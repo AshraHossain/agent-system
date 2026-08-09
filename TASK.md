@@ -4,12 +4,17 @@ Priority task list. See `PLANNING.md` for architecture context.
 
 ## High priority
 
-- [ ] **Fix API key mismatch** — `.env` sets `OPENROUTER_API_KEY`, but
-  `app/agents.py` instantiates `OpenAI()` with no arguments, which reads
-  `OPENAI_API_KEY`. As written, the planner agent will fail at runtime unless
-  `OPENAI_API_KEY` is also set. Decide: switch to OpenRouter's OpenAI-compatible
-  endpoint (`base_url="https://openrouter.ai/api/v1"`, `api_key=OPENROUTER_API_KEY`)
-  or rename the env var to `OPENAI_API_KEY`.
+- [ ] **Fix API key mismatch (confirmed — currently breaks import)** — `.env`
+  sets `OPENROUTER_API_KEY`, but `app/agents.py` does `client = OpenAI()` at
+  **module import time** with no `load_dotenv()` call anywhere in the codebase.
+  Verified directly: `uv run python -c "from app.main import app"` raises
+  `openai.OpenAIError: Missing credentials` because `OPENAI_API_KEY` is unset.
+  Fix requires two changes: (1) load `.env` (e.g. `load_dotenv()` in
+  `app/main.py` or `app/agents.py`), and (2) either point the client at
+  OpenRouter's OpenAI-compatible endpoint
+  (`OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.environ["OPENROUTER_API_KEY"])`)
+  or rename the env var to `OPENAI_API_KEY`. Until fixed, the app fails at
+  import time, not just at request time.
 - [ ] **Add a test suite** — `tests/` exists but is empty. No test framework is
   configured yet (no pytest in `requirements.txt` / `pyproject.toml`).
 

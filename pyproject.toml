@@ -1,0 +1,22 @@
+[project]
+name = "agent-system"
+version = "0.1.0"
+description = "FastAPI + LangGraph agentic workflow system"
+readme = "PLANNING.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "langchain>=0.2.0",
+    "langgraph>=0.0.40",
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app", "tools", "memory"]
