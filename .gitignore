@@ -45,3 +45,5 @@ data/
 *.sqlite3
 logs/
 *.log
+
+graphify-out/
