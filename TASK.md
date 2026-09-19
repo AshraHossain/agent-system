@@ -13,21 +13,32 @@ Priority task list. See `PLANNING.md` for architecture context.
   correctly. **Note:** the key that was sitting in plaintext `.env` was
   visible in a terminal transcript during debugging — rotate it in the
   OpenRouter dashboard as a precaution.
-- [ ] **Add a test suite** — `tests/` exists but is empty. No test framework is
-  configured yet (no pytest in `requirements.txt` / `pyproject.toml`).
+- [x] **Add a test suite** — Fixed. `pytest` is now a `dependency-groups.dev`
+  entry in `pyproject.toml` (`uv sync` installs it into the project venv, so
+  `uv run pytest` sees `app.*`/`tools.*` and their real dependencies instead
+  of a bare global pytest). `tests/conftest.py` sets a placeholder
+  `OPENROUTER_API_KEY` so importing `app.agents` doesn't require a real
+  secret. 24 tests passing, all offline (planner_agent is mocked wherever a
+  test exercises the graph).
+- [x] **Remove `eval()` from `calculator_tool`** — Fixed. Wiring
+  `calculator_tool` into the graph (below) made it reachable end-to-end from
+  the public `GET /run?query=...` endpoint via LLM-generated plan text,
+  turning the old `eval(expression)` into a real remote-code-execution
+  surface. `tools/calculator_tool.py` now parses the expression with `ast`
+  and evaluates it through a fixed table of arithmetic operators only.
 
 ## Medium priority
 
-- [ ] **Wire tools into the graph** — `tools/calculator_tool.py` and
-  `tools/search_tool.py` are standalone functions, not yet bound as LangGraph
-  nodes or LangChain tools callable by the planner.
+- [x] **Wire tools into the graph** — Fixed. `app/graph.py`'s new `executor`
+  node routes each parsed plan step to `calculator_tool` (arithmetic
+  detected via regex), `search_tool` (steps mentioning "search"/"look up"/
+  "find information"), or passes the step through unchanged otherwise.
 - [ ] **Implement `memory/store.py`** — currently an empty file. Needed once
   the graph has more than one turn/node worth persisting.
-- [ ] **Expand the graph beyond a single node** — `app/graph.py` currently has
-  one node (`planner`) that is both entry and finish point. Real multi-step
-  agent behavior needs additional nodes/edges.
-- [ ] **Populate `AgentState.result`** — the state includes a `result` field
-  that is initialized but never set by the current graph logic.
+- [x] **Expand the graph beyond a single node** — Fixed. `app/graph.py` is
+  now a 3-node linear graph: `planner` → `executor` → `synthesizer`.
+- [x] **Populate `AgentState.result`** — Fixed. The new `synthesizer` node
+  joins each step with its tool result into `AgentState.result`.
 
 ## Low priority / infra
 

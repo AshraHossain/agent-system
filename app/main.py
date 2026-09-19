@@ -8,6 +8,7 @@ def run(query: str):
     result = app_graph.invoke({
         "query": query,
         "steps": [],
+        "tool_results": [],
         "result": ""
     })
 

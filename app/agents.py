@@ -1,4 +1,6 @@
 import os
+import re
+from typing import List
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -20,3 +22,17 @@ def planner_agent(query: str) -> str:
     )
 
     return response.choices[0].message.content
+
+
+def parse_steps(raw: str) -> List[str]:
+    """Split a planner's freeform text into individual step strings.
+
+    Strips common list markers ("1.", "2)", "-", "*") from each line.
+    Falls back to the raw text as a single step if nothing else parses out.
+    """
+    steps = []
+    for line in raw.strip().splitlines():
+        cleaned = re.sub(r"^[\s\-\*\d\.\)]+", "", line).strip()
+        if cleaned:
+            steps.append(cleaned)
+    return steps or [raw.strip()]

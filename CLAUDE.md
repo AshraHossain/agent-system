@@ -48,19 +48,24 @@ uv run pytest                                    # tests (tests/ is currently em
 ## Layout
 
 - `app/main.py` — FastAPI app, single route `GET /run`.
-- `app/graph.py` — `StateGraph(AgentState)`, one node (`"planner"`, entry
-  and finish point).
-- `app/agents.py` — `planner_agent(query)`, calls the OpenAI SDK.
-- `app/state.py` — `AgentState` TypedDict: `query`, `steps`, `result`
-  (`result` is currently never populated — see `TASK.md`).
+- `app/graph.py` — `StateGraph(AgentState)`, three nodes: `"planner"`
+  (entry) → `"executor"` → `"synthesizer"` (finish). Also owns
+  `execute_step`, the regex-based router that sends each step to a tool.
+- `app/agents.py` — `planner_agent(query)` calls the OpenAI SDK;
+  `parse_steps(raw)` splits its output into a list of step strings.
+- `app/state.py` — `AgentState` TypedDict: `query`, `steps`, `tool_results`,
+  `result` (`result` is now populated by the `"synthesizer"` node).
 - `memory/store.py` — empty placeholder for a future persistence layer.
-- `tools/calculator_tool.py`, `tools/search_tool.py` — standalone
-  functions, not yet bound into the graph.
-- `tests/` — empty; no test framework configured yet.
+- `tools/calculator_tool.py` — safe `ast`-based arithmetic evaluator (no
+  `eval`), `tools/search_tool.py` — placeholder search. Both are called
+  from `app/graph.py`'s `"executor"` node.
+- `tests/` — `test_tools.py`, `test_agents.py`, `test_graph.py`,
+  `test_main.py`; 24 tests, all offline.
 
 ## Conventions
 
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): description`.
-- Single-node graph today: adding agent steps means adding nodes/edges to
-  the `StateGraph` in `app/graph.py`.
+- Linear 3-node graph today (`planner` → `executor` → `synthesizer`): adding
+  more agent steps means adding nodes/edges to the `StateGraph` in
+  `app/graph.py`. No conditional routing yet.
 - No persistence yet: state does not survive a single `/run` call.
