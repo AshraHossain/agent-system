@@ -39,19 +39,22 @@ HTTP GET /run?query=...
               └─ app/graph.py: run_synthesizer — joins each step with its tool result into `result`
         ▼
   app/state.py    AgentState (TypedDict): query, steps, tool_results, result
+        │
+        ▼
+  memory/store.py    save_run(state) -> run_id   (appends to data/runs.jsonl)
 ```
 
 ### Module responsibilities
 
 | Module | Path | Purpose |
 |---|---|---|
-| FastAPI app | `app/main.py` | Defines the ASGI app and the `GET /run` endpoint. Builds the initial `AgentState` and invokes the compiled graph. |
+| FastAPI app | `app/main.py` | Defines the ASGI app and the `GET /run` endpoint. Builds the initial `AgentState`, invokes the compiled graph, and persists the final state via `memory.store.save_run`. |
 | Graph | `app/graph.py` | Builds a `StateGraph(AgentState)` with three nodes — `"planner"` (entry) → `"executor"` → `"synthesizer"` (finish) — wired with `add_edge`. Also owns `execute_step`, the regex-based tool router. Compiles to `app_graph`. |
 | Agents | `app/agents.py` | `planner_agent(query)` — calls the OpenAI SDK (model `openai/gpt-4o-mini` via OpenRouter) to break the query into steps. `parse_steps(raw)` — splits that freeform text into a `List[str]`, stripping numbering/bullets. |
 | State | `app/state.py` | `AgentState` TypedDict: `query: str`, `steps: List[str]`, `tool_results: List[str]`, `result: str`. |
-| Memory | `memory/store.py` | Currently empty — placeholder for a future memory/persistence layer. |
+| Memory | `memory/store.py` | `save_run(state) -> run_id`, `load_run(run_id)`, `list_runs()` — append-only JSON-Lines persistence to `data/runs.jsonl` (gitignored). Write-only from the graph's perspective: nothing reads past runs back into a new `/run` call yet. |
 | Tools | `tools/calculator_tool.py`, `tools/search_tool.py` | `calculator_tool` safely evaluates arithmetic via `ast` (no `eval`); `search_tool` is still a placeholder. Both are now called from `app/graph.py`'s `"executor"` node. |
-| Tests | `tests/` | `test_tools.py`, `test_agents.py`, `test_graph.py`, `test_main.py` — 24 tests, all offline (`planner_agent` mocked wherever the graph is exercised). |
+| Tests | `tests/` | `test_tools.py`, `test_agents.py`, `test_graph.py`, `test_store.py`, `test_main.py` — 27 tests, all offline (`planner_agent` mocked wherever the graph is exercised; `test_store.py` redirects `STORE_PATH` to a tmp dir). |
 
 ### Request flow
 
@@ -61,7 +64,8 @@ HTTP GET /run?query=...
 4. `"executor"` runs `execute_step` over each entry in `steps`, producing `tool_results`
    (one entry per step, from `calculator_tool`, `search_tool`, or the step text itself).
 5. `"synthesizer"` zips `steps` with `tool_results` into a human-readable `result` string.
-6. The resulting state dict (`query`, `steps`, `tool_results`, `result`) is returned as JSON.
+6. `main.py` calls `memory.store.save_run(result)`, which appends the state to `data/runs.jsonl` and returns a `run_id`.
+7. The resulting state dict, plus `run_id`, is returned as JSON.
 
 ### External dependencies
 
@@ -85,8 +89,10 @@ HTTP GET /run?query=...
   calculator vs. search vs. passthrough by pattern-matching the step text.
   It only recognizes simple two-operand arithmetic (`"3 + 4"`), not chained
   expressions embedded in prose (`"add 3 to 4 then double it"`).
-- **No persistence yet** — `memory/store.py` is an empty stub; state does not
-  survive a single `/run` call.
+- **Persistence is write-only** — `memory/store.py` appends each run's final
+  state to `data/runs.jsonl` and hands back a `run_id`, but nothing reads a
+  past run back into a new `/run` call. There's no cross-run memory in the
+  graph itself, and no HTTP route to fetch a stored run by `run_id` yet.
 - **`search_tool` is still a placeholder** — it echoes the query rather than
   calling a real search API.
 
@@ -98,4 +104,5 @@ HTTP GET /run?query=...
   decision, and/or extend `calculator_tool`'s expression extraction to
   handle multi-step arithmetic phrased in prose.
 - Wire `search_tool` to a real search API.
-- Add a persistence layer under `memory/store.py`.
+- Read prior runs back into the graph (actual memory, not just storage), and/or
+  add a `GET /runs/{run_id}` route to fetch a stored run.

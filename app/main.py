@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.graph import app_graph
+from memory.store import save_run
 
 app = FastAPI()
 
@@ -12,4 +13,6 @@ def run(query: str):
         "result": ""
     })
 
-    return result
+    run_id = save_run(result)
+
+    return {"run_id": run_id, **result}

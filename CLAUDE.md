@@ -55,12 +55,14 @@ uv run pytest                                    # tests (tests/ is currently em
   `parse_steps(raw)` splits its output into a list of step strings.
 - `app/state.py` — `AgentState` TypedDict: `query`, `steps`, `tool_results`,
   `result` (`result` is now populated by the `"synthesizer"` node).
-- `memory/store.py` — empty placeholder for a future persistence layer.
+- `memory/store.py` — `save_run`/`load_run`/`list_runs`, append-only
+  JSON-Lines persistence to `data/runs.jsonl` (gitignored). `main.py` saves
+  every `/run` call; nothing reads past runs back into the graph yet.
 - `tools/calculator_tool.py` — safe `ast`-based arithmetic evaluator (no
   `eval`), `tools/search_tool.py` — placeholder search. Both are called
   from `app/graph.py`'s `"executor"` node.
 - `tests/` — `test_tools.py`, `test_agents.py`, `test_graph.py`,
-  `test_main.py`; 24 tests, all offline.
+  `test_store.py`, `test_main.py`; 27 tests, all offline.
 
 ## Conventions
 
@@ -68,4 +70,5 @@ uv run pytest                                    # tests (tests/ is currently em
 - Linear 3-node graph today (`planner` → `executor` → `synthesizer`): adding
   more agent steps means adding nodes/edges to the `StateGraph` in
   `app/graph.py`. No conditional routing yet.
-- No persistence yet: state does not survive a single `/run` call.
+- Persistence is write-only: `memory/store.py` records each run, but no
+  route or graph node reads a past run back in yet.

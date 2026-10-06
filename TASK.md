@@ -33,8 +33,12 @@ Priority task list. See `PLANNING.md` for architecture context.
   node routes each parsed plan step to `calculator_tool` (arithmetic
   detected via regex), `search_tool` (steps mentioning "search"/"look up"/
   "find information"), or passes the step through unchanged otherwise.
-- [ ] **Implement `memory/store.py`** — currently an empty file. Needed once
-  the graph has more than one turn/node worth persisting.
+- [x] **Implement `memory/store.py`** — Fixed. Append-only JSON-Lines store
+  (`data/runs.jsonl`, gitignored): `save_run(state)` writes a run's final
+  state and returns a `run_id`; `load_run(run_id)` / `list_runs()` read it
+  back. `GET /run` now calls `save_run` and includes `run_id` in its
+  response. Still no cross-run memory read into the graph itself — this is
+  storage, not recall.
 - [x] **Expand the graph beyond a single node** — Fixed. `app/graph.py` is
   now a 3-node linear graph: `planner` → `executor` → `synthesizer`.
 - [x] **Populate `AgentState.result`** — Fixed. The new `synthesizer` node
