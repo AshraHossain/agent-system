@@ -44,7 +44,7 @@ def route_step_to_tool(step: str) -> str:
         step_lower = step.lower()
         if any(op in step for op in ["+", "-", "*", "/", "%", "**"]):
             return "calculator"
-        if any(kw in step_lower for kw in ["search", "find", "look up", "query"]):
+        if any(re.search(r"\b" + kw + r"\b", step_lower) for kw in ["search", "find", "look up", "query"]):
             return "search"
         return "passthrough"
 
