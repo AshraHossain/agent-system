@@ -49,5 +49,8 @@ Priority task list. See `PLANNING.md` for architecture context.
 - [x] Git repository initialized (`git init`, local identity set).
 - [x] UV-based dependency management (`pyproject.toml` + `uv.lock`).
 - [x] Dockerfile for containerized runs.
-- [ ] CI workflow (lint/test on push) — not yet configured.
+- [x] **CI workflow (lint/test on push)** — Fixed. GitHub Actions workflow created
+  (`.github/workflows/ci.yml`) that runs `pytest` on push and pull requests.
+  Uses `uv` for dependency management and Python 3.11. Runs on all commits to
+  main and feature branches, plus all PRs against main.
 - [ ] Structured logging / observability for the FastAPI service.
