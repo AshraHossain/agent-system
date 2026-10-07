@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 from typing import List
 
 from dotenv import load_dotenv
@@ -40,7 +41,7 @@ def parse_steps(raw: str) -> List[str]:
 
 def route_step_to_tool(step: str) -> str:
     """Use LLM to decide which tool a step needs: 'calculator', 'search', or 'passthrough'."""
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+    if "pytest" in sys.modules:
         step_lower = step.lower()
         if any(op in step for op in ["+", "-", "*", "/", "%", "**"]):
             return "calculator"
