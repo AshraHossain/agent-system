@@ -1,7 +1,6 @@
 from langgraph.graph import StateGraph, END
 from app.state import AgentState
-from app import agents
-from app.agents import planner_agent, parse_steps
+from app.agents import planner_agent, parse_steps, route_step_to_tool
 from tools.calculator_tool import calculator_tool
 from tools.search_tool import search_tool
 
@@ -17,7 +16,7 @@ def run_planner(state: AgentState):
 
 def execute_step(step: str) -> str:
     """Route a step to the appropriate tool using LLM-based decision."""
-    tool = agents.route_step_to_tool(step)
+    tool = route_step_to_tool(step)
 
     if tool == "calculator":
         return calculator_tool(step)
