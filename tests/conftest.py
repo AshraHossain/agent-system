@@ -5,8 +5,6 @@ import re
 import sys
 from pathlib import Path
 
-import pytest
-
 # Add parent directory to path so tests can import app/
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -16,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("OPENROUTER_API_KEY", "test-placeholder-key")
 
 
-def mock_route_step_to_tool(step: str) -> str:
+def _mock_route_step_to_tool(step: str) -> str:
     """Mock router using heuristic routing without LLM calls."""
     step_lower = step.lower()
     if any(op in step for op in ["+", "-", "*", "/", "%", "**"]):
@@ -26,8 +24,7 @@ def mock_route_step_to_tool(step: str) -> str:
     return "passthrough"
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _patch_route_step_to_tool():
-    """Autouse session fixture to patch route_step_to_tool before any tests run."""
-    import app.agents
-    app.agents.route_step_to_tool = mock_route_step_to_tool
+# Patch app.agents.route_step_to_tool at conftest load time, BEFORE test modules
+# are imported. This ensures app/graph will capture the mocked version.
+import app.agents
+app.agents.route_step_to_tool = _mock_route_step_to_tool
