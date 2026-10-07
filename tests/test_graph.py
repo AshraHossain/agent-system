@@ -20,9 +20,16 @@ def test_execute_step_passes_through_non_tool_steps():
 
 
 def test_run_executor_populates_tool_results():
-    state = {"query": "q", "steps": ["2 + 2", "Summarize"], "tool_results": [], "result": ""}
+    state = {"query": "q", "steps": ["2 + 2", "Summarize"], "tool_results": [], "errors": [], "attempts": 0, "result": ""}
     update = run_executor(state)
     assert update["tool_results"] == ["4", "Summarize"]
+
+
+def test_run_executor_detects_errors():
+    state = {"query": "q", "steps": ["5 / 0", "Valid step"], "tool_results": [], "errors": [], "attempts": 0, "result": ""}
+    update = run_executor(state)
+    assert len(update["errors"]) == 1
+    assert update["errors"][0] == "5 / 0"
 
 
 def test_run_synthesizer_populates_result():
@@ -30,6 +37,8 @@ def test_run_synthesizer_populates_result():
         "query": "q",
         "steps": ["2 + 2", "Summarize"],
         "tool_results": ["4", "Summarize"],
+        "errors": [],
+        "attempts": 0,
         "result": "",
     }
     update = run_synthesizer(state)
@@ -45,7 +54,7 @@ def test_full_graph_invoke_with_mocked_planner(monkeypatch):
     )
 
     final_state = app_graph.invoke(
-        {"query": "irrelevant", "steps": [], "tool_results": [], "result": ""}
+        {"query": "irrelevant", "steps": [], "tool_results": [], "errors": [], "attempts": 0, "result": ""}
     )
 
     assert final_state["steps"] == [

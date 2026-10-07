@@ -43,6 +43,13 @@ Priority task list. See `PLANNING.md` for architecture context.
   now a 3-node linear graph: `planner` → `executor` → `synthesizer`.
 - [x] **Populate `AgentState.result`** — Fixed. The new `synthesizer` node
   joins each step with its tool result into `AgentState.result`.
+- [x] **Add conditional edges for re-planning on errors** — Fixed. Added
+  `errors` and `attempts` fields to `AgentState`. The `executor` node now
+  detects when a tool returns an error (e.g., division by zero) and populates
+  `errors` with failed steps. A conditional edge routes to `synthesizer` if
+  no errors occurred, or back to `planner` for re-planning if errors detected
+  (up to 3 retry attempts max to prevent infinite loops). Tests expanded to
+  verify error detection behavior (28/28 tests passing).
 
 ## Low priority / infra
 

@@ -10,6 +10,8 @@ def run(query: str):
         "query": query,
         "steps": [],
         "tool_results": [],
+        "errors": [],
+        "attempts": 0,
         "result": ""
     })
 

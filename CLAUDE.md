@@ -4,12 +4,15 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-A minimal FastAPI service exposing a single-node LangGraph agent: `GET
+A minimal FastAPI service exposing a multi-node LangGraph agent: `GET
 /run?query=...` invokes a `planner` agent (OpenAI chat completion,
-`gpt-4o-mini`) that breaks the query into steps, and the resulting graph
-state is returned as JSON. This is an early-stage scaffold — read
-`PLANNING.md` before changing code; it documents the architecture, module
-responsibilities, and constraints in full.
+`gpt-4o-mini`) that breaks the query into steps, an executor that routes
+each step to a tool (calculator for arithmetic, search placeholder, or
+passthrough), and a synthesizer that assembles the result. The graph uses
+conditional edges to re-plan if any tool errors occur (up to 3 retries).
+The resulting graph state is returned as JSON. Read `PLANNING.md` before
+changing code; it documents the architecture, module responsibilities, and
+constraints in full.
 
 ## Framework conventions
 
@@ -54,7 +57,8 @@ uv run pytest                                    # tests (tests/ is currently em
 - `app/agents.py` — `planner_agent(query)` calls the OpenAI SDK;
   `parse_steps(raw)` splits its output into a list of step strings.
 - `app/state.py` — `AgentState` TypedDict: `query`, `steps`, `tool_results`,
-  `result` (`result` is now populated by the `"synthesizer"` node).
+  `errors` (steps that failed), `attempts` (re-plan counter), `result`
+  (populated by `"synthesizer"`).
 - `memory/store.py` — `save_run`/`load_run`/`list_runs`, append-only
   JSON-Lines persistence to `data/runs.jsonl` (gitignored). `main.py` saves
   every `/run` call; nothing reads past runs back into the graph yet.
@@ -62,13 +66,15 @@ uv run pytest                                    # tests (tests/ is currently em
   `eval`), `tools/search_tool.py` — placeholder search. Both are called
   from `app/graph.py`'s `"executor"` node.
 - `tests/` — `test_tools.py`, `test_agents.py`, `test_graph.py`,
-  `test_store.py`, `test_main.py`; 27 tests, all offline.
+  `test_store.py`, `test_main.py`; 28 tests, all offline.
 
 ## Conventions
 
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): description`.
-- Linear 3-node graph today (`planner` → `executor` → `synthesizer`): adding
-  more agent steps means adding nodes/edges to the `StateGraph` in
-  `app/graph.py`. No conditional routing yet.
-- Persistence is write-only: `memory/store.py` records each run, but no
-  route or graph node reads a past run back in yet.
+- 3-node graph with conditional edges (`planner` → `executor` with conditional
+  routing to [`synthesizer` on success | `planner` on error up to max_attempts=3]):
+  The executor detects tool errors and triggers re-planning as needed. Adding
+  more agent steps means adding nodes/edges to the `StateGraph` in `app/graph.py`.
+- Persistence is write-only: `memory/store.py` records each run (including
+  `errors` and `attempts` counters), but no route or graph node reads a past
+  run back in yet.

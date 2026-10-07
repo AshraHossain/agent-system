@@ -81,10 +81,11 @@ HTTP GET /run?query=...
 
 ## Key design constraints
 
-- **Linear graph, no branching** — `graph.py` wires `"planner"` →
-  `"executor"` → `"synthesizer"` with fixed `add_edge` calls. There's no
-  conditional routing (e.g. re-planning, retries) yet — real branching needs
-  `add_conditional_edges`.
+- **Conditional edges for re-planning** — `graph.py` uses `add_conditional_edges`
+  to route the executor's output: if any step produced an error (from
+  `calculator_tool` division-by-zero, etc.), the agent re-plans (back to
+  `"planner"`); otherwise it proceeds to `"synthesizer"`. An `attempts`
+  counter prevents infinite re-planning loops (max 3 attempts).
 - **Tool routing is regex-based, not LLM-driven** — `execute_step` decides
   calculator vs. search vs. passthrough by pattern-matching the step text.
   It only recognizes simple two-operand arithmetic (`"3 + 4"`), not chained
