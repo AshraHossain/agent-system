@@ -86,10 +86,12 @@ HTTP GET /run?query=...
   `calculator_tool` division-by-zero, etc.), the agent re-plans (back to
   `"planner"`); otherwise it proceeds to `"synthesizer"`. An `attempts`
   counter prevents infinite re-planning loops (max 3 attempts).
-- **Tool routing is regex-based, not LLM-driven** — `execute_step` decides
-  calculator vs. search vs. passthrough by pattern-matching the step text.
-  It only recognizes simple two-operand arithmetic (`"3 + 4"`), not chained
-  expressions embedded in prose (`"add 3 to 4 then double it"`).
+- **LLM-driven tool routing** — `execute_step` calls `route_step_to_tool`
+  (in `app/agents.py`) to ask the LLM which tool each step needs: calculator,
+  search, or passthrough. The calculator tool intelligently extracts arithmetic
+  from prose (e.g., "Compute 3 + 4" → "3 + 4" → 7), and supports nested
+  expressions like "(2 + 3) * 4". This replaces regex-based routing with
+  more sophisticated semantic decisions.
 - **Persistence is write-only** — `memory/store.py` appends each run's final
   state to `data/runs.jsonl` and hands back a `run_id`, but nothing reads a
   past run back into a new `/run` call. There's no cross-run memory in the

@@ -66,15 +66,17 @@ uv run pytest                                    # tests (tests/ is currently em
   `eval`), `tools/search_tool.py` — placeholder search. Both are called
   from `app/graph.py`'s `"executor"` node.
 - `tests/` — `test_tools.py`, `test_agents.py`, `test_graph.py`,
-  `test_store.py`, `test_main.py`; 28 tests, all offline.
+  `test_store.py`, `test_main.py`; 29 tests, all offline (with mocked LLM calls).
 
 ## Conventions
 
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): description`.
-- 3-node graph with conditional edges (`planner` → `executor` with conditional
-  routing to [`synthesizer` on success | `planner` on error up to max_attempts=3]):
-  The executor detects tool errors and triggers re-planning as needed. Adding
-  more agent steps means adding nodes/edges to the `StateGraph` in `app/graph.py`.
+- 3-node graph with conditional edges and LLM-driven routing:
+  `planner` → `executor` (uses LLM to route each step to calculator/search/passthrough)
+  → conditional split [`synthesizer` on success | `planner` on error, max 3 retries].
+  The executor calls `route_step_to_tool` to decide tool usage; calculator tool
+  extracts and evaluates arithmetic from prose. Adding more agent steps means
+  adding nodes/edges to the `StateGraph` in `app/graph.py`.
 - Persistence is write-only: `memory/store.py` records each run (including
   `errors` and `attempts` counters), but no route or graph node reads a past
   run back in yet.

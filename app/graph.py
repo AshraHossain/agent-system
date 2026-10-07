@@ -1,13 +1,9 @@
-import re
-
 from langgraph.graph import StateGraph, END
 from app.state import AgentState
-from app.agents import planner_agent, parse_steps
+from app.agents import planner_agent, parse_steps, route_step_to_tool
 from tools.calculator_tool import calculator_tool
 from tools.search_tool import search_tool
 
-_ARITHMETIC = re.compile(r"-?\d+(?:\.\d+)?\s*[-+*/%]\s*-?\d+(?:\.\d+)?")
-_SEARCH_HINTS = re.compile(r"\bsearch\b|\blook ?up\b|\bfind information\b", re.IGNORECASE)
 _ERROR_PREFIX = "Error in calculation"
 _MAX_ATTEMPTS = 3
 
@@ -19,13 +15,15 @@ def run_planner(state: AgentState):
 
 
 def execute_step(step: str) -> str:
-    """Route a single plan step to a tool, or pass it through unchanged."""
-    match = _ARITHMETIC.search(step)
-    if match:
-        return calculator_tool(match.group(0))
-    if _SEARCH_HINTS.search(step):
+    """Route a step to the appropriate tool using LLM-based decision."""
+    tool = route_step_to_tool(step)
+
+    if tool == "calculator":
+        return calculator_tool(step)
+    elif tool == "search":
         return search_tool(step)
-    return step
+    else:
+        return step
 
 
 def run_executor(state: AgentState):

@@ -36,3 +36,24 @@ def parse_steps(raw: str) -> List[str]:
         if cleaned:
             steps.append(cleaned)
     return steps or [raw.strip()]
+
+
+def route_step_to_tool(step: str) -> str:
+    """Use LLM to decide which tool a step needs: 'calculator', 'search', or 'passthrough'."""
+    response = client.chat.completions.create(
+        model="openai/gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a task router. Categorize the given step into one of:\n"
+                    "- 'calculator': if it requires arithmetic or mathematical calculation\n"
+                    "- 'search': if it requires finding information, searching, or looking something up\n"
+                    "- 'passthrough': if it's a statement, analysis, or other task that needs no tool\n\n"
+                    "Respond with ONLY the category name, nothing else."
+                ),
+            },
+            {"role": "user", "content": step},
+        ]
+    )
+    return response.choices[0].message.content.strip().lower()

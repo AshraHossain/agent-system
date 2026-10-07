@@ -1,5 +1,6 @@
 import ast
 import operator
+import re
 
 _OPERATORS = {
     ast.Add: operator.add,
@@ -13,6 +14,8 @@ _OPERATORS = {
     ast.UAdd: operator.pos,
 }
 
+_ARITHMETIC_PATTERN = re.compile(r"-?\d+(?:\.\d+)?\s*[-+*/%]\s*-?\d+(?:\.\d+)?")
+
 
 def _eval_node(node):
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
@@ -24,10 +27,32 @@ def _eval_node(node):
     raise ValueError(f"Unsupported expression: {ast.dump(node)}")
 
 
-def calculator_tool(expression: str) -> str:
-    """Evaluate a numeric expression without executing arbitrary code."""
+def _extract_arithmetic(text: str) -> str:
+    """Extract arithmetic expression from prose text.
+
+    If text parses as valid Python arithmetic, return it as-is.
+    Otherwise, search for arithmetic patterns and extract the first match.
+    """
+    text = text.strip()
     try:
-        tree = ast.parse(expression, mode="eval")
+        ast.parse(text, mode="eval")
+        return text
+    except SyntaxError:
+        match = _ARITHMETIC_PATTERN.search(text)
+        if match:
+            return match.group(0)
+        return text
+
+
+def calculator_tool(expression: str) -> str:
+    """Evaluate a numeric expression without executing arbitrary code.
+
+    Intelligently extracts arithmetic from prose (e.g., "Compute 3 + 4" → "3 + 4").
+    Supports nested expressions like "(2 + 3) * 4" if they parse as valid Python.
+    """
+    try:
+        arithmetic_expr = _extract_arithmetic(expression)
+        tree = ast.parse(arithmetic_expr, mode="eval")
         return str(_eval_node(tree.body))
     except Exception:
         return "Error in calculation"

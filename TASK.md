@@ -50,6 +50,12 @@ Priority task list. See `PLANNING.md` for architecture context.
   no errors occurred, or back to `planner` for re-planning if errors detected
   (up to 3 retry attempts max to prevent infinite loops). Tests expanded to
   verify error detection behavior (28/28 tests passing).
+- [x] **Replace regex-based tool routing with LLM-driven decisions** — Fixed.
+  Added `route_step_to_tool` function in `app/agents.py` that calls the LLM
+  to categorize steps as "calculator", "search", or "passthrough". Updated
+  `execute_step` to use LLM routing instead of regex patterns. Made
+  `calculator_tool` smarter to extract and handle nested arithmetic expressions
+  from prose. Tests updated to mock the routing function (29/29 tests passing).
 
 ## Low priority / infra
 

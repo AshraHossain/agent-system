@@ -28,5 +28,10 @@ def test_calculator_tool_blocks_code_execution():
     assert calculator_tool("[].__class__") == "Error in calculation"
 
 
+def test_calculator_tool_extracts_from_prose():
+    assert calculator_tool("Compute 3 + 4") == "7"
+    assert calculator_tool("Calculate 10 * 5 please") == "50"
+
+
 def test_search_tool_echoes_query():
     assert "hello" in search_tool("hello")
