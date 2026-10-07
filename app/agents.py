@@ -46,7 +46,10 @@ def route_step_to_tool(step: str) -> str:
     """
     import sys
 
-    in_test = os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules
+    try:
+        in_test = os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules
+    except Exception:
+        in_test = False
 
     if in_test:
         step_lower = step.lower()
@@ -56,20 +59,23 @@ def route_step_to_tool(step: str) -> str:
             return "search"
         return "passthrough"
 
-    response = client.chat.completions.create(
-        model="openai/gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a task router. Categorize the given step into one of:\n"
-                    "- 'calculator': if it requires arithmetic or mathematical calculation\n"
-                    "- 'search': if it requires finding information, searching, or looking something up\n"
-                    "- 'passthrough': if it's a statement, analysis, or other task that needs no tool\n\n"
-                    "Respond with ONLY the category name, nothing else."
-                ),
-            },
-            {"role": "user", "content": step},
-        ]
-    )
-    return response.choices[0].message.content.strip().lower()
+    try:
+        response = client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a task router. Categorize the given step into one of:\n"
+                        "- 'calculator': if it requires arithmetic or mathematical calculation\n"
+                        "- 'search': if it requires finding information, searching, or looking something up\n"
+                        "- 'passthrough': if it's a statement, analysis, or other task that needs no tool\n\n"
+                        "Respond with ONLY the category name, nothing else."
+                    ),
+                },
+                {"role": "user", "content": step},
+            ]
+        )
+        return response.choices[0].message.content.strip().lower()
+    except Exception:
+        return "passthrough"
