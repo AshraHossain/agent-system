@@ -9,6 +9,7 @@ runner's asyncio timeout are hard backstops.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from opspilot.adk.models import Final, to_response
 from opspilot.config import Limits
 
 ALWAYS_ALLOWED = {"set_model_response"}
+log = logging.getLogger("opspilot.run")
 
 
 @dataclass
@@ -37,6 +39,10 @@ class RunCounters:
     completion_tokens: int | None = None
     total_tokens: int | None = None
     events: list[str] = field(default_factory=list)
+    model_time_ms: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    tool_time_ms: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    _model_start: dict[str, float] = field(default_factory=dict)
+    _tool_start: dict[str, float] = field(default_factory=dict)
 
     def elapsed(self) -> float:
         return time.monotonic() - self.started
@@ -72,14 +78,21 @@ class BudgetPlugin(BasePlugin):
             return to_response(Final(failed_output(agent, reason)), has_tools)
         c.llm_calls += 1
         c.llm_by_agent[agent] += 1
+        c._model_start[agent] = time.monotonic()
         return None
 
     async def after_model_callback(
         self, *, callback_context: CallbackContext, llm_response: LlmResponse
     ) -> LlmResponse | None:
+        c = self.counters(callback_context.invocation_id)
+        agent = callback_context.agent_name
+        started = c._model_start.pop(agent, None)
+        if started is not None:
+            ms = (time.monotonic() - started) * 1000
+            c.model_time_ms[agent] += ms
+            log.info("model_call agent=%s ms=%.1f", agent, ms)
         usage = llm_response.usage_metadata
         if usage is not None:
-            c = self.counters(callback_context.invocation_id)
             for attr, src in (
                 ("prompt_tokens", usage.prompt_token_count),
                 ("completion_tokens", usage.candidates_token_count),
@@ -112,4 +125,23 @@ class BudgetPlugin(BasePlugin):
             }
         c.tool_calls += 1
         c.tools_by_agent[agent].append(tool.name)
+        c._tool_start[tool_context.function_call_id or tool.name] = time.monotonic()
+        return None
+
+    async def after_tool_callback(
+        self, *, tool: BaseTool, tool_args: dict, tool_context: ToolContext, result: dict
+    ) -> dict | None:
+        c = self.counters(tool_context.invocation_id)
+        started = c._tool_start.pop(tool_context.function_call_id or tool.name, None)
+        if started is not None:
+            ms = (time.monotonic() - started) * 1000
+            c.tool_time_ms[tool.name] += ms
+            status = result.get("status") if isinstance(result, dict) else None
+            log.info(
+                "tool_call agent=%s tool=%s status=%s ms=%.1f",
+                tool_context.agent_name,
+                tool.name,
+                status,
+                ms,
+            )
         return None

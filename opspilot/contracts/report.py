@@ -70,6 +70,8 @@ class RunMetrics(BaseModel):
     tool_calls_by_agent: dict[str, list[str]] = Field(default_factory=dict)
     llm_calls_by_agent: dict[str, int] = Field(default_factory=dict)
     budget_events: list[str] = Field(default_factory=list)
+    model_time_ms: dict[str, float] = Field(default_factory=dict)
+    tool_time_ms: dict[str, float] = Field(default_factory=dict)
 
 
 class InvestigationReport(BaseModel):

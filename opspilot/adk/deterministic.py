@@ -252,6 +252,8 @@ def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None
         tool_calls_by_agent={k: list(v) for k, v in c.tools_by_agent.items()},
         llm_calls_by_agent=dict(c.llm_by_agent),
         budget_events=list(c.events),
+        model_time_ms={k: round(v, 1) for k, v in c.model_time_ms.items()},
+        tool_time_ms={k: round(v, 1) for k, v in c.tool_time_ms.items()},
     )
 
 
