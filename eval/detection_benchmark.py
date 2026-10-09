@@ -26,15 +26,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from netpulse.data.schemas import TABLE_METRICS, TelemetryQuery
+from netpulse.data.store import DatasetStore
 from netpulse.detection import DetectionConfig, DetectionRequest, detect_series
-from netpulse.models import Metric
 
 ROOT = Path(__file__).resolve().parent.parent
-TABLE_METRICS = {
-    "links": [Metric.UTILIZATION_PCT, Metric.LATENCY_MS, Metric.PACKET_LOSS_PCT, Metric.ERROR_RATE],
-    "nodes": [Metric.CPU_PCT, Metric.MEMORY_PCT],
-    "services": [Metric.SERVICE_LATENCY_MS, Metric.SERVICE_SUCCESS_PCT],
-}
 
 
 @dataclass
@@ -51,25 +47,25 @@ class CaseResult:
     missed: list[str] = field(default_factory=list)
 
 
-def _visible_frame(dataset_dir: Path, table: str, submitted_at: pd.Timestamp) -> pd.DataFrame:
-    df = pd.read_csv(dataset_dir / f"{table}.csv.gz")
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-    return df[df["timestamp"] + pd.to_timedelta(df["delay_s"], unit="s") <= submitted_at]
-
-
-def detect_case(case: dict, data_root: Path, config: DetectionConfig | None = None) -> tuple[list, int]:
+def detect_case(case: dict, store: DatasetStore, config: DetectionConfig | None = None) -> tuple[list, int]:
     """Return (confirmed anomalies, unconfirmed count) for one case using visible data only."""
     sub = case["submission"]
-    submitted_at = pd.Timestamp(case["submitted_at"])
+    window = store.telemetry_window(
+        TelemetryQuery(
+            dataset_id=sub["dataset_id"],
+            window_start=sub["window_start"],
+            window_end=sub["window_end"],
+            as_of=case["submitted_at"],
+        )
+    )
     confirmed, unconfirmed = [], 0
     for table, metrics in TABLE_METRICS.items():
-        df = _visible_frame(data_root / "cases" / sub["dataset_id"], table, submitted_at)
-        for entity_id, rows in df.groupby("entity_id", sort=True):
+        for entity_id in window.entities(table):
             for metric in metrics:
                 request = DetectionRequest(
                     entity_id=entity_id, metric=metric, window_start=sub["window_start"], window_end=sub["window_end"]
                 )
-                report = detect_series(request, rows["timestamp"], rows[metric.value], config)
+                report = detect_series(request, *window.series(entity_id, metric), config)
                 confirmed += report.confirmed
                 unconfirmed += len(report.anomalies) - len(report.confirmed)
     return confirmed, unconfirmed
@@ -116,7 +112,8 @@ def run(
 ) -> dict:
     cases = [json.loads(line) for line in cases_file.read_text().splitlines() if line.strip()]
     # Detect on every case before any label is read.
-    detections = {c["case_id"]: detect_case(c, data_root, config) for c in cases}
+    store = DatasetStore(data_root)
+    detections = {c["case_id"]: detect_case(c, store, config) for c in cases}
     labels = {lab["case_id"]: lab for lab in map(json.loads, labels_file.read_text().splitlines())}
     tolerance = pd.Timedelta(minutes=tolerance_minutes)
     results = [score_case(c, labels[c["case_id"]], *detections[c["case_id"]], tolerance) for c in cases]

@@ -217,7 +217,7 @@ approval before the next starts.**
 | 2 ✅ | This plan, ARCHITECTURE.md, workflow and state docs, ADRs 0001–0007, typed state model | State and reducer contract tests |
 | 3 ✅ | `synthgen/` generator, generated `data/synthetic/v1`, runbooks, past incidents, `eval/datasets/v1` cases and labels, manifest | Reproducibility checksum, schema validity, label/corpus separation |
 | 4 ✅ | `netpulse/detection` (baseline, threshold, robust z, window comparison, plausibility, gap handling, consolidation) and `eval/detection_benchmark.py` — see docs/detection.md | Unit tests per algorithm, including noise, gaps, and flat series |
-| 5 | `netpulse/topology`, `netpulse/retrieval`, `netpulse/data`, tool I/O schemas | Traversal and blast radius, BM25 ranking, sanitization, error handling |
+| 5 ✅ | `netpulse/data` (visibility-aware store), `netpulse/topology` (paths, blast radius, localization, change context), `netpulse/retrieval` (BM25, sanitization, conflicts) — see docs/tools.md | Visibility, gaps, traversal safety, blast radius, localization, retrieval ranking, injection flags, conflicts |
 | 6 | Minimal graph: intake → … → report with the heuristic investigator | Node unit tests, happy-path end-to-end |
 | 7 | Verifier, ranker, routing, retry and round budgets, deadline, failure report, Ollama adapter + FakeLLM | Routing tables, retry budget, tool failure, insufficient evidence → inconclusive |
 | 8 | SQLite checkpointer, `interrupt`/resume, policy engine, action catalog | Checkpoint and resume across a fresh process, approve/reject/more-investigation, authz |
