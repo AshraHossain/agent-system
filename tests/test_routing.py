@@ -36,7 +36,13 @@ def state(**kw):
 
 @pytest.mark.parametrize(
     "router",
-    [routing.after_linear("x"), routing.after_verify, routing.after_rank, routing.after_recommend],
+    [
+        routing.after_linear("x"),
+        routing.after_verify,
+        routing.after_rank,
+        routing.after_recommend,
+        routing.after_policy,
+    ],
 )
 def test_fatal_beats_deadline_beats_everything(router):
     assert router(state(fatal_error=True, deadline_at=EARLIER), NOW) == "failure_report"
@@ -81,24 +87,41 @@ def test_after_rank_bounded_rounds(sufficient, rounds, signal, expected):
     assert routing.after_rank(s, NOW) == expected
 
 
+def test_after_recommend_goes_to_policy_review():
+    assert routing.after_recommend(state(), NOW) == "policy_review"
+
+
 @pytest.mark.parametrize(
-    ("conclusive", "signal", "severity", "expected"),
+    ("approval_status", "expected"),
+    [("pending", "human_approval"), ("escalated", "escalate"), ("not_required", "compile_report")],
+)
+def test_after_policy(approval_status, expected):
+    assert routing.after_policy(state(approval_status=approval_status), NOW) == expected
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
     [
-        (True, True, "high", "compile_report"),
-        (False, True, "medium", "escalate"),
-        (False, False, "low", "compile_report"),  # nothing found, low severity: inconclusive report only
-        (True, True, "critical", "escalate"),
+        ({"approval_status": "approved"}, "compile_report"),
+        ({"approval_status": "rejected"}, "compile_report"),
+        ({"approval_status": "pending", "review_error": "role operator cannot decide"}, "human_approval"),
+        (
+            {
+                "approval_status": "more_investigation_requested",
+                "reviewer_decisions": [{"choice": "request_more_investigation"}],
+            },
+            "retrieve_telemetry",
+        ),
+        (
+            {
+                "approval_status": "more_investigation_requested",
+                "reviewer_decisions": [{"choice": "request_more_investigation"}] * 2,
+            },
+            "escalate",
+        ),
+        ({"fatal_error": True}, "failure_report"),
     ],
 )
-def test_after_recommend_escalation(conclusive, signal, severity, expected):
-    s = state(
-        confidence_assessment=assessment(conclusive, conclusive),
-        detected_anomalies=[{"confirmed": signal}],
-        classification={"severity": severity},
-    )
-    assert routing.after_recommend(s, NOW) == expected
-
-
-def test_escalate_always_reports_unless_fatal():
-    assert routing.after_escalate(state(deadline_at=EARLIER), NOW) == "compile_report"
-    assert routing.after_escalate(state(fatal_error=True), NOW) == "failure_report"
+def test_after_human(update, expected):
+    # The deadline is ignored here on purpose: it is re-based when a reviewer resumes the run.
+    assert routing.after_human(state(deadline_at=EARLIER, **update), NOW) == expected

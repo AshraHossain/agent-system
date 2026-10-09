@@ -8,6 +8,7 @@
 | [detection.md](detection.md) | Deterministic detectors and benchmark |
 | [tools.md](tools.md) | Data, topology, and retrieval tools |
 | [llm.md](llm.md) | LLM providers, prompts, strict parsing, verification, budgets |
+| [human_approval.md](human_approval.md) | Policy review, durable interrupt/resume, authorization, audit |
 | [adr/](adr/) | Architecture decision records |
 
-Planned for later phases: `evaluation.md`, `security.md`, `human_approval.md`, `operations.md`.
+Planned for later phases: `evaluation.md`, `security.md`, `operations.md`.

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from netpulse.graph.builder import NODES
 from netpulse.graph.deps import Deps
-from netpulse.graph.runner import initial_state
+from netpulse.graph.runner import initial_state, resume_investigation, run_investigation
 from netpulse.state import append_list, merge_evidence
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,7 +54,16 @@ def apply(state: dict, update: dict) -> dict:
     return out
 
 
-PIPELINE = [(n, fn) for n, fn, _ in NODES if n not in {"escalate", "failure_report"}]
+PIPELINE = [(n, fn) for n, fn, _ in NODES if n not in {"escalate", "failure_report", "human_approval"}]
+SENIOR_APPROVE = {"reviewer_id": "test-senior", "reviewer_role": "senior_operator", "choice": "approve"}
+
+
+def run_to_end(deps: Deps, state: dict, graph, review: dict | None = SENIOR_APPROVE) -> dict:
+    """Run; if the workflow pauses for approval, resume it once with ``review``."""
+    out = run_investigation(deps, state, graph)
+    if "__interrupt__" in out and review is not None:
+        out = resume_investigation(deps, graph, state["incident_id"], review)
+    return out
 
 
 def run_until(scenario: str, stop_before: str, deps: Deps | None = None) -> dict:

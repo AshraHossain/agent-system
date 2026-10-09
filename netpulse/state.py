@@ -79,6 +79,7 @@ class InvestigationState(TypedDict, total=False):
     ]  # provider/model/outcome per attempt (owner: generate_hypotheses)
     escalation_reasons: list[str]  # why the run was handed to a human (owner: escalate)
     approval_status: str  # ApprovalStatus (owner: policy_review, human_approval, escalate)
+    review_error: str | None  # last invalid reviewer input; shown on re-interrupt (owner: human_approval)
     reviewer_decisions: Annotated[list[JSONDict], append_list]  # ReviewerDecision[] (owner: human_approval)
     status: str  # WorkflowStatus (owner: whichever node changes the lifecycle stage)
     fatal_error: bool  # set by the node wrapper; routes to failure_report

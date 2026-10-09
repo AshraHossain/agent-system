@@ -3,27 +3,26 @@
 > This document is the full target specification. The **implementation status**
 > table below shows what exists today.
 
-## Implementation status (Phase 7)
+## Implementation status (Phase 8)
+
+All 14 logical stages are implemented.
 
 | Node / edge | Status |
 |---|---|
-| 1–11, 13b `escalate`, 14, `failure_report` | Implemented (`netpulse/graph/nodes.py`, `verification.py`, `ranking.py`) |
-| Verify → generate retry loop; rank → telemetry extra round; recommend → escalate | Implemented (`routing.py`, unit-tested in `tests/test_routing.py`) |
-| Fatal → `failure_report`; deadline → `escalate`; step budget → failure report | Implemented (routers, `runner.py`) |
-| Per-node timeouts (tool / LLM), critical vs. degradable nodes | Implemented (`wrapper.py`) |
-| Ollama generator with a visible fallback; scripted test generator | Implemented (`netpulse/llm/`, see [llm.md](llm.md)) |
-| 12 `policy_review`, 13a `human_approval` (interrupt), remediation proposals, SQLite checkpointer | Phase 8 |
+| 1–14 and `failure_report` | Implemented (`netpulse/graph/nodes.py`, `verification.py`, `ranking.py`) |
+| 11 `recommend_actions` | Diagnostics always. Remediation only when evidence is sufficient. Catalog-only, target type checked, never executed. |
+| 12 `policy_review` | Deterministic per-action and incident decisions (`netpulse/policy/engine.py`) |
+| 13a `human_approval` | `interrupt()` with a durable SQLite checkpoint. Approve, reject, more investigation, or an invalid/unauthorized input that triggers a re-ask (see [human_approval.md](human_approval.md)). |
+| 13b `escalate` | Merges policy reasons with deadline and review-budget reasons |
+| Routers (`routing.py`) | fatal → `failure_report`; deadline → `escalate`; verify retry; rank extra round; policy → approval / escalate / report; human → report / telemetry / re-ask / escalate |
+| Budgets | retries, rounds, review cycles, wall clock (re-based on human resume), per-node tool/LLM timeouts, graph step limit → failure report |
 
-**Phase 7 escalation rule**, refined by the Phase 8 policy engine: escalate
-when the assessment is not conclusive **and** at least one confirmed anomaly
-exists, or when the operator-reported severity is critical. A run with no
-anomaly and low severity ends as a plain inconclusive report.
-
-**Critical nodes** are intake, telemetry, detection, verification, ranking,
-escalate and report. In these nodes, a non-recoverable tool error or a
-timeout ends the run via `failure_report`. In every other node it is
-recorded and the run continues degraded. Unexpected exceptions are always
-fatal.
+**Escalation** is decided by `policy_review`. The run escalates when the
+result is not conclusive but there is real signal, when severity is critical,
+or when several complementary root causes were found. If remediation also
+needs approval, the escalation reasons travel with the approval request,
+which then requires a `senior_operator`. Otherwise the run goes straight to
+`escalate`.
 
 ## Node contracts
 

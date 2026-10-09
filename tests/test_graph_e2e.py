@@ -4,7 +4,7 @@ import builtins
 from pathlib import Path
 
 import pytest
-from graph_helpers import case_state, shared_deps
+from graph_helpers import case_state, run_to_end, shared_deps
 
 from netpulse.graph.builder import build_graph
 from netpulse.graph.runner import run_investigation
@@ -15,9 +15,10 @@ def graph():
     return build_graph(shared_deps())
 
 
-def run(scenario: str, graph, deps=None) -> dict:
+def run(scenario: str, graph=None, deps=None) -> dict:
+    """Each run gets a fresh graph: one checkpointer thread per incident id (see runner guard)."""
     deps = deps or shared_deps()
-    return run_investigation(deps, case_state(scenario, deps), graph)
+    return run_to_end(deps, case_state(scenario, deps), build_graph(deps))
 
 
 def hypotheses_by_rank(state: dict) -> list[dict]:
@@ -43,9 +44,15 @@ def test_happy_path_identifies_congested_link(graph):
         "verify_evidence",
         "rank_hypotheses",
         "recommend_actions",
+        "policy_review",
+        "human_approval",  # the paused first execution leaves no trace; this is the resumed one
         "compile_report",
     ]
     assert report["data_notice"].startswith("SIMULATED DATA")
+    assert state["approval_status"] == "approved" and state["reviewer_decisions"][0]["reviewer_id"] == "test-senior"
+    remediation = [a for a in report["recommended_actions"] if a["kind"] == "remediation"]
+    assert remediation and all(a["executed"] is False for a in remediation)
+    assert "executed nothing" in report["summary"]
 
 
 def test_every_citation_resolves_to_registered_evidence(graph):
@@ -74,9 +81,11 @@ def test_insufficient_evidence_never_produces_a_confident_root_cause(graph, scen
     assert report["missing_evidence"]
 
 
-def test_multiple_faults_are_both_reported(graph):
-    causes = {(h["cause_category"], h["suspected_root_entity"]) for h in hypotheses_by_rank(run("multi_fault", graph))}
+def test_multiple_faults_are_both_reported_and_escalated(graph):
+    state = run("multi_fault", graph)
+    causes = {(h["cause_category"], h["suspected_root_entity"]) for h in hypotheses_by_rank(state)}
     assert {("device_cpu_saturation", "fw-1"), ("link_degradation", "link-agg-1-acc-2")} <= causes
+    assert any("simultaneous root causes" in r for r in state["final_report"]["escalation_reasons"])
 
 
 def test_prompt_injection_is_treated_as_data(graph):
@@ -89,11 +98,11 @@ def test_prompt_injection_is_treated_as_data(graph):
     assert all(a["kind"] == "diagnostic" for a in report["recommended_actions"])
 
 
-def test_missing_dataset_produces_structured_failure_report(graph):
+def test_missing_dataset_produces_structured_failure_report():
     deps = shared_deps()
     state = case_state("congestion", deps)
     state["submission"] = {**state["submission"], "dataset_id": "case-99"}
-    out = run_investigation(deps, state, graph)
+    out = run_investigation(deps, state, build_graph(deps))
     assert out["status"] == "failed" and out["final_report"]["outcome"] == "failed"
     assert out["node_trace"][-1]["node"] == "failure_report"
     assert any(e["node"] == "retrieve_telemetry" and not e["recoverable"] for e in out["errors"])
@@ -106,7 +115,7 @@ def test_unexpected_exception_is_contained(graph, monkeypatch):
         raise RuntimeError("event store offline")
 
     monkeypatch.setattr(deps.store, "events", broken)
-    out = run_investigation(deps, case_state("congestion", deps), graph)
+    out = run_investigation(deps, case_state("congestion", deps), build_graph(deps))
     assert out["final_report"]["outcome"] == "failed"
     assert any(e["kind"] == "internal" and "event store offline" in e["message"] for e in out["errors"])
 
@@ -137,3 +146,13 @@ def test_investigation_never_opens_ground_truth(graph, monkeypatch):
     )
     state = run("congestion", graph)
     assert state["final_report"]["outcome"] == "root_cause_identified" and opened == []
+
+
+def test_rerunning_an_incident_on_the_same_graph_is_refused():
+    from netpulse.errors import ToolInputError
+
+    deps = shared_deps()
+    graph = build_graph(deps)
+    run_investigation(deps, case_state("normal_quiet", deps), graph)
+    with pytest.raises(ToolInputError, match="already has a run"):
+        run_investigation(deps, case_state("normal_quiet", deps), graph)

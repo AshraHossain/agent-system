@@ -48,3 +48,6 @@ logs/
 *.log
 
 graphify-out/
+
+# NetPulse local state (checkpoints + audit log)
+.netpulse/

@@ -44,10 +44,11 @@ Implemented in [`netpulse/state.py`](../netpulse/state.py), with value schemas i
 | `verification_results` | `VerificationResult[]` | verify_evidence | Append-only |
 | `verifier_feedback` | `str[]` | verify_evidence | Blocking issues for the next attempt. Reset when a new investigation round starts. |
 | `generation_attempts` | `dict[]` (append) | generate_hypotheses | Provider, model, outcome (`ok`/`error`/`timeout`), hypothesis count and duration per attempt |
-| `escalation_reasons` | `str[]` | escalate | Why the run was handed to a human |
+| `escalation_reasons` | `str[]` | policy_review → escalate | Policy writes the conditions; escalate adds deadline and review-budget reasons |
 | `confidence_assessment` | `ConfidenceAssessment` | rank_hypotheses | Ordinal confidence, deterministic |
 | `recommended_actions` | `ProposedAction[]` | recommend_actions | `executed` is fixed to `False` |
-| `policy_decisions` | `PolicyDecision[]` | policy_review | |
+| `policy_decisions` | `PolicyDecision[]` | policy_review | One per action, plus an incident-level decision (`action_id = null`) |
+| `review_error` | `str \| null` | human_approval | The last invalid or unauthorized reviewer input. It is shown on the next interrupt. |
 | `approval_status` | `ApprovalStatus` | policy_review → human_approval / escalate | Explicit hand-off order |
 | `reviewer_decisions` | `ReviewerDecision[]` | human_approval | Append-only |
 | `retry_count` | `int` | generate_hypotheses (reset by retrieve_telemetry on a new round) | Attempts made in the current round |

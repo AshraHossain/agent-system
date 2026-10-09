@@ -41,6 +41,9 @@ Development runs in approved phases. Read these before changing code:
   (docs/state_model.md), and evidence is immutable once recorded.
 - **Every output is labelled synthetic.** Never imply the system observed a
   real network.
+- **Code before `interrupt()` in `human_approval` must be side-effect free.**
+  LangGraph re-runs the node on resume. Never treat the in-memory saver as
+  durable approval.
 
 ## Commands
 
@@ -48,7 +51,8 @@ Development runs in approved phases. Read these before changing code:
 uv sync                                   # setup
 uv run pytest                             # full suite (~50 s)
 uv run ruff check . && uv run ruff format --check netpulse synthgen tests eval
-uv run netpulse investigate --case case-04            # demo one investigation
+uv run netpulse --provider heuristic investigate --case case-04   # demo; may pause for approval
+uv run netpulse review --incident case-04 --reviewer alice --role operator --choice approve
 uv run python -m synthgen.generate --check            # verify committed synthetic data
 uv run python -m eval.detection_benchmark             # detector precision/recall
 NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ollama server
@@ -65,7 +69,8 @@ NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ol
 | `netpulse/retrieval/` | BM25, sanitization, conflicts |
 | `netpulse/llm/` | Generator protocol; Ollama, heuristic, scripted and fallback generators; prompts; strict parsing |
 | `netpulse/graph/` | Nodes, verification, ranking, routing, wrapper (trace, timeouts, errors), builder, runner |
-| `netpulse/policy/catalog.json` | Static action allowlist |
+| `netpulse/policy/` | `catalog.json` (static action allowlist) and `engine.py` (deterministic policy rules) |
+| `netpulse/persistence/`, `netpulse/service.py` | SQLite checkpoints and append-only audit; start/status/decide/resume service |
 | `synthgen/` | Dataset generator. **Ground truth, never imported by netpulse.** |
 | `eval/` | Benchmarks and scorers. They may read labels; netpulse may not. |
 | `data/synthetic/v1/`, `eval/datasets/v1/`, `eval/labels/v1/` | Committed, checksummed data |

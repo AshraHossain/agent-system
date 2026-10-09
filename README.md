@@ -17,11 +17,12 @@ workflow:
 - **Uncertain cases** come out as inconclusive reports that list what
   evidence is missing.
 
-**Status: Phase 7 of 12.** The end-to-end workflow runs with deterministic
+**Status: Phase 8 of 12.** The end-to-end workflow runs with deterministic
 verification, bounded retries and investigation rounds, deadlines, timeouts,
-and an escalation path. The default LLM is local Ollama, which falls back
-*visibly* to a rule-based investigator if Ollama is unreachable. Human
-approval, the API, the UI and evaluation reports come in later phases. See
+an escalation path, a deterministic policy engine, and **durable human
+approval**. A run pauses with `interrupt()`, is checkpointed to SQLite, and
+can be resumed from another process. The default LLM is local Ollama, which falls back
+*visibly* to a rule-based investigator if Ollama is unreachable. The API, the UI and evaluation reports come in later phases. See
 [PLAN.md](PLAN.md).
 
 ## Quick start
@@ -29,8 +30,9 @@ approval, the API, the UI and evaluation reports come in later phases. See
 ```bash
 uv sync
 uv run netpulse investigate --case case-04     # investigate one synthetic case
-uv run netpulse investigate --case case-04 --json
-uv run netpulse investigate --case case-04 --provider heuristic   # no Ollama needed
+uv run netpulse --provider heuristic investigate --case case-04   # no Ollama needed; pauses for approval
+uv run netpulse status --incident case-04
+uv run netpulse review --incident case-04 --reviewer alice --role operator --choice approve
 uv run pytest
 ```
 
@@ -46,6 +48,7 @@ uv run pytest
 | [docs/detection.md](docs/detection.md) | Detectors and measured precision/recall |
 | [docs/tools.md](docs/tools.md) | Data, topology, and retrieval tool contracts |
 | [docs/llm.md](docs/llm.md) | LLM providers, prompts, parsing, verification, budgets |
+| [docs/human_approval.md](docs/human_approval.md) | Policy, interrupt/resume, checkpoints, authorization, audit |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
 ## License

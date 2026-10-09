@@ -9,12 +9,11 @@ import time
 from datetime import timedelta
 
 import pytest
-from graph_helpers import FIXED_NOW, case_state
+from graph_helpers import FIXED_NOW, case_state, run_to_end
 
 from netpulse.errors import DataCorruptError
 from netpulse.graph.builder import build_graph
 from netpulse.graph.deps import Deps
-from netpulse.graph.runner import run_investigation
 from netpulse.llm.scripted import ScriptedGenerator
 from netpulse.models import Budget
 
@@ -36,7 +35,7 @@ def run(deps: Deps, scenario: str, budget: Budget | None = None) -> dict:
     state = case_state(scenario, deps)
     if budget:
         state["budget"] = budget.model_dump(mode="json")
-    return run_investigation(deps, state, build_graph(deps))
+    return run_to_end(deps, state, build_graph(deps))
 
 
 def anomaly_ids(ctx, entity: str) -> list[str]:

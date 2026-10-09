@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from netpulse.models import Budget, ConfidenceAssessment, Severity
+from netpulse.models import Budget, ConfidenceAssessment
 
 FAILURE, ESCALATE = "failure_report", "escalate"
 
@@ -64,18 +64,31 @@ def after_rank(state: dict, now: datetime) -> str:
     return "recommend_actions"
 
 
-def needs_escalation(state: dict) -> bool:
-    """Phase 7 rule (refined by the Phase 8 policy engine): uncertain with real signal, or critical severity."""
-    assessment = ConfidenceAssessment.model_validate(state["confidence_assessment"])
-    has_signal = any(a.get("confirmed") for a in state.get("detected_anomalies") or [])
-    critical = (state.get("classification") or {}).get("severity") == Severity.CRITICAL.value
-    return (not assessment.conclusive and has_signal) or critical
-
-
 def after_recommend(state: dict, now: datetime) -> str:
+    return guard(state, now) or "policy_review"
+
+
+def after_policy(state: dict, now: datetime) -> str:
     if stop := guard(state, now):
         return stop
-    return ESCALATE if needs_escalation(state) else "compile_report"
+    return {"pending": "human_approval", "escalated": ESCALATE}.get(state.get("approval_status"), "compile_report")
+
+
+def after_human(state: dict, now: datetime) -> str:
+    """After a reviewer resumes the run. No deadline check: the deadline is re-based on resume."""
+    if state.get("fatal_error"):
+        return FAILURE
+    if state.get("review_error"):
+        return "human_approval"  # invalid input: ask again (each loop needs a new human resume)
+    status = state.get("approval_status")
+    if status == "more_investigation_requested":
+        return "retrieve_telemetry" if _review_cycles_left(state) >= 0 else ESCALATE
+    return "compile_report"
+
+
+def _review_cycles_left(state: dict) -> int:
+    used = sum(1 for d in state.get("reviewer_decisions") or [] if d["choice"] == "request_more_investigation")
+    return budget(state).max_review_cycles - used
 
 
 def after_escalate(state: dict, now: datetime) -> str:

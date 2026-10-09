@@ -226,6 +226,7 @@ class Budget(_Model):
     wall_clock_seconds: float = Field(default=300.0, gt=0, le=3600)
     tool_timeout_seconds: float = Field(default=20.0, gt=0, le=300)
     llm_timeout_seconds: float = Field(default=120.0, gt=0, le=900)
+    max_review_cycles: int = Field(default=1, ge=0, le=3)  # reviewer "investigate more" requests honoured
 
 
 class Classification(_Model):
@@ -388,6 +389,9 @@ class PolicyDecision(_Model):
     required_role: Literal["none", "operator", "senior_operator"] = "none"
 
 
+ROLE_RANK = {"none": 0, "operator": 1, "senior_operator": 2}
+
+
 class ReviewerDecision(_Model):
     reviewer_id: str
     reviewer_role: Literal["operator", "senior_operator"]
@@ -429,5 +433,44 @@ class FinalReport(_Model):
     missing_evidence: list[str] = Field(default_factory=list)
     errors: list[ErrorRecord] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    policy_decisions: list[PolicyDecision] = Field(default_factory=list)
+    reviewer_decisions: list[ReviewerDecision] = Field(default_factory=list)
+    escalation_reasons: list[str] = Field(default_factory=list)
     data_notice: str = SYNTHETIC_DATA_NOTICE
     generated_at: datetime
+
+
+# --------------------------------------------------------------------------
+# Human review (interrupt payload and resume input)
+# --------------------------------------------------------------------------
+
+
+class ReviewItem(_Model):
+    action: ProposedAction
+    decision: PolicyDecision
+
+
+class ReviewRequest(_Model):
+    """What the workflow shows a reviewer while paused. Built deterministically from state."""
+
+    incident_id: str
+    required_role: Literal["operator", "senior_operator"]
+    summary: str
+    hypotheses: list[RankedHypothesis]
+    evidence: list[EvidenceItem]
+    pending_actions: list[ReviewItem]
+    escalation_reasons: list[str] = Field(default_factory=list)
+    review_cycles_left: int
+    allowed_choices: list[ReviewerChoice]
+    previous_error: str | None = None
+    data_notice: str = SYNTHETIC_DATA_NOTICE
+
+
+class ReviewInput(_Model):
+    """Resume payload supplied by an authenticated reviewer (validated again inside the graph)."""
+
+    reviewer_id: str = Field(min_length=1, max_length=100)
+    reviewer_role: Literal["operator", "senior_operator"]
+    choice: ReviewerChoice
+    comment: str = Field(default="", max_length=2000)
+    approved_action_ids: list[str] | None = None  # None with "approve" = all pending actions

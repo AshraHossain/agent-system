@@ -24,6 +24,8 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from typing import Any, Literal
 
+from langgraph.errors import GraphBubbleUp
+
 from netpulse.errors import ToolError, ToolInputError, ToolTimeoutError
 from netpulse.graph.deps import Deps
 from netpulse.models import Budget, ErrorKind, ErrorRecord, NodeTrace
@@ -76,6 +78,8 @@ def instrument(
         try:
             update = dict(_run_with_timeout(fn, state, deps, seconds) or {})
             outcome = "degraded" if update.get("errors") else "ok"
+        except GraphBubbleUp:
+            raise  # interrupt() and other LangGraph control flow must reach the runtime untouched
         except ToolTimeoutError as exc:
             update = dict(on_timeout(state, deps)) if on_timeout else {}
             update["errors"] = [error_record(name, ErrorKind.TIMEOUT, exc, not critical, deps)]

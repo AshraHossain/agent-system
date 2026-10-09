@@ -12,6 +12,8 @@ import time
 import uuid
 from datetime import datetime, timedelta
 
+from langgraph.types import interrupt
+
 from netpulse.data.schemas import METRIC_TABLE, TelemetryQuery
 from netpulse.data.store import coverage_evidence
 from netpulse.detection import DetectionRequest, detect_series, to_evidence
@@ -23,6 +25,7 @@ from netpulse.graph.verification import verify
 from netpulse.graph.wrapper import error_record
 from netpulse.llm.base import EvidenceView, GenerationContext
 from netpulse.models import (
+    ROLE_RANK,
     SYNTHETIC_DATA_NOTICE,
     ActionKind,
     Anomaly,
@@ -37,16 +40,24 @@ from netpulse.models import (
     IncidentCategory,
     IncidentSubmission,
     Metric,
+    PolicyDecision,
+    PolicyOutcome,
     ProposedAction,
     RankedHypothesis,
     ReportOutcome,
     RequestMetadata,
     RetrievedDocumentRef,
+    ReviewerChoice,
+    ReviewerDecision,
+    ReviewInput,
+    ReviewItem,
+    ReviewRequest,
     RootCauseCategory,
     Severity,
     WorkflowStatus,
 )
 from netpulse.policy.catalog import load_catalog
+from netpulse.policy.engine import PolicyContext, escalation_reasons, review_action, review_incident
 from netpulse.retrieval.retriever import RetrievalQuery, document_evidence
 from netpulse.retrieval.sanitize import sanitize
 from netpulse.topology.analysis import (
@@ -564,31 +575,50 @@ def rank_hypotheses(state: dict, deps: Deps) -> dict:
 # --------------------------------------------------------------------------
 
 
+MAX_DIAGNOSTICS, MAX_REMEDIATIONS = 6, 3
+
+
 def recommend_actions(state: dict, deps: Deps) -> dict:
+    """Select catalog actions. Diagnostics always; remediation only when evidence is sufficient.
+
+    Nothing here executes anything: every action is a proposal with ``executed=False``.
+    """
     catalog = load_catalog()
+    graph = deps.topology
     assessment = ConfidenceAssessment.model_validate(state["confidence_assessment"])
     hypotheses = {h["hypothesis_id"]: Hypothesis.model_validate(h) for h in state.get("hypotheses") or []}
     actions: list[ProposedAction] = []
     seen: set[tuple[str, str]] = set()
 
     def propose(catalog_id: str, target: list[str], hyp: Hypothesis | None) -> None:
+        entry = catalog[catalog_id]
         key = (catalog_id, ",".join(target))
-        if key in seen or len(actions) >= 6:
+        kind = ActionKind(entry.kind)
+        count = sum(a.kind == kind for a in actions)
+        if key in seen or count >= (MAX_DIAGNOSTICS if kind == ActionKind.DIAGNOSTIC else MAX_REMEDIATIONS):
             return
         seen.add(key)
-        entry = catalog[catalog_id]
+        radii = [graph.blast_radius(t) for t in target if graph.topology.kind(t) in {"node", "link"}]
         actions.append(
             ProposedAction(
                 action_id=f"act-{len(actions) + 1:02d}",
                 catalog_id=catalog_id,
-                kind=ActionKind.DIAGNOSTIC,
+                kind=kind,
                 description=entry.description,
                 target_entities=target,
                 related_hypothesis_id=hyp.hypothesis_id if hyp else None,
                 evidence_ids=hyp.supporting_evidence[:5] if hyp else [],
-                reversible=True,
+                reversible=entry.reversible,
+                blast_radius_entities=sorted({n for r in radii for n in r.isolated_nodes}),
+                affected_services=sorted({svc for r in radii for svc in r.affected_services}),
             )
         )
+
+    def target_fits(entry, entity: str | None) -> bool:
+        if entity is None:
+            return entry.target_type in {"any", "service"}
+        kind = graph.topology.kind(entity)
+        return entry.target_type == "any" or entry.target_type == kind
 
     for ranked in assessment.ranking[:3]:
         hyp = hypotheses[ranked.hypothesis_id]
@@ -596,11 +626,168 @@ def recommend_actions(state: dict, deps: Deps) -> dict:
         for entry in catalog.values():
             if entry.kind == "diagnostic" and hyp.cause_category.value in entry.applies_to:
                 propose(entry.catalog_id, target, hyp)
+    if assessment.evidence_sufficient:
+        leaders = [r for r in assessment.ranking if r.confidence == assessment.ranking[0].confidence]
+        for ranked in leaders:
+            hyp = hypotheses[ranked.hypothesis_id]
+            for entry in catalog.values():
+                if (
+                    entry.kind == "remediation"
+                    and hyp.cause_category.value in entry.applies_to
+                    and target_fits(entry, hyp.suspected_root_entity)
+                ):
+                    propose(entry.catalog_id, [hyp.suspected_root_entity], hyp)
     if _coverage_gaps(state):
         propose("check_collector_health", _coverage_gaps(state), None)
     if not actions:
         propose("run_path_trace", state.get("affected_services") or [], None)
     return {"recommended_actions": [_dump(a) for a in actions]}
+
+
+# --------------------------------------------------------------------------
+# 12. policy review (deterministic)
+# --------------------------------------------------------------------------
+
+
+def _policy_context(state: dict, deps: Deps) -> PolicyContext:
+    assessment = ConfidenceAssessment.model_validate(state["confidence_assessment"])
+    leaders = (
+        [r for r in assessment.ranking if r.confidence == (assessment.ranking or [None])[0].confidence]
+        if assessment.ranking
+        else []
+    )
+    conflicted: set[str] = set()
+    for item in _registry(state).values():
+        if item.method == "declared_conflict" and item.source_ref:
+            for runbook_id in item.source_ref.split(":", 1)[1].split("+"):
+                rb = next((r for r in deps.retriever.runbooks if r.runbook_id == runbook_id), None)
+                if rb:
+                    conflicted |= set(re.findall(r"`([a-z_]+)`", rb.body))
+    return PolicyContext(
+        assessment=assessment,
+        severity=(state.get("classification") or {}).get("severity", "medium"),
+        has_signal=any(a.get("confirmed") for a in state.get("detected_anomalies") or []),
+        leading_root_count=len(leaders) if assessment.conclusive else 0,
+        conflicted_actions=frozenset(conflicted),
+    )
+
+
+def policy_review(state: dict, deps: Deps) -> dict:
+    catalog = load_catalog()
+    ctx = _policy_context(state, deps)
+    actions = [ProposedAction.model_validate(a) for a in state.get("recommended_actions") or []]
+    decisions = [review_action(a, ctx, catalog, deps.topology) for a in actions]
+    incident = review_incident(decisions, ctx)
+    status = {
+        PolicyOutcome.REQUIRE_APPROVAL: ApprovalStatus.PENDING,
+        PolicyOutcome.ESCALATE: ApprovalStatus.ESCALATED,
+    }.get(incident.outcome, ApprovalStatus.NOT_REQUIRED)
+    update = {
+        "policy_decisions": [_dump(d) for d in [*decisions, incident]],
+        "approval_status": status.value,
+        "escalation_reasons": escalation_reasons(ctx),
+        "_trace_detail": f"incident decision: {incident.outcome.value}",
+    }
+    if status == ApprovalStatus.PENDING:
+        update["status"] = WorkflowStatus.AWAITING_APPROVAL.value
+    return update
+
+
+# --------------------------------------------------------------------------
+# 13a. human approval (LangGraph interrupt; durable via the checkpointer)
+# --------------------------------------------------------------------------
+
+
+def build_review_request(state: dict) -> ReviewRequest:
+    """Pure function of state: re-running it on resume yields the identical payload."""
+    decisions = {d["action_id"]: PolicyDecision.model_validate(d) for d in state.get("policy_decisions") or []}
+    incident = decisions[None]
+    pending = [
+        ReviewItem(action=ProposedAction.model_validate(a), decision=decisions[a["action_id"]])
+        for a in state.get("recommended_actions") or []
+        if decisions.get(a["action_id"]) and decisions[a["action_id"]].outcome == PolicyOutcome.REQUIRE_APPROVAL
+    ]
+    assessment = ConfidenceAssessment.model_validate(state["confidence_assessment"])
+    hypotheses = {h["hypothesis_id"]: Hypothesis.model_validate(h) for h in state.get("hypotheses") or []}
+    registry = _registry(state)
+    cited = []
+    for r in assessment.ranking[:3]:
+        cited += [e for e in hypotheses[r.hypothesis_id].supporting_evidence if e in registry and e not in cited]
+    cycles_used = sum(
+        1
+        for d in state.get("reviewer_decisions") or []
+        if d["choice"] == ReviewerChoice.REQUEST_MORE_INVESTIGATION.value
+    )
+    cycles_left = max(0, Budget.model_validate(state.get("budget") or {}).max_review_cycles - cycles_used)
+    choices = [ReviewerChoice.APPROVE, ReviewerChoice.REJECT]
+    if cycles_left:
+        choices.append(ReviewerChoice.REQUEST_MORE_INVESTIGATION)
+    return ReviewRequest(
+        incident_id=state["incident_id"],
+        required_role=incident.required_role if incident.required_role != "none" else "operator",
+        summary=assessment.rationale,
+        hypotheses=assessment.ranking[:3],
+        evidence=[registry[e] for e in cited[:15]],
+        pending_actions=pending,
+        escalation_reasons=state.get("escalation_reasons") or [],
+        review_cycles_left=cycles_left,
+        allowed_choices=choices,
+        previous_error=state.get("review_error"),
+    )
+
+
+def human_approval(state: dict, deps: Deps) -> dict:
+    request = build_review_request(state)
+    raw = interrupt(_dump(request))  # pauses here; the checkpointer persists state until a reviewer resumes
+    try:
+        review = ReviewInput.model_validate(raw)
+    except ValueError as exc:
+        return {"review_error": f"invalid review input: {str(exc)[:300]}"}
+    if ROLE_RANK[review.reviewer_role] < ROLE_RANK[request.required_role]:
+        return {"review_error": f"role {review.reviewer_role} cannot decide; {request.required_role} required"}
+    if review.choice not in request.allowed_choices:
+        return {"review_error": f"choice {review.choice.value} is not allowed (no review cycles left)"}
+    pending_ids = [item.action.action_id for item in request.pending_actions]
+    approved = []
+    if review.choice == ReviewerChoice.APPROVE:
+        approved = pending_ids if review.approved_action_ids is None else review.approved_action_ids
+        unknown = sorted(set(approved) - set(pending_ids))
+        if unknown:
+            return {"review_error": f"cannot approve unknown or non-pending actions: {', '.join(unknown)}"}
+    decision = ReviewerDecision(
+        reviewer_id=review.reviewer_id,
+        reviewer_role=review.reviewer_role,
+        choice=review.choice,
+        comment=sanitize(review.comment, 2000).text,
+        approved_action_ids=approved,
+        decided_at=deps.clock(),
+    )
+    status = {
+        ReviewerChoice.APPROVE: ApprovalStatus.APPROVED,
+        ReviewerChoice.REJECT: ApprovalStatus.REJECTED,
+        ReviewerChoice.REQUEST_MORE_INVESTIGATION: ApprovalStatus.MORE_INVESTIGATION_REQUESTED,
+    }[review.choice]
+    update = {
+        "reviewer_decisions": [_dump(decision)],
+        "approval_status": status.value,
+        "review_error": None,
+        "status": WorkflowStatus.RUNNING.value,
+        # Time spent waiting for a human does not count against the investigation budget.
+        "deadline_at": (
+            deps.clock() + timedelta(seconds=Budget.model_validate(state.get("budget") or {}).wall_clock_seconds)
+        ).isoformat(),
+    }
+    if review.comment:
+        alloc = EvidenceIdAllocator(state.get("evidence_references") or {})
+        note = EvidenceItem(
+            evidence_id=alloc.next("rev"),
+            source="reviewer",
+            summary=f"Reviewer {review.reviewer_id} ({review.choice.value}): {decision.comment}"[:600],
+            method="human_review",
+            trusted=False,  # human free text informs; it does not establish a cause on its own
+        )
+        update["evidence_references"] = {note.evidence_id: _dump(note)}
+    return update
 
 
 # --------------------------------------------------------------------------
@@ -610,7 +797,7 @@ def recommend_actions(state: dict, deps: Deps) -> dict:
 
 def escalate(state: dict, deps: Deps) -> dict:
     """Hand the incident to a human operator. Records why; never asserts a cause on its own."""
-    reasons = []
+    reasons = list(state.get("escalation_reasons") or [])
     if state.get("deadline_at") and deps.clock() > datetime.fromisoformat(state["deadline_at"]):
         reasons.append("investigation time budget exhausted")
     raw = state.get("confidence_assessment")
@@ -619,9 +806,8 @@ def escalate(state: dict, deps: Deps) -> dict:
         reasons.append("investigation stopped before hypotheses were ranked")
     elif not assessment.conclusive:
         reasons.append(f"evidence insufficient after {state.get('investigation_rounds', 0)} investigation round(s)")
-    severity = (state.get("classification") or {}).get("severity")
-    if severity == Severity.CRITICAL.value:
-        reasons.append("operator-reported severity is critical")
+    if state.get("approval_status") == ApprovalStatus.MORE_INVESTIGATION_REQUESTED.value:
+        reasons.append("reviewer requested more investigation but the review budget is exhausted")
     rejected = sum(len(v.get("rejected_hypothesis_ids", [])) for v in state.get("verification_results") or [])
     if rejected:
         reasons.append(f"{rejected} generated hypothesis(es) were rejected by verification")
@@ -633,7 +819,7 @@ def escalate(state: dict, deps: Deps) -> dict:
     return {
         "approval_status": ApprovalStatus.ESCALATED.value,
         "status": WorkflowStatus.ESCALATED.value,
-        "escalation_reasons": reasons or ["escalation requested by workflow policy"],
+        "escalation_reasons": list(dict.fromkeys(reasons)) or ["escalation requested by workflow policy"],
         "errors": errors,
     }
 
@@ -661,6 +847,17 @@ def compile_report(state: dict, deps: Deps) -> dict:
             + (f"Leading candidate: {top[0].hypothesis_id} ({top[0].confidence.value}). " if top else "")
             + "See missing evidence and recommended diagnostics."
         )
+    approval = state.get("approval_status")
+    decisions = state.get("reviewer_decisions") or []
+    if approval == ApprovalStatus.APPROVED.value:
+        approved = decisions[-1]["approved_action_ids"] if decisions else []
+        summary += (
+            f" Reviewer {decisions[-1]['reviewer_id']} approved {len(approved)} proposed action(s) "
+            "for MANUAL execution outside NetPulse. NetPulse is read-only and executed nothing."
+        )
+    elif approval == ApprovalStatus.REJECTED.value:
+        outcome = ReportOutcome.REJECTED_BY_REVIEWER
+        summary += f" Reviewer {decisions[-1]['reviewer_id']} rejected the proposed actions."
     if escalated:
         status = WorkflowStatus.ESCALATED
         if outcome != ReportOutcome.ROOT_CAUSE_IDENTIFIED:
@@ -694,6 +891,9 @@ def compile_report(state: dict, deps: Deps) -> dict:
         "missing_evidence": assessment.missing_evidence if assessment else ["investigation did not reach ranking"],
         "errors": state.get("errors") or [],
         "limitations": limitations,
+        "policy_decisions": state.get("policy_decisions") or [],
+        "reviewer_decisions": decisions,
+        "escalation_reasons": state.get("escalation_reasons") or [],
         "data_notice": SYNTHETIC_DATA_NOTICE,
         "generated_at": deps.clock(),
     }

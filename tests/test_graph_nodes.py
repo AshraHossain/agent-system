@@ -213,11 +213,21 @@ def test_generator_receives_only_summaries_and_ids():
     assert not hasattr(ctx, "telemetry") and all(len(e.summary) <= 600 for e in ctx.evidence)
 
 
-def test_recommendations_are_read_only_catalog_diagnostics():
+def test_recommendations_are_catalog_proposals_never_executed():
     state = run_until("multi_fault", "recommend_actions")
-    out = nodes.recommend_actions(state, shared_deps())
-    assert out["recommended_actions"]
-    assert all(a["kind"] == "diagnostic" and a["executed"] is False for a in out["recommended_actions"])
+    actions = nodes.recommend_actions(state, shared_deps())["recommended_actions"]
+    from netpulse.policy.catalog import load_catalog
+
+    catalog = load_catalog()
+    assert actions and all(a["catalog_id"] in catalog and a["executed"] is False for a in actions)
+    assert all(catalog[a["catalog_id"]].kind == a["kind"] for a in actions)
+    assert any(a["kind"] == "remediation" for a in actions)  # evidence is sufficient here
+
+
+def test_no_remediation_without_sufficient_evidence():
+    state = run_until("outside_evidence", "recommend_actions")
+    actions = nodes.recommend_actions(state, shared_deps())["recommended_actions"]
+    assert actions and all(a["kind"] == "diagnostic" for a in actions)
 
 
 def test_recommendations_include_collector_check_when_data_is_missing():
@@ -230,7 +240,7 @@ def test_report_marks_inconclusive_and_carries_notice():
     state = run_until("outside_evidence", "compile_report")
     out = nodes.compile_report(state, shared_deps())
     report = out["final_report"]
-    assert report["outcome"] == "inconclusive" and out["status"] == "inconclusive"
+    assert report["outcome"] == "escalated" and out["status"] == "escalated"  # policy escalated it
     assert "SIMULATED DATA" in report["data_notice"] and report["missing_evidence"]
 
 
