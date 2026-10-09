@@ -47,3 +47,4 @@ logs/
 *.log
 
 graphify-out/
+var/

@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install
+        run: uv sync --frozen
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Tests (offline, no model credentials)
+        env:
+          OPSPILOT_MODEL_PROVIDER: mock
+        run: uv run pytest -q
+      - name: Offline evaluation + guardrails
+        run: uv run opspilot eval --guardrails --out var/eval
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: var/eval/
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t opspilot:ci .
+      - name: Smoke test (ADK API server lists the app)
+        run: |
+          docker run -d --name op -p 127.0.0.1:8000:8000 opspilot:ci \
+            adk api_server --host 0.0.0.0 --port 8000 adk_apps
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/list-apps && break; sleep 2; done
+          curl -sf http://127.0.0.1:8000/list-apps | grep -q opspilot_ai
+          docker rm -f op
