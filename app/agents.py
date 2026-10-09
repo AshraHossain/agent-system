@@ -39,43 +39,21 @@ def parse_steps(raw: str) -> List[str]:
 
 
 def route_step_to_tool(step: str) -> str:
-    """Use LLM to decide which tool a step needs: 'calculator', 'search', or 'passthrough'.
-
-    Uses heuristic routing in test environments. Test detection uses multiple signals:
-    PYTEST_CURRENT_TEST env var and pytest module in sys.modules.
-    """
-    import sys
-
-    try:
-        in_test = os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules
-    except Exception:
-        in_test = False
-
-    if in_test:
-        step_lower = step.lower()
-        if any(op in step for op in ["+", "-", "*", "/", "%", "**"]):
-            return "calculator"
-        if any(re.search(r"\b" + kw + r"\b", step_lower) for kw in ["search", "find", "look up", "query"]):
-            return "search"
-        return "passthrough"
-
-    try:
-        response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a task router. Categorize the given step into one of:\n"
-                        "- 'calculator': if it requires arithmetic or mathematical calculation\n"
-                        "- 'search': if it requires finding information, searching, or looking something up\n"
-                        "- 'passthrough': if it's a statement, analysis, or other task that needs no tool\n\n"
-                        "Respond with ONLY the category name, nothing else."
-                    ),
-                },
-                {"role": "user", "content": step},
-            ]
-        )
-        return response.choices[0].message.content.strip().lower()
-    except Exception:
-        return "passthrough"
+    """Use LLM to decide which tool a step needs: 'calculator', 'search', or 'passthrough'."""
+    response = client.chat.completions.create(
+        model="openai/gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a task router. Categorize the given step into one of:\n"
+                    "- 'calculator': if it requires arithmetic or mathematical calculation\n"
+                    "- 'search': if it requires finding information, searching, or looking something up\n"
+                    "- 'passthrough': if it's a statement, analysis, or other task that needs no tool\n\n"
+                    "Respond with ONLY the category name, nothing else."
+                ),
+            },
+            {"role": "user", "content": step},
+        ]
+    )
+    return response.choices[0].message.content.strip().lower()

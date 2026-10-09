@@ -1,6 +1,7 @@
 """Tests for the multi-node app/graph.py (planner -> executor -> synthesizer).
 
-planner_agent and route_step_to_tool are mocked everywhere here so these tests run offline.
+route_step_to_tool is replaced by a keyword-based fake (tests/conftest.py) and
+planner_agent is mocked where the full graph runs, so these tests stay offline.
 """
 
 import app.graph as graph_module
