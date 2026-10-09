@@ -8,6 +8,7 @@ re-validate whatever they read through the Pydantic models.
 from __future__ import annotations
 
 import re
+import time
 import uuid
 from datetime import datetime, timedelta
 
@@ -18,6 +19,7 @@ from netpulse.errors import ToolError, ToolInputError
 from netpulse.evidence import EvidenceIdAllocator
 from netpulse.graph.deps import Deps
 from netpulse.graph.ranking import assess
+from netpulse.graph.verification import verify
 from netpulse.graph.wrapper import error_record
 from netpulse.llm.base import EvidenceView, GenerationContext
 from netpulse.models import (
@@ -204,7 +206,9 @@ def retrieve_telemetry(state: dict, deps: Deps) -> dict:
             dq_ids.append(item.evidence_id)
     ref = window.ref.model_copy(update={"data_quality_evidence_ids": dq_ids})
     gaps = sorted(c.entity_id for c in window.coverage if c.coverage_ratio < COVERAGE_GAP)
+    reset = {"retry_count": 0, "verifier_feedback": []} if rounds > 1 else {}
     return {
+        **reset,
         "telemetry_window": {**_dump(ref), "gap_entities": gaps},
         "evidence_references": evidence,
         "investigation_rounds": rounds,
@@ -419,10 +423,10 @@ def retrieve_runbooks(state: dict, deps: Deps) -> dict:
 # --------------------------------------------------------------------------
 
 
-def generate_hypotheses(state: dict, deps: Deps) -> dict:
+def generation_context(state: dict) -> GenerationContext:
     registry = _registry(state)
     ref = state["telemetry_window"]
-    context = GenerationContext(
+    return GenerationContext(
         incident_id=state["incident_id"],
         category=(state.get("classification") or {}).get("category", "unknown"),
         window_start=ref["start"],
@@ -444,32 +448,109 @@ def generate_hypotheses(state: dict, deps: Deps) -> dict:
         verifier_feedback=state.get("verifier_feedback") or [],
         attempt=state.get("retry_count", 0),
     )
+
+
+def generate_hypotheses(state: dict, deps: Deps) -> dict:
+    attempt = state.get("retry_count", 0) + 1
+    t0 = time.perf_counter()
+    log = {"attempt": attempt, "round": state.get("investigation_rounds", 1)}
     try:
-        result = deps.generator.generate(context)
+        result = deps.generator.generate(generation_context(state))
     except ToolError:
         raise
-    except Exception as exc:  # generator failures are recoverable: they yield zero hypotheses
+    except Exception as exc:  # generator failures are recoverable: the attempt counts, hypotheses are empty
+        log.update(
+            provider=deps.generator.provider,
+            model=deps.generator.model,
+            outcome="error",
+            error=f"{type(exc).__name__}: {str(exc)[:300]}",
+            hypotheses=0,
+        )
         return {
             "hypotheses": [],
-            "retry_count": state.get("retry_count", 0) + 1,
+            "retry_count": attempt,
+            "generation_attempts": [{**log, "duration_ms": round((time.perf_counter() - t0) * 1000, 1)}],
             "errors": [error_record("generate_hypotheses", ErrorKind.LLM_FAILURE, exc, True, deps)],
         }
+    log.update(
+        provider=result.provider,
+        model=result.model,
+        outcome="ok",
+        hypotheses=len(result.hypotheses),
+        note=(result.raw_output or "")[:200] if "fallback" in result.provider else None,
+    )
     return {
         "hypotheses": [_dump(h) for h in result.hypotheses],
-        "retry_count": state.get("retry_count", 0) + 1,
-        "_trace_detail": f"{len(result.hypotheses)} hypotheses from {result.provider}",
+        "retry_count": attempt,
+        "generation_attempts": [{**log, "duration_ms": round((time.perf_counter() - t0) * 1000, 1)}],
+        "_trace_detail": f"attempt {attempt}: {len(result.hypotheses)} hypotheses from {result.provider}",
+    }
+
+
+def on_generation_timeout(state: dict, deps: Deps) -> dict:
+    """Wrapper callback: an LLM timeout is a failed attempt, not a fatal error."""
+    attempt = state.get("retry_count", 0) + 1
+    return {
+        "hypotheses": [],
+        "retry_count": attempt,
+        "generation_attempts": [
+            {
+                "attempt": attempt,
+                "round": state.get("investigation_rounds", 1),
+                "provider": deps.generator.provider,
+                "model": deps.generator.model,
+                "outcome": "timeout",
+                "hypotheses": 0,
+            }
+        ],
     }
 
 
 # --------------------------------------------------------------------------
-# 10. ranking (Phase 6: no verifier yet; ranking itself ignores unknown ids)
+# 9. evidence verification (deterministic)
+# --------------------------------------------------------------------------
+
+
+def verify_evidence(state: dict, deps: Deps) -> dict:
+    hypotheses = [Hypothesis.model_validate(h) for h in state.get("hypotheses") or []]
+    window = state.get("telemetry_window") or {}
+    outcome = verify(
+        hypotheses,
+        _registry(state),
+        _anomalies(state),
+        deps.topology,
+        _coverage_gaps(state),
+        observed_entities=window.get("entity_ids", []),
+        attempt=state.get("retry_count", 0),
+    )
+    r = outcome.result
+    return {
+        "verification_results": [_dump(r)],
+        "verifier_feedback": outcome.feedback,
+        "evidence_references": {k: _dump(v) for k, v in outcome.new_evidence.items()},
+        "_trace_detail": f"attempt {r.attempt}: passed={r.passed} accepted={len(r.accepted_hypothesis_ids)} "
+        f"rejected={len(r.rejected_hypothesis_ids)}",
+    }
+
+
+def _accepted(state: dict) -> list[Hypothesis]:
+    results = state.get("verification_results") or []
+    hypotheses = [Hypothesis.model_validate(h) for h in state.get("hypotheses") or []]
+    if not results:
+        return []
+    accepted = set(results[-1]["accepted_hypothesis_ids"])
+    return [h for h in hypotheses if h.hypothesis_id in accepted]
+
+
+# --------------------------------------------------------------------------
+# 10. ranking (only verified hypotheses are ranked)
 # --------------------------------------------------------------------------
 
 
 def rank_hypotheses(state: dict, deps: Deps) -> dict:
     loc = _localization(state)
     assessment = assess(
-        [Hypothesis.model_validate(h) for h in state.get("hypotheses") or []],
+        _accepted(state),
         _registry(state),
         _anomalies(state),
         _coverage_gaps(state),
@@ -527,12 +608,44 @@ def recommend_actions(state: dict, deps: Deps) -> dict:
 # --------------------------------------------------------------------------
 
 
+def escalate(state: dict, deps: Deps) -> dict:
+    """Hand the incident to a human operator. Records why; never asserts a cause on its own."""
+    reasons = []
+    if state.get("deadline_at") and deps.clock() > datetime.fromisoformat(state["deadline_at"]):
+        reasons.append("investigation time budget exhausted")
+    raw = state.get("confidence_assessment")
+    assessment = ConfidenceAssessment.model_validate(raw) if raw else None
+    if assessment is None:
+        reasons.append("investigation stopped before hypotheses were ranked")
+    elif not assessment.conclusive:
+        reasons.append(f"evidence insufficient after {state.get('investigation_rounds', 0)} investigation round(s)")
+    severity = (state.get("classification") or {}).get("severity")
+    if severity == Severity.CRITICAL.value:
+        reasons.append("operator-reported severity is critical")
+    rejected = sum(len(v.get("rejected_hypothesis_ids", [])) for v in state.get("verification_results") or [])
+    if rejected:
+        reasons.append(f"{rejected} generated hypothesis(es) were rejected by verification")
+    errors = (
+        [error_record("escalate", ErrorKind.BUDGET_EXHAUSTED, "time budget exhausted before completion", True, deps)]
+        if "investigation time budget exhausted" in reasons
+        else []
+    )
+    return {
+        "approval_status": ApprovalStatus.ESCALATED.value,
+        "status": WorkflowStatus.ESCALATED.value,
+        "escalation_reasons": reasons or ["escalation requested by workflow policy"],
+        "errors": errors,
+    }
+
+
 def compile_report(state: dict, deps: Deps) -> dict:
-    assessment = ConfidenceAssessment.model_validate(state["confidence_assessment"])
+    raw = state.get("confidence_assessment")
+    assessment = ConfidenceAssessment.model_validate(raw) if raw else None
     hypotheses = {h["hypothesis_id"]: Hypothesis.model_validate(h) for h in state.get("hypotheses") or []}
     registry = _registry(state)
-    top: list[RankedHypothesis] = assessment.ranking[:3]
-    if assessment.conclusive:
+    top: list[RankedHypothesis] = assessment.ranking[:3] if assessment else []
+    escalated = state.get("approval_status") == ApprovalStatus.ESCALATED.value
+    if assessment and assessment.conclusive:
         leaders = [r for r in top if r.confidence == top[0].confidence]
         causes = "; ".join(
             f"{hypotheses[r.hypothesis_id].cause_category.value} at "
@@ -548,11 +661,28 @@ def compile_report(state: dict, deps: Deps) -> dict:
             + (f"Leading candidate: {top[0].hypothesis_id} ({top[0].confidence.value}). " if top else "")
             + "See missing evidence and recommended diagnostics."
         )
+    if escalated:
+        status = WorkflowStatus.ESCALATED
+        if outcome != ReportOutcome.ROOT_CAUSE_IDENTIFIED:
+            outcome = ReportOutcome.ESCALATED
+        summary += " Escalated to a human operator: " + "; ".join(state.get("escalation_reasons") or []) + "."
     cited = sorted({e for r in top for e in hypotheses[r.hypothesis_id].supporting_evidence if e in registry})
+    verification = state.get("verification_results") or []
+    rejected = sorted({h for v in verification for h in v.get("rejected_hypothesis_ids", [])})
     limitations = [
         "Synthetic data only; no real network was observed.",
         "Confidence levels are rule-based and ordinal, not probabilities.",
-    ] + [f"Input warning: {w}" for w in state.get("input_warnings") or []]
+    ]
+    if rejected:
+        codes = sorted({i["code"] for v in verification for i in v["issues"] if i["blocking"]})
+        limitations.append(
+            f"{len(rejected)} generated hypothesis(es) were rejected by deterministic verification "
+            f"({', '.join(codes)}) and are excluded from ranking."
+        )
+    attempts = state.get("generation_attempts") or []
+    if any("fallback" in (a.get("provider") or "") for a in attempts):
+        limitations.append("The configured LLM was unavailable; the rule-based fallback generator was used.")
+    limitations += [f"Input warning: {w}" for w in state.get("input_warnings") or []]
     report = {
         "incident_id": state["incident_id"],
         "outcome": outcome,
@@ -561,7 +691,7 @@ def compile_report(state: dict, deps: Deps) -> dict:
         "cited_evidence_ids": cited,
         "recommended_actions": state.get("recommended_actions") or [],
         "approval_status": state.get("approval_status", ApprovalStatus.NOT_REQUIRED.value),
-        "missing_evidence": assessment.missing_evidence,
+        "missing_evidence": assessment.missing_evidence if assessment else ["investigation did not reach ranking"],
         "errors": state.get("errors") or [],
         "limitations": limitations,
         "data_notice": SYNTHETIC_DATA_NOTICE,

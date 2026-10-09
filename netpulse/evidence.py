@@ -19,6 +19,7 @@ KINDS = {
     "rb": "runbook excerpt (untrusted)",
     "hist": "historical incident (untrusted)",
     "rev": "reviewer note",
+    "chk": "verifier negative check (no anomaly where a hypothesis requires one)",
 }
 _ID = re.compile(r"^ev-([a-z]+)-(\d{4})$")
 

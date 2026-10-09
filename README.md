@@ -17,9 +17,12 @@ workflow:
 - **Uncertain cases** come out as inconclusive reports that list what
   evidence is missing.
 
-**Status: Phase 6 of 12.** The end-to-end workflow runs with a rule-based
-investigator. Verification, the local LLM (Ollama), human approval, the API,
-the UI, and evaluation reports come in later phases. See [PLAN.md](PLAN.md).
+**Status: Phase 7 of 12.** The end-to-end workflow runs with deterministic
+verification, bounded retries and investigation rounds, deadlines, timeouts,
+and an escalation path. The default LLM is local Ollama, which falls back
+*visibly* to a rule-based investigator if Ollama is unreachable. Human
+approval, the API, the UI and evaluation reports come in later phases. See
+[PLAN.md](PLAN.md).
 
 ## Quick start
 
@@ -27,6 +30,7 @@ the UI, and evaluation reports come in later phases. See [PLAN.md](PLAN.md).
 uv sync
 uv run netpulse investigate --case case-04     # investigate one synthetic case
 uv run netpulse investigate --case case-04 --json
+uv run netpulse investigate --case case-04 --provider heuristic   # no Ollama needed
 uv run pytest
 ```
 
@@ -41,6 +45,7 @@ uv run pytest
 | [docs/synthetic_data.md](docs/synthetic_data.md) | Dataset, scenarios, ground truth |
 | [docs/detection.md](docs/detection.md) | Detectors and measured precision/recall |
 | [docs/tools.md](docs/tools.md) | Data, topology, and retrieval tool contracts |
+| [docs/llm.md](docs/llm.md) | LLM providers, prompts, parsing, verification, budgets |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
 ## License

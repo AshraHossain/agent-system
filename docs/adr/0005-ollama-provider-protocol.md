@@ -16,6 +16,10 @@ The provider is chosen by `NETPULSE_LLM_PROVIDER`. Ollama-backed tests carry
 **Alternatives.** Hosted APIs as the default (paid, data egress); raw HTTP
 calls (more code).
 
+**Update (Phase 7).** A `FallbackGenerator` wraps Ollama. It switches to the
+heuristic only when the server is *unreachable* (never on bad output), and
+it labels the switch in the attempt log and the report.
+
 **Consequences.** CI never exercises a real model. LLM quality is measured
 only in local eval runs, and reports always state which provider produced
 them.

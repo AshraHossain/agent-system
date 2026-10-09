@@ -74,6 +74,10 @@ class InvestigationState(TypedDict, total=False):
     retry_count: int  # hypothesis regeneration attempts (owner: generate_hypotheses)
     investigation_rounds: int  # evidence-gathering rounds (owner: retrieve_telemetry)
     verifier_feedback: list[str]  # blocking issues fed into the next attempt (owner: verify_evidence)
+    generation_attempts: Annotated[
+        list[JSONDict], append_list
+    ]  # provider/model/outcome per attempt (owner: generate_hypotheses)
+    escalation_reasons: list[str]  # why the run was handed to a human (owner: escalate)
     approval_status: str  # ApprovalStatus (owner: policy_review, human_approval, escalate)
     reviewer_decisions: Annotated[list[JSONDict], append_list]  # ReviewerDecision[] (owner: human_approval)
     status: str  # WorkflowStatus (owner: whichever node changes the lifecycle stage)

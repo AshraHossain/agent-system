@@ -123,6 +123,9 @@ class VerificationCode(StrEnum):
     UNTRUSTED_ONLY_SUPPORT = "untrusted_only_support"
     SCHEMA_ERROR = "schema_error"
     DUPLICATE_HYPOTHESIS = "duplicate_hypothesis"
+    NUMERIC_CLAIM_UNSUPPORTED = "numeric_claim_unsupported"
+    NO_HYPOTHESES = "no_hypotheses"
+    MISSING_REQUIRED_CONTEXT = "missing_required_context"
 
 
 class ActionKind(StrEnum):

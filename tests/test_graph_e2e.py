@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from graph_helpers import case_state, shared_deps
 
-from netpulse.graph.builder import PIPELINE, build_graph
+from netpulse.graph.builder import build_graph
 from netpulse.graph.runner import run_investigation
 
 
@@ -31,7 +31,20 @@ def test_happy_path_identifies_congested_link(graph):
     assert report["outcome"] == "root_cause_identified" and state["status"] == "completed"
     top = hypotheses_by_rank(state)[0]
     assert (top["cause_category"], top["suspected_root_entity"]) == ("link_congestion", "link-core-1-agg-1")
-    assert [t["node"] for t in state["node_trace"]] == [name for name, _ in PIPELINE]
+    assert [t["node"] for t in state["node_trace"]] == [
+        "intake_validate",
+        "classify_incident",
+        "retrieve_telemetry",
+        "detect_anomalies",
+        "analyze_topology",
+        "retrieve_history",
+        "retrieve_runbooks",
+        "generate_hypotheses",
+        "verify_evidence",
+        "rank_hypotheses",
+        "recommend_actions",
+        "compile_report",
+    ]
     assert report["data_notice"].startswith("SIMULATED DATA")
 
 
@@ -55,7 +68,8 @@ def test_no_anomaly_yields_inconclusive_without_invented_cause(graph, scenario):
 def test_insufficient_evidence_never_produces_a_confident_root_cause(graph, scenario):
     state = run(scenario, graph)
     report = state["final_report"]
-    assert report["outcome"] == "inconclusive"
+    assert report["outcome"] == "escalated" and state["approval_status"] == "escalated"
+    assert state["escalation_reasons"] and "Escalated to a human operator" in report["summary"]
     assert all(r["confidence"] in ("low", "insufficient_evidence") for r in report["top_hypotheses"])
     assert report["missing_evidence"]
 

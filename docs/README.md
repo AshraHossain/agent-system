@@ -7,6 +7,7 @@
 | [synthetic_data.md](synthetic_data.md) | Dataset v1, scenarios, ground-truth method |
 | [detection.md](detection.md) | Deterministic detectors and benchmark |
 | [tools.md](tools.md) | Data, topology, and retrieval tools |
+| [llm.md](llm.md) | LLM providers, prompts, strict parsing, verification, budgets |
 | [adr/](adr/) | Architecture decision records |
 
 Planned for later phases: `evaluation.md`, `security.md`, `human_approval.md`, `operations.md`.

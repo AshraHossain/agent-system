@@ -42,13 +42,15 @@ Implemented in [`netpulse/state.py`](../netpulse/state.py), with value schemas i
 | `evidence_references` | `{id: EvidenceItem}` | many (immutable merge) | The registry that every claim must cite |
 | `hypotheses` | `Hypothesis[]` | generate_hypotheses | Replaced on each attempt. Earlier attempts survive in `verification_results`. |
 | `verification_results` | `VerificationResult[]` | verify_evidence | Append-only |
-| `verifier_feedback` | `str[]` | verify_evidence | Blocking issues for the next attempt |
+| `verifier_feedback` | `str[]` | verify_evidence | Blocking issues for the next attempt. Reset when a new investigation round starts. |
+| `generation_attempts` | `dict[]` (append) | generate_hypotheses | Provider, model, outcome (`ok`/`error`/`timeout`), hypothesis count and duration per attempt |
+| `escalation_reasons` | `str[]` | escalate | Why the run was handed to a human |
 | `confidence_assessment` | `ConfidenceAssessment` | rank_hypotheses | Ordinal confidence, deterministic |
 | `recommended_actions` | `ProposedAction[]` | recommend_actions | `executed` is fixed to `False` |
 | `policy_decisions` | `PolicyDecision[]` | policy_review | |
 | `approval_status` | `ApprovalStatus` | policy_review → human_approval / escalate | Explicit hand-off order |
 | `reviewer_decisions` | `ReviewerDecision[]` | human_approval | Append-only |
-| `retry_count` | `int` | generate_hypotheses | Reset to 0 at the start of each investigation round |
+| `retry_count` | `int` | generate_hypotheses (reset by retrieve_telemetry on a new round) | Attempts made in the current round |
 | `investigation_rounds` | `int` | retrieve_telemetry | |
 | `status` | `WorkflowStatus` | lifecycle nodes | |
 | `fatal_error` | `bool` | node wrapper | |

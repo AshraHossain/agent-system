@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path
 
-from netpulse.graph.builder import PIPELINE
+from netpulse.graph.builder import NODES
 from netpulse.graph.deps import Deps
 from netpulse.graph.runner import initial_state
 from netpulse.state import append_list, merge_evidence
@@ -23,7 +23,7 @@ SCENARIO_CASE = {
 
 @cache
 def shared_deps() -> Deps:
-    deps = Deps.default()
+    deps = Deps.default(provider="heuristic")
     deps.clock = lambda: FIXED_NOW
     return deps
 
@@ -47,15 +47,18 @@ def apply(state: dict, update: dict) -> dict:
             continue
         if key == "evidence_references":
             out[key] = merge_evidence(out.get(key), value)
-        elif key in {"errors", "node_trace", "verification_results", "reviewer_decisions"}:
+        elif key in {"errors", "node_trace", "verification_results", "reviewer_decisions", "generation_attempts"}:
             out[key] = append_list(out.get(key), value)
         else:
             out[key] = value
     return out
 
 
+PIPELINE = [(n, fn) for n, fn, _ in NODES if n not in {"escalate", "failure_report"}]
+
+
 def run_until(scenario: str, stop_before: str, deps: Deps | None = None) -> dict:
-    """Run node functions (unwrapped) in pipeline order up to, not including, ``stop_before``."""
+    """Run node functions (unwrapped) in happy-path order up to, not including, ``stop_before``."""
     deps = deps or shared_deps()
     state = case_state(scenario, deps)
     for name, fn in PIPELINE:

@@ -21,6 +21,12 @@ class DataNotFoundError(ToolError, LookupError):
     recoverable = False
 
 
+class ToolTimeoutError(ToolError, TimeoutError):
+    """A tool or model call exceeded its time budget. The call may still be running in a worker thread."""
+
+    recoverable = True
+
+
 class DataCorruptError(ToolError):
     """Stored data failed validation (wrong columns, unparsable values)."""
 

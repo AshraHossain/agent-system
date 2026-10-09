@@ -9,8 +9,10 @@ LangGraph `StateGraph`:
 
 - **Detection is deterministic.** Detectors, topology analysis and retrieval
   are plain code, not LLM calls.
-- **LLM use is confined to hypothesis generation.** Today that step is
-  rule-based (`HeuristicGenerator`); the Ollama provider arrives in Phase 7.
+- **LLM use is confined to hypothesis generation** (`netpulse/llm/`). Ollama
+  is the default and falls back visibly to the rule-based `HeuristicGenerator`
+  if Ollama is unreachable. A deterministic verifier checks every output
+  before ranking (docs/llm.md).
 - **Confidence is computed by rules,** as an ordinal level, never a
   probability.
 - **The system is read-only.** Remediation is only ever *proposed*.
@@ -49,6 +51,7 @@ uv run ruff check . && uv run ruff format --check netpulse synthgen tests eval
 uv run netpulse investigate --case case-04            # demo one investigation
 uv run python -m synthgen.generate --check            # verify committed synthetic data
 uv run python -m eval.detection_benchmark             # detector precision/recall
+NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ollama server
 ```
 
 ## Layout
@@ -60,8 +63,8 @@ uv run python -m eval.detection_benchmark             # detector precision/recal
 | `netpulse/detection/` | Deterministic detectors and consolidation |
 | `netpulse/topology/` | Paths, blast radius, localization, change context |
 | `netpulse/retrieval/` | BM25, sanitization, conflicts |
-| `netpulse/llm/` | Generator protocol and heuristic generator |
-| `netpulse/graph/` | Nodes, wrapper (trace and errors), ranking, builder, runner |
+| `netpulse/llm/` | Generator protocol; Ollama, heuristic, scripted and fallback generators; prompts; strict parsing |
+| `netpulse/graph/` | Nodes, verification, ranking, routing, wrapper (trace, timeouts, errors), builder, runner |
 | `netpulse/policy/catalog.json` | Static action allowlist |
 | `synthgen/` | Dataset generator. **Ground truth, never imported by netpulse.** |
 | `eval/` | Benchmarks and scorers. They may read labels; netpulse may not. |

@@ -3,25 +3,27 @@
 > This document is the full target specification. The **implementation status**
 > table below shows what exists today.
 
-## Implementation status (Phase 6)
+## Implementation status (Phase 7)
 
 | Node / edge | Status |
 |---|---|
-| 1–8, 10, 11 (diagnostics only), 14, `failure_report` | Implemented in `netpulse/graph/nodes.py` |
-| Every node → `failure_report` when `fatal_error` | Implemented (`route_next` in `builder.py`) |
-| Node wrapper: trace, error capture, recoverable vs. fatal | Implemented (`wrapper.py`) |
-| 9 `verify_evidence`, retry loop, extra investigation rounds, deadline routing | Phase 7 |
-| Ollama generator, mocked-LLM tests | Phase 7 |
-| 12 `policy_review`, 13a `human_approval` (interrupt), 13b `escalate`, remediation proposals, SQLite checkpointer | Phase 8 |
+| 1–11, 13b `escalate`, 14, `failure_report` | Implemented (`netpulse/graph/nodes.py`, `verification.py`, `ranking.py`) |
+| Verify → generate retry loop; rank → telemetry extra round; recommend → escalate | Implemented (`routing.py`, unit-tested in `tests/test_routing.py`) |
+| Fatal → `failure_report`; deadline → `escalate`; step budget → failure report | Implemented (routers, `runner.py`) |
+| Per-node timeouts (tool / LLM), critical vs. degradable nodes | Implemented (`wrapper.py`) |
+| Ollama generator with a visible fallback; scripted test generator | Implemented (`netpulse/llm/`, see [llm.md](llm.md)) |
+| 12 `policy_review`, 13a `human_approval` (interrupt), remediation proposals, SQLite checkpointer | Phase 8 |
 
-Phase 6 runs the nodes in a straight line: `intake_validate → classify_incident → retrieve_telemetry →
-detect_anomalies → analyze_topology → retrieve_history → retrieve_runbooks → generate_hypotheses →
-rank_hypotheses → recommend_actions → compile_report`. Inconclusive results still end at `compile_report`
-with `outcome=inconclusive`. Escalation as a separate path arrives in Phase 8.
+**Phase 7 escalation rule**, refined by the Phase 8 policy engine: escalate
+when the assessment is not conclusive **and** at least one confirmed anomaly
+exists, or when the operator-reported severity is critical. A run with no
+anomaly and low severity ends as a plain inconclusive report.
 
-The diagram is in [ARCHITECTURE.md §4](../ARCHITECTURE.md#4-investigation-graph).
-This document defines each node's inputs, outputs, and failure behavior, and
-it defines every conditional edge.
+**Critical nodes** are intake, telemetry, detection, verification, ranking,
+escalate and report. In these nodes, a non-recoverable tool error or a
+timeout ends the run via `failure_report`. In every other node it is
+recorded and the run continues degraded. Unexpected exceptions are always
+fatal.
 
 ## Node contracts
 

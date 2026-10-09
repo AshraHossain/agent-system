@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.10,<3",
     "numpy>=2.1",
     "pandas>=2.2",
+    "langchain-ollama>=1.1,<2",
 ]
 
 [project.scripts]
@@ -41,3 +42,7 @@ select = ["E", "F", "I", "B", "UP", "S"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not ollama'"
+markers = [
+    "ollama: needs a running local Ollama server (opt in: NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama)",
+]

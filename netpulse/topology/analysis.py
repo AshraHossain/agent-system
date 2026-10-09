@@ -301,7 +301,7 @@ def localization_evidence(result: LocalizationResult, evidence_id: str, top: int
         evidence_id=evidence_id,
         source=EvidenceSource.TOPOLOGY,
         summary=(verdict + " Candidates: " + "; ".join(parts))[:600],
-        entity_ids=[c.entity_id for c in result.candidates[:top]],
+        entity_ids=[c.entity_id for c in result.candidates],  # all candidates, so any can be cited as grounded
         method="topology.localize",
     )
 

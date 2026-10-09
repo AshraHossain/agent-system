@@ -45,7 +45,7 @@ def test_intake_drops_unknown_suspects_and_flags_injection():
 def test_wrapped_intake_failure_is_fatal_and_recorded():
     state = case_state("congestion")
     state["submission"] = {}
-    out = instrument("intake_validate", nodes.intake_validate, shared_deps())(state)
+    out = instrument("intake_validate", nodes.intake_validate, shared_deps(), critical=True)(state)
     assert out["fatal_error"] is True
     assert out["errors"][0]["kind"] == "validation" and out["node_trace"][0]["outcome"] == "error"
 

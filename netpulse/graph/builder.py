@@ -1,60 +1,82 @@
-"""Build the investigation StateGraph.
+"""Build the investigation StateGraph (Phase 7: verification, bounded loops, escalation).
 
-Phase 6 topology (linear happy path):
+    intake_validate → classify_incident → retrieve_telemetry → detect_anomalies → analyze_topology
+    → retrieve_history → retrieve_runbooks → generate_hypotheses → verify_evidence
+        verify_evidence ─(blocking issues, retries left)→ generate_hypotheses
+        verify_evidence ─(passed | retries exhausted)→ rank_hypotheses
+    rank_hypotheses ─(insufficient, rounds left)→ retrieve_telemetry   (wider window)
+    rank_hypotheses → recommend_actions ─(uncertain with signal | critical)→ escalate → compile_report
+                                        └→ compile_report → END
+    any node ─(fatal_error)→ failure_report → END;  any node ─(deadline passed)→ escalate
 
-    intake_validate → classify_incident → retrieve_telemetry → detect_anomalies
-    → analyze_topology → retrieve_history → retrieve_runbooks → generate_hypotheses
-    → rank_hypotheses → recommend_actions → compile_report → END
-
-After every node, ``route_next`` sends a run whose ``fatal_error`` is set to
-``failure_report`` (→ END). Verification, retries, budgets, policy and
-approval are added in Phases 7–8.
+Routers are pure functions in ``routing.py``; they receive ``deps.clock()`` for deadline checks.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from langgraph.graph import END, START, StateGraph
 
-from netpulse.graph import nodes
+from netpulse.graph import nodes, routing
 from netpulse.graph.deps import Deps
 from netpulse.graph.wrapper import instrument
 from netpulse.state import InvestigationState
 
-PIPELINE: list[tuple[str, Callable]] = [
-    ("intake_validate", nodes.intake_validate),
-    ("classify_incident", nodes.classify_incident),
-    ("retrieve_telemetry", nodes.retrieve_telemetry),
-    ("detect_anomalies", nodes.detect_anomalies),
-    ("analyze_topology", nodes.analyze_topology),
-    ("retrieve_history", nodes.retrieve_history),
-    ("retrieve_runbooks", nodes.retrieve_runbooks),
-    ("generate_hypotheses", nodes.generate_hypotheses),
-    ("rank_hypotheses", nodes.rank_hypotheses),
-    ("recommend_actions", nodes.recommend_actions),
-    ("compile_report", nodes.compile_report),
+FAILURE, ESCALATE = routing.FAILURE, routing.ESCALATE
+
+# name, function, instrumentation options
+NODES = [
+    ("intake_validate", nodes.intake_validate, {"critical": True}),
+    ("classify_incident", nodes.classify_incident, {}),
+    ("retrieve_telemetry", nodes.retrieve_telemetry, {"timeout": "tool", "critical": True}),
+    ("detect_anomalies", nodes.detect_anomalies, {"timeout": "tool", "critical": True}),
+    ("analyze_topology", nodes.analyze_topology, {"timeout": "tool"}),
+    ("retrieve_history", nodes.retrieve_history, {"timeout": "tool"}),
+    ("retrieve_runbooks", nodes.retrieve_runbooks, {"timeout": "tool"}),
+    ("generate_hypotheses", nodes.generate_hypotheses, {"timeout": "llm", "on_timeout": nodes.on_generation_timeout}),
+    ("verify_evidence", nodes.verify_evidence, {"critical": True}),
+    ("rank_hypotheses", nodes.rank_hypotheses, {"critical": True}),
+    ("recommend_actions", nodes.recommend_actions, {}),
+    (ESCALATE, nodes.escalate, {"critical": True}),
+    ("compile_report", nodes.compile_report, {"critical": True}),
+    (FAILURE, nodes.failure_report, {}),
 ]
-FAILURE = "failure_report"
-
-
-def route_next(next_node: str) -> Callable[[dict], str]:
-    def route(state: dict) -> str:
-        return FAILURE if state.get("fatal_error") else next_node
-
-    route.__name__ = f"route_to_{next_node}"
-    return route
+LINEAR = [
+    ("intake_validate", "classify_incident"),
+    ("classify_incident", "retrieve_telemetry"),
+    ("retrieve_telemetry", "detect_anomalies"),
+    ("detect_anomalies", "analyze_topology"),
+    ("analyze_topology", "retrieve_history"),
+    ("retrieve_history", "retrieve_runbooks"),
+    ("retrieve_runbooks", "generate_hypotheses"),
+    ("generate_hypotheses", "verify_evidence"),
+]
 
 
 def build_graph(deps: Deps, checkpointer=None):
     graph = StateGraph(InvestigationState)
-    for name, fn in PIPELINE:
-        graph.add_node(name, instrument(name, fn, deps))
-    graph.add_node(FAILURE, instrument(FAILURE, nodes.failure_report, deps))
+    for name, fn, opts in NODES:
+        graph.add_node(name, instrument(name, fn, deps, **opts))
 
-    graph.add_edge(START, PIPELINE[0][0])
-    for (name, _), (next_name, _) in zip(PIPELINE[:-1], PIPELINE[1:], strict=True):
-        graph.add_conditional_edges(name, route_next(next_name), [next_name, FAILURE])
-    graph.add_conditional_edges(PIPELINE[-1][0], route_next(END), [END, FAILURE])
+    def bind(router):
+        def route(state: dict) -> str:
+            return router(state, deps.clock())
+
+        route.__name__ = router.__name__
+        return route
+
+    graph.add_edge(START, "intake_validate")
+    for src, dst in LINEAR:
+        graph.add_conditional_edges(src, bind(routing.after_linear(dst)), [dst, FAILURE, ESCALATE])
+    graph.add_conditional_edges(
+        "verify_evidence", bind(routing.after_verify), ["rank_hypotheses", "generate_hypotheses", FAILURE, ESCALATE]
+    )
+    graph.add_conditional_edges(
+        "rank_hypotheses", bind(routing.after_rank), ["recommend_actions", "retrieve_telemetry", FAILURE, ESCALATE]
+    )
+    graph.add_conditional_edges(
+        "recommend_actions", bind(routing.after_recommend), [ESCALATE, "compile_report", FAILURE]
+    )
+    graph.add_conditional_edges(ESCALATE, bind(routing.after_escalate), ["compile_report", FAILURE])
+    graph.add_conditional_edges("compile_report", lambda s: FAILURE if s.get("fatal_error") else END, [END, FAILURE])
     graph.add_edge(FAILURE, END)
     return graph.compile(checkpointer=checkpointer)

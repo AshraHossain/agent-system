@@ -43,6 +43,8 @@ def _print_summary(state: dict) -> None:
         print("Recommended diagnostics (read-only, not executed):")
         for a in report["recommended_actions"]:
             print(f"  - {a['catalog_id']} on {', '.join(a['target_entities'])}")
+    for note in report["limitations"]:
+        print(f"Note: {note}")
     print("\nNode trace: " + " → ".join(t["node"] for t in state.get("node_trace") or []))
 
 
@@ -59,6 +61,12 @@ def main(argv: list[str] | None = None) -> int:
     inv.add_argument("--cases-file", type=Path, default=DEFAULT_CASES)
     inv.add_argument("--data-dir", type=Path, default=None)
     inv.add_argument("--json", action="store_true", help="print the final report as JSON")
+    inv.add_argument(
+        "--provider",
+        choices=["ollama", "heuristic"],
+        default=None,
+        help="hypothesis generator (default: NETPULSE_LLM_PROVIDER, else ollama with visible fallback)",
+    )
     args = parser.parse_args(argv)
 
     if args.case:
@@ -69,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--submitted-at is required with --submission")
         submission, submitted_at, incident_id = json.loads(args.submission.read_text()), args.submitted_at, None
 
-    deps = Deps.default(args.data_dir)
+    deps = Deps.default(args.data_dir, provider=args.provider)
     state = run_investigation(
         deps, initial_state(submission, submitted_at=submitted_at, incident_id=incident_id, source="api", deps=deps)
     )
