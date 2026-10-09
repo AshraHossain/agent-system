@@ -108,20 +108,20 @@ come from one framework, and our control flow is a fixed pipeline.
 
 ## 5. Implementation phases (status)
 
-| # | Phase | Status |
+| # | Phase | Status (commit) |
 |---|---|---|
-| 1 | Repository & environment inspection | done |
-| 2 | ADK API verification; pinned dependency set (`google-adk[db]==2.11.0`) | done |
-| 3 | PLAN.md, ARCHITECTURE.md, ADRs | done |
-| 4 | Synthetic datasets (topology, telemetry generator, knowledge corpus, incidents, eval cases) | see git log |
-| 5 | Deterministic tools + unit tests | see git log |
-| 6 | Smallest working ADK agent (mock model) | see git log |
-| 7 | Specialist agents + output contracts | see git log |
-| 8 | Orchestration, verification, finalizer | see git log |
-| 9 | Sessions (SQLite), resume, budgets, failure handling | see git log |
-| 10 | Evaluation harness, security hardening, observability | see git log |
-| 11 | Demo CLI, `adk web` app, Dockerfile, CI | see git log |
-| 12 | Full test run + skeptical architecture review ([docs/review.md](docs/review.md)) | see git log |
+| 1 | Repository & environment inspection | done (report only) |
+| 2 | ADK API verification; pinned dependency set (`google-adk[db]==2.11.0`) | done (`203af70`) |
+| 3 | PLAN.md, ARCHITECTURE.md, ADRs | done (`e6520b8`) |
+| 4 | Synthetic datasets (topology, telemetry generator, knowledge corpus, incidents, eval cases) | done (`586b966`) |
+| 5 | Deterministic tools + unit tests | done (`1f26086`) |
+| 6 | Smallest working ADK agent (mock model) | done (`0d3fc81`) |
+| 7 | Specialist agents + output contracts | done (`637480d`) |
+| 8 | Orchestration, verification, finalizer | done (`c45e226`) |
+| 9 | Sessions (SQLite), resume, budgets, failure handling | done (`011bebe`) |
+| 10 | Evaluation harness, security hardening, observability | done (`d8dee1a`) |
+| 11 | Demo CLI, `adk web` app, Dockerfile, CI | done (`a1d4f5c`) |
+| 12 | Full test run + skeptical architecture review ([docs/review.md](docs/review.md)) | done (`5b9bfba` + docs) |
 
 ## 6. Non-goals and honest limits
 
