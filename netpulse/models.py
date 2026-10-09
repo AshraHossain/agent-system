@@ -104,6 +104,7 @@ class DetectorMethod(StrEnum):
     ROLLING_BASELINE = "rolling_baseline"
     ROBUST_ZSCORE = "robust_zscore"
     WINDOW_COMPARISON = "window_comparison"
+    PLAUSIBILITY = "plausibility"  # physically impossible readings (e.g. utilization > 100%)
 
 
 class ConfidenceLevel(StrEnum):
@@ -273,16 +274,21 @@ class EvidenceItem(_Model):
 
 
 class Anomaly(_Model):
+    """A consolidated detector finding, as stored in graph state."""
+
     anomaly_id: str
     entity_id: str
     metric: Metric
-    detector: DetectorMethod
+    detectors: list[DetectorMethod] = Field(min_length=1)
+    confirmed: bool  # corroborated by enough independent methods (or physically implausible)
+    implausible: bool = False
+    direction: Literal["high", "low"]
     start: datetime
     end: datetime
     peak_value: float
+    peak_at: datetime
     baseline_value: float | None = None
     threshold: float | None = None
-    score: float | None = None
     evidence_id: str = Field(pattern=EVIDENCE_ID_PATTERN)
 
 
