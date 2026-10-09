@@ -2,6 +2,17 @@
 
 Guidance for Claude Code when working in this repository.
 
+## Current direction: NetPulse AI (in progress)
+
+This repo is being rebuilt as **NetPulse AI**, a LangGraph network-anomaly
+investigation platform that runs on synthetic data, in phases that each need
+approval. Before working on it, read `PLAN.md`, `ARCHITECTURE.md`,
+`docs/graph_workflow.md`, `docs/state_model.md` and `docs/adr/`. New code
+goes in `netpulse/`. The `app/` scaffold described below will be retired in
+Phase 6. The API-key bug described below was fixed in commit `1af9096`, and
+the scaffold notes here are kept only until that retirement. Never add code
+that executes network changes. Remediation is always a proposal.
+
 ## What this is
 
 A minimal FastAPI service exposing a single-node LangGraph agent: `GET
