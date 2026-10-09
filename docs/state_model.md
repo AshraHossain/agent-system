@@ -30,9 +30,10 @@ Implemented in [`netpulse/state.py`](../netpulse/state.py), with value schemas i
 | `incident_id` | `str` | intake_validate | Also the LangGraph `thread_id` |
 | `request_metadata` | `RequestMetadata` | intake_validate | Includes the execution ID and LLM config snapshot |
 | `submission` | `IncidentSubmission` | intake_validate | Free text is untrusted |
+| `input_warnings` | `str[]` | intake_validate | Unknown suspected entities dropped; instruction-like text flagged |
 | `budget`, `deadline_at` | `Budget`, ISO time | intake_validate (`deadline_at` re-based by human_approval on resume) | |
 | `classification` | `Classification` | classify_incident | Rule-based |
-| `telemetry_window` | `TelemetryWindowRef` | retrieve_telemetry | **Reference only.** Rows stay in the data store. |
+| `telemetry_window` | `TelemetryWindowRef` + `gap_entities` | retrieve_telemetry | **Reference only.** Rows stay in the data store. `gap_entities` lists entities with less than 50% coverage. |
 | `detected_anomalies` | `Anomaly[]` | detect_anomalies | Each item points at its `ev-anom-*` |
 | `affected_nodes`, `affected_services` | `str[]` | analyze_topology | |
 | `topology_evidence` | dict | analyze_topology | Candidate roots, blast radius, evidence IDs |

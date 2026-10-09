@@ -46,6 +46,7 @@ class InvestigationState(TypedDict, total=False):
     incident_id: str
     request_metadata: JSONDict  # RequestMetadata
     submission: JSONDict  # IncidentSubmission (free text is untrusted)
+    input_warnings: list[str]  # e.g. instruction-like text found in the submission (owner: intake)
     budget: JSONDict  # Budget
     deadline_at: str  # ISO timestamp derived from budget at intake
 

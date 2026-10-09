@@ -1,92 +1,48 @@
-# agent-system
+# NetPulse AI
 
-A minimal FastAPI service that exposes a single-node LangGraph agent. A
-`GET` request carries a natural-language `query`, which is handed to a
-planner agent (an OpenAI chat-completion call) that breaks it into steps.
-The graph returns the accumulated state as JSON.
+> **SIMULATED DATA.** NetPulse runs entirely on a synthetic network. It has
+> never observed or modified a real network, and it is **read-only**: it
+> proposes diagnostics and remediation, and it executes nothing.
 
-This is an early-stage scaffold, not a production system: there is one
-graph node, no persistence wired up, and the two tool stubs in `tools/`
-are not yet called from the graph. See [PLANNING.md](PLANNING.md) and
-[TASK.md](TASK.md) for the full, current picture — including a known
-`OPENAI_API_KEY` / `OPENROUTER_API_KEY` mismatch that is tracked but not
-yet fixed.
+NetPulse investigates network anomalies with a stateful **LangGraph**
+workflow:
 
-## Framework
+- **Detection** is deterministic: thresholds, robust statistics, and
+  same-time-yesterday comparison.
+- **Topology analysis** covers blast radius and symptom localization.
+- **Retrieval** searches runbooks and past incidents, and treats what it
+  finds as untrusted.
+- **Root-cause hypotheses** are evidence-backed, ranked with rule-based
+  ordinal confidence.
+- **Uncertain cases** come out as inconclusive reports that list what
+  evidence is missing.
 
-This repo follows the **SuperClaude Framework** structure for AI-agent-assisted
-development: [`PLANNING.md`](PLANNING.md) is the architecture reference
-(module map, request flow, external dependencies, constraints),
-[`TASK.md`](TASK.md) tracks prioritized work, and
-[`plugins/README.md`](plugins/README.md) documents the (currently empty)
-plugin extension point. Dependency management is UV-based (`pyproject.toml`
-+ `uv.lock`).
+**Status: Phase 6 of 12.** The end-to-end workflow runs with a rule-based
+investigator. Verification, the local LLM (Ollama), human approval, the API,
+the UI, and evaluation reports come in later phases. See [PLAN.md](PLAN.md).
 
-## Getting Started
-
-```bash
-uv sync                       # installs FastAPI, LangGraph, OpenAI SDK, etc.
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-Then, with the server running:
+## Quick start
 
 ```bash
-curl "http://localhost:8000/run?query=plan+a+trip+to+Tokyo"
-```
-
-> **Known issue:** the OpenAI client in `app/agents.py` is constructed at
-> import time from `OPENAI_API_KEY`, but `.env` currently only sets
-> `OPENROUTER_API_KEY`. As shipped, `GET /run` will fail unless
-> `OPENAI_API_KEY` is set in your environment. See
-> [TASK.md](TASK.md#high-priority) for the tracked fix — not addressed in
-> this documentation update.
-
-### Docker
-
-```bash
-docker build -t agent-system .
-docker run -p 8000:8000 -e OPENAI_API_KEY=sk-... agent-system
-```
-
-The image installs dependencies via `uv sync --frozen` at build time and
-runs `uvicorn app.main:app` directly (see [Dockerfile](Dockerfile)).
-
-### Tests
-
-```bash
+uv sync
+uv run netpulse investigate --case case-04     # investigate one synthetic case
+uv run netpulse investigate --case case-04 --json
 uv run pytest
 ```
 
-`tests/` currently exists but is empty — no test suite yet (tracked in
-[TASK.md](TASK.md)).
+## Documentation
 
-## Architecture
-
-```
-HTTP GET /run?query=...
-        │
-        ▼
-  app/main.py            FastAPI app, single route: GET /run
-        │
-        ▼
-  app/graph.py            LangGraph StateGraph
-        │                 - one node: "planner" (entry point = finish point)
-        ▼
-  app/agents.py            planner_agent(query) -> str
-        │                 - calls OpenAI chat.completions (model: gpt-4o-mini)
-        ▼
-  app/state.py              AgentState (TypedDict): query, steps, result
-```
-
-See [PLANNING.md](PLANNING.md) for the full module responsibility table,
-request flow, and known constraints (single-node graph, no persistence,
-tools not yet wired in).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup.
+| Document | Contents |
+|---|---|
+| [PLAN.md](PLAN.md) | Phases, design decisions, and the alternatives considered |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Components, the graph, evidence and approval flows, trust boundaries |
+| [docs/graph_workflow.md](docs/graph_workflow.md) | Node contracts, routing, budgets |
+| [docs/state_model.md](docs/state_model.md) | State fields, ownership, reducers |
+| [docs/synthetic_data.md](docs/synthetic_data.md) | Dataset, scenarios, ground truth |
+| [docs/detection.md](docs/detection.md) | Detectors and measured precision/recall |
+| [docs/tools.md](docs/tools.md) | Data, topology, and retrieval tool contracts |
+| [docs/adr/](docs/adr/) | Architecture decision records |
 
 ## License
 
-Proprietary. See [LICENSE](LICENSE). All rights reserved.
+Proprietary; see [LICENSE](LICENSE).

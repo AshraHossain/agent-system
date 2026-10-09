@@ -103,8 +103,7 @@ eval/
 data/synthetic/               generated, version-controlled with checksums
 ```
 
-The existing `app/`, `tools/`, and `memory/` scaffold will be retired once
-`netpulse/` replaces it. See PLAN.md §6.
+The original `app/` scaffold was removed in Phase 6 (PLAN.md §6).
 
 ## 4. Investigation graph
 

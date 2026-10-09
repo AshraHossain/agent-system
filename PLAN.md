@@ -218,7 +218,7 @@ approval before the next starts.**
 | 3 ✅ | `synthgen/` generator, generated `data/synthetic/v1`, runbooks, past incidents, `eval/datasets/v1` cases and labels, manifest | Reproducibility checksum, schema validity, label/corpus separation |
 | 4 ✅ | `netpulse/detection` (baseline, threshold, robust z, window comparison, plausibility, gap handling, consolidation) and `eval/detection_benchmark.py` — see docs/detection.md | Unit tests per algorithm, including noise, gaps, and flat series |
 | 5 ✅ | `netpulse/data` (visibility-aware store), `netpulse/topology` (paths, blast radius, localization, change context), `netpulse/retrieval` (BM25, sanitization, conflicts) — see docs/tools.md | Visibility, gaps, traversal safety, blast radius, localization, retrieval ranking, injection flags, conflicts |
-| 6 | Minimal graph: intake → … → report with the heuristic investigator | Node unit tests, happy-path end-to-end |
+| 6 ✅ | Linear graph intake → … → report with the heuristic investigator, node wrapper (trace and errors), fatal → failure report, rule-based ranking, diagnostics-only recommendations, CLI; legacy scaffold removed | Node unit tests, ranking rules, end-to-end including insufficient-evidence and failure paths |
 | 7 | Verifier, ranker, routing, retry and round budgets, deadline, failure report, Ollama adapter + FakeLLM | Routing tables, retry budget, tool failure, insufficient evidence → inconclusive |
 | 8 | SQLite checkpointer, `interrupt`/resume, policy engine, action catalog | Checkpoint and resume across a fresh process, approve/reject/more-investigation, authz |
 | 9 | FastAPI endpoints, Streamlit UI | API tests (TestClient), UI smoke import |
@@ -226,14 +226,13 @@ approval before the next starts.**
 | 11 | Full end-to-end runs, failure investigation | Fixes plus regression tests |
 | 12 | Skeptical production-readiness review | — |
 
-## 6. Repository migration
+## 6. Repository migration (done in Phase 6)
 
-The `app/` scaffold (OpenRouter planner), `tools/` (including the `eval()`
-calculator), `memory/`, `requirements.txt`, `PLANNING.md`, and `TASK.md`
-will be removed in Phase 6, when `netpulse.api` replaces `app.main`. Until
-then they are left untouched so the existing service keeps running. The
-existing framework tests in `tests/test_main.py` will be updated at the same
-time.
+The original scaffold has been removed: the `app/` OpenRouter planner, the
+`tools/` directory (including the `eval()` calculator), `memory/`,
+`requirements.txt`, `PLANNING.md`, `TASK.md` and `plugins/`.
+`tests/test_repository.py` guards against reintroducing dynamic code
+execution.
 
 ## 7. Risks and open questions
 

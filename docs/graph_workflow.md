@@ -1,8 +1,23 @@
 # Graph workflow
 
-> Phase 2 specification. The graph itself is built in Phases 6–8. The node
-> names and routing below are the contract that the Phase 6–8 tests will
-> assert.
+> This document is the full target specification. The **implementation status**
+> table below shows what exists today.
+
+## Implementation status (Phase 6)
+
+| Node / edge | Status |
+|---|---|
+| 1–8, 10, 11 (diagnostics only), 14, `failure_report` | Implemented in `netpulse/graph/nodes.py` |
+| Every node → `failure_report` when `fatal_error` | Implemented (`route_next` in `builder.py`) |
+| Node wrapper: trace, error capture, recoverable vs. fatal | Implemented (`wrapper.py`) |
+| 9 `verify_evidence`, retry loop, extra investigation rounds, deadline routing | Phase 7 |
+| Ollama generator, mocked-LLM tests | Phase 7 |
+| 12 `policy_review`, 13a `human_approval` (interrupt), 13b `escalate`, remediation proposals, SQLite checkpointer | Phase 8 |
+
+Phase 6 runs the nodes in a straight line: `intake_validate → classify_incident → retrieve_telemetry →
+detect_anomalies → analyze_topology → retrieve_history → retrieve_runbooks → generate_hypotheses →
+rank_hypotheses → recommend_actions → compile_report`. Inconclusive results still end at `compile_report`
+with `outcome=inconclusive`. Escalation as a separate path arrives in Phase 8.
 
 The diagram is in [ARCHITECTURE.md §4](../ARCHITECTURE.md#4-investigation-graph).
 This document defines each node's inputs, outputs, and failure behavior, and

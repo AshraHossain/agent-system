@@ -1,48 +1,23 @@
-# Contributing to agent-system
+# Contributing to NetPulse AI
 
-This is an early-stage FastAPI + LangGraph scaffold. Read
-[PLANNING.md](PLANNING.md) first — it documents the current architecture,
-module responsibilities, and known constraints (single-node graph, no
-persistence, tools not yet wired in, an `OPENAI_API_KEY`/`OPENROUTER_API_KEY`
-mismatch tracked in [TASK.md](TASK.md)) so you don't rediscover them from
-scratch.
-
-## Development Setup
-
-Dependency management is [UV](https://docs.astral.sh/uv/)-based
-(`pyproject.toml` + `uv.lock`):
-
-```bash
-uv sync
-uv run pytest
-```
-
-Run the service locally:
-
-```bash
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-## Framework
-
-This repo follows the SuperClaude Framework structure — see
-[PLANNING.md](PLANNING.md) for architecture and [TASK.md](TASK.md) for the
-prioritized backlog. Check `TASK.md` before starting work; several
-known issues (API key mismatch, empty test suite, unwired tools) are
-already tracked there rather than needing rediscovery.
-
-## Guidelines
-
-- Keep `app/state.py`'s `AgentState` the single source of truth for graph
-  state shape; don't add ad hoc dicts alongside it.
-- New graph nodes go in `app/graph.py`; new agent logic goes in
-  `app/agents.py`. Keep the FastAPI route in `app/main.py` thin.
-- Tools under `tools/` should be bound into the graph as proper
-  LangGraph/LangChain tools when wired up, not called ad hoc.
-- Conventional commits: `feat|fix|test|refactor|docs|chore(scope): description`.
+1. Read [CLAUDE.md](CLAUDE.md) (hard rules) and [PLAN.md](PLAN.md) (current phase).
+2. Set up with `uv sync`. Before every push, run `uv run pytest` and
+   `uv run ruff check .`.
+3. **Detection, topology, retrieval, ranking and policy stay deterministic.**
+   LLM use belongs only behind the `HypothesisGenerator` protocol in
+   `netpulse/llm/`.
+4. **New state fields** need a single owning node and an entry in
+   `docs/state_model.md`.
+5. **Ground truth stays out of `netpulse/`.** Never import `synthgen` or read
+   `eval/labels` from it.
+6. **If you change `synthgen/`,** regenerate the data with
+   `uv run python -m synthgen.generate`, commit the changed files and
+   manifest, and explain the change in the PR.
+7. Use conventional commits.
 
 ## Definition of done
 
-- `uv run pytest` green (once a test suite exists — see `TASK.md`).
-- New behavior documented in `PLANNING.md` if it changes the architecture
-  or request flow.
+- Tests and ruff are green.
+- Behaviour changes are documented in the relevant doc or ADR.
+- The PR says what was *not* verified, especially anything that depends on a
+  real LLM.
