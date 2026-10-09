@@ -43,7 +43,9 @@ repeated for them. Evidence is content-addressed, so re-running a stage cannot
 duplicate records. A completed investigation resumes with zero model/tool
 calls (`test_resume_of_completed_investigation_skips_all_model_work`); a run
 that failed in the incident analyst re-runs only the analyst and later stages
-(`test_resume_reruns_failed_stage_and_downstream_only`).
+(`test_resume_reruns_failed_stage_and_downstream_only`). With the optional
+re-investigation loop enabled, resume also resets the `investigation_rounds`
+counter, so the resumed run gets its own retry round.
 
 This is an explicit, application-level mechanism; it does not rely on ADK's
 experimental resumability features.

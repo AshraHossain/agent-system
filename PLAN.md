@@ -79,11 +79,13 @@ SequentialAgent opspilot_investigation
 * **Sequential after the fan-out.** Incident analysis must reconcile all three
   findings, the draft must reflect the analysis, and verification must check the
   final draft — these are true data dependencies.
-* **No `LoopAgent` in v1.** The verifier records `additional_evidence_requests`
-  and the status becomes `inconclusive`/`requires_human_review` instead of
-  re-running specialists. A bounded re-investigation loop is a documented
-  future option (ADR-0002), not a default — loops multiply cost and make
-  completion harder to reason about.
+* **No `LoopAgent` by default.** The verifier records
+  `additional_evidence_requests` and the status becomes
+  `inconclusive`/`requires_human_review` instead of re-running specialists —
+  loops multiply cost and make completion harder to reason about. An optional
+  bounded loop (`OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`) gives stages that failed
+  one more round; see the ADR-0002 amendment and
+  [docs/orchestration.md](docs/orchestration.md#optional-re-investigation-rounds).
 * **Not ADK 2.x graph `Workflow`.** The new `google.adk.workflow` graph API
   could express this, but the pipeline has no conditional routing that needs a
   graph, and the classic workflow agents are the longer-established API.

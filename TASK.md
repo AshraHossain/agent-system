@@ -14,7 +14,7 @@
 - [ ] Independently authored evaluation set (different author)
 
 ## Medium priority
-- [ ] Optional bounded re-investigation loop (`LoopAgent`, max 2) when verification requests evidence
+- [x] Optional bounded re-investigation loop (`LoopAgent`, max 2) — retries failed stages; off by default (`OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`)
 - [ ] Semantic embedder option (Gemini embeddings) with an offline cache
 - [ ] Cost estimation from recorded tokens with configurable price table
 

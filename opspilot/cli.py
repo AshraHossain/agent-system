@@ -130,6 +130,8 @@ def print_outcome(out, *, case: dict | None = None, show_labels: bool = False) -
             f"  run: {m.llm_calls} model calls, {m.tool_calls} tool calls, {m.duration_s}s, "
             f"tokens={m.total_tokens if m.total_tokens is not None else 'n/a (mock)'}"
         )
+        if m.investigation_rounds > 1:
+            print(f"  rounds: {m.investigation_rounds} (retried: {', '.join(m.retried_stages)})")
     print(f"  session: {out.session_id} (resume with `opspilot resume {out.session_id}`)")
     if case and show_labels:
         _h("LABELS (shown after the run for comparison only; never given to agents)")

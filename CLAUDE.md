@@ -43,6 +43,9 @@ uv run adk web adk_apps                   # ADK dev UI
   skips must return schema-valid JSON.
 - `ctx.end_invocation` does not stop a `SequentialAgent`; stages check
   `intake_error` themselves.
+- `LoopAgent` ends when any event it yields has `actions.escalate`;
+  `SequentialAgent` ignores `escalate`, so the optional `reinvestigation_gate`
+  ends the rounds without skipping review or the finalizer.
 
 ## Conventions
 

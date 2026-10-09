@@ -37,6 +37,14 @@ class Limits:
     model_timeout_s: float = 60.0
     max_request_chars: int = 4000
     max_report_chars: int = 60_000
+    # 1 = single pass (default). 2 = one extra round that retries failed stages.
+    max_investigation_rounds: int = 1
+
+    def __post_init__(self) -> None:
+        if self.max_investigation_rounds not in (1, 2):
+            raise ValueError(
+                f"max_investigation_rounds must be 1 or 2, got {self.max_investigation_rounds!r}"
+            )
 
     @classmethod
     def from_env(cls) -> Limits:
@@ -52,6 +60,9 @@ class Limits:
             model_timeout_s=_float("OPSPILOT_MODEL_TIMEOUT_S", cls.model_timeout_s),
             max_request_chars=_int("OPSPILOT_MAX_REQUEST_CHARS", cls.max_request_chars),
             max_report_chars=_int("OPSPILOT_MAX_REPORT_CHARS", cls.max_report_chars),
+            max_investigation_rounds=_int(
+                "OPSPILOT_MAX_INVESTIGATION_ROUNDS", cls.max_investigation_rounds
+            ),
         )
 
 

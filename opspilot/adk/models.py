@@ -21,6 +21,7 @@ from typing import Any
 
 from google.adk.models import BaseLlm, LlmRequest, LlmResponse
 from google.genai import types
+from pydantic import PrivateAttr
 
 from opspilot.adk.runtime import RunFaults
 from opspilot.config import Settings
@@ -88,16 +89,20 @@ class ScriptedLlm(BaseLlm):
     model: str = "scripted-mock"
     agent: str
     faults: frozenset[str] = frozenset()
+    transient: bool = False
+    _calls: int = PrivateAttr(default=0)
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
         from opspilot.adk.mock_policies import POLICIES
 
-        if "timeout" in self.faults:
+        self._calls += 1
+        faults = frozenset() if self.transient and self._calls > 1 else self.faults
+        if "timeout" in faults:
             await asyncio.sleep(0)
             raise TimeoutError(f"simulated model timeout for {self.agent}")
-        if "quota" in self.faults:
+        if "quota" in faults:
             raise ModelQuotaError("429 RESOURCE_EXHAUSTED (simulated)")
         action = POLICIES[self.agent](parse_turn(self.agent, llm_request))
         yield to_response(action, "set_model_response" in llm_request.tools_dict)
@@ -128,7 +133,7 @@ def make_model(agent: str, settings: Settings, faults: RunFaults | None = None) 
         f.add("timeout")
     if agent in faults.model_quota:
         f.add("quota")
-    return ScriptedLlm(agent=agent, faults=frozenset(f))
+    return ScriptedLlm(agent=agent, faults=frozenset(f), transient=faults.transient)
 
 
 def generate_config(

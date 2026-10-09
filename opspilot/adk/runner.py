@@ -22,6 +22,7 @@ from google.genai import types
 
 from opspilot.adk.agents import TOOL_ALLOWLIST, build_root_agent
 from opspilot.adk.plugins import BudgetPlugin
+from opspilot.adk.rounds import ROUNDS_KEY, STAGE_GROUPS, rounds_info
 from opspilot.adk.runtime import RunFaults, register, resolve, unregister
 from opspilot.config import Settings
 from opspilot.contracts.report import InvestigationReport, RunMetrics
@@ -30,14 +31,6 @@ from opspilot.core import report as report_core
 from opspilot.core.verification import evidence_from_state
 
 APP_NAME = "opspilot"
-# Stage outputs in pipeline order; specialists form one parallel group.
-STAGE_GROUPS = [
-    ["telemetry_finding", "topology_finding", "knowledge_finding"],
-    ["incident_analysis"],
-    ["report_draft"],
-    ["verification"],
-    ["review"],
-]
 USER_ID = "operator"
 
 
@@ -114,8 +107,11 @@ def resume_invalidation(state: dict) -> dict:
 
     Completed upstream stages are kept (their agents skip on resume); evidence
     records are content-addressed, so re-running a stage cannot duplicate them.
+    The re-investigation round counter restarts, so a resumed run gets its own retry.
     """
     delta: dict = {"final_report": None}
+    if state.get(ROUNDS_KEY) is not None:
+        delta[ROUNDS_KEY] = None
     stale = False
     for group in STAGE_GROUPS:
         if stale:
@@ -210,6 +206,7 @@ async def run_investigation(
         c = plugin.runs.get(next(iter(plugin.runs), ""), None)
         metrics = None
         if c is not None:
+            rounds = rounds_info(state)
             metrics = RunMetrics(
                 provider=settings.provider,
                 model=settings.model,
@@ -217,6 +214,8 @@ async def run_investigation(
                 tool_calls=c.tool_calls,
                 duration_s=round(c.elapsed(), 3),
                 budget_events=c.events,
+                investigation_rounds=rounds["round"],
+                retried_stages=list(rounds["retried"]),
             )
         report = _fallback_report(state, reason, metrics)
         with contextlib.suppress(Exception):

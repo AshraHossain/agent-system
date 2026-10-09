@@ -23,6 +23,8 @@ class RunFaults:
     model_timeout: frozenset[str] = frozenset()
     model_quota: frozenset[str] = frozenset()
     telemetry_unavailable: bool = False
+    # Model faults hit only each agent's first call (a transient outage).
+    transient: bool = False
 
     @classmethod
     def from_spec(cls, spec: dict | None) -> RunFaults:
@@ -31,6 +33,7 @@ class RunFaults:
             model_timeout=frozenset(spec.get("model_timeout", [])),
             model_quota=frozenset(spec.get("model_quota", [])),
             telemetry_unavailable=bool(spec.get("telemetry_unavailable", False)),
+            transient=bool(spec.get("transient", False)),
         )
 
 

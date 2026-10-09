@@ -1,4 +1,4 @@
-"""Deterministic (non-LLM) agents: intake, evidence verifier, finalizer.
+"""Deterministic (non-LLM) agents: intake, evidence verifier, re-investigation gate, finalizer.
 
 They subclass ADK's `BaseAgent` and communicate exclusively through event
 `state_delta`s, like the LLM agents, so they appear in traces, persist with the
@@ -18,6 +18,7 @@ from google.genai import types
 from pydantic import ValidationError
 
 from opspilot.adk.plugins import BudgetPlugin
+from opspilot.adk.rounds import plan_next_round, rounds_info
 from opspilot.adk.runtime import register, resolve
 from opspilot.config import Settings
 from opspilot.contracts.evidence import Evidence, EvidenceKind
@@ -234,6 +235,23 @@ class EvidenceVerifierAgent(BaseAgent):
         )
 
 
+class ReinvestigationGateAgent(BaseAgent):
+    """Last stage of each round: retry failed stages in another round, or end the loop."""
+
+    max_rounds: int = 2
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        decision = plan_next_round(dict(ctx.session.state), self.max_rounds)
+        text = decision.reason if decision.retry else f"re-investigation done: {decision.reason}"
+        yield Event(
+            author=self.name,
+            invocation_id=ctx.invocation_id,
+            branch=ctx.branch,
+            actions=EventActions(state_delta=decision.state_delta, escalate=decision.stop),
+            content=types.Content(role="model", parts=[types.Part(text=text)]),
+        )
+
+
 def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None:
     plugin = next(
         (p for p in getattr(ctx.plugin_manager, "plugins", []) if isinstance(p, BudgetPlugin)), None
@@ -241,6 +259,7 @@ def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None
     if plugin is None:
         return None
     c = plugin.counters(ctx.invocation_id)
+    rounds = rounds_info(ctx.session.state)
     return RunMetrics(
         provider=settings.provider,
         model=settings.model if settings.provider == "gemini" else "scripted-mock",
@@ -255,6 +274,8 @@ def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None
         budget_events=list(c.events),
         model_time_ms={k: round(v, 1) for k, v in c.model_time_ms.items()},
         tool_time_ms={k: round(v, 1) for k, v in c.tool_time_ms.items()},
+        investigation_rounds=rounds["round"],
+        retried_stages=list(rounds["retried"]),
     )
 
 

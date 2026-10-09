@@ -35,6 +35,11 @@ graph TD
   ROOT --> FIN["finalizer<br/>BaseAgent · deterministic"]
 ```
 
+With `OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`, specialists through
+`evidence_verifier` run inside a `LoopAgent` (max 2 rounds) ending in a
+deterministic `reinvestigation_gate` that retries failed stages; see
+[docs/orchestration.md](docs/orchestration.md#optional-re-investigation-rounds).
+
 ## Task flow
 
 ```mermaid
