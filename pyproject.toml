@@ -48,7 +48,7 @@ extend-exclude = ["var"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
-ignore = ["S101", "RUF001", "RUF002", "RUF003"]
+ignore = ["S101", "RUF001", "RUF002", "RUF003", "SIM905"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "B011"]

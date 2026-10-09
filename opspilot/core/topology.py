@@ -54,7 +54,7 @@ def svc_node(service: str) -> str:
 
 
 def svc_name(node: str) -> str:
-    return node[len(SVC):] if node.startswith(SVC) else node
+    return node[len(SVC) :] if node.startswith(SVC) else node
 
 
 class Topology:
@@ -77,12 +77,19 @@ class Topology:
         comps: dict[str, dict] = {}
         for c in spec["components"]:
             comps[c["id"]] = {
-                "id": c["id"], "type": c["type"], "redundancy_group": c.get("redundancy_group"),
-                "tier": None, "interfaces": [], "endpoints": [],
+                "id": c["id"],
+                "type": c["type"],
+                "redundancy_group": c.get("redundancy_group"),
+                "tier": None,
+                "interfaces": [],
+                "endpoints": [],
             }
         for link in spec["links"]:
             comps[link["id"]] = {
-                "id": link["id"], "type": "link", "redundancy_group": None, "tier": None,
+                "id": link["id"],
+                "type": "link",
+                "redundancy_group": None,
+                "tier": None,
                 "interfaces": [link["a"], link["b"]],
                 "endpoints": [link["a"].split(":")[0], link["b"].split(":")[0]],
                 "capacity_gbps": link.get("capacity_gbps"),
@@ -92,8 +99,12 @@ class Topology:
                 comps[dev]["interfaces"].append(iface)
         for s in spec["services"]:
             comps[svc_node(s["id"])] = {
-                "id": svc_node(s["id"]), "type": "service", "redundancy_group": None,
-                "tier": s["tier"], "interfaces": [], "endpoints": [],
+                "id": svc_node(s["id"]),
+                "type": "service",
+                "redundancy_group": None,
+                "tier": s["tier"],
+                "interfaces": [],
+                "endpoints": [],
             }
         removed = {(r["src"], r["dst"]) for r in (remove_edges or [])}
         edges = [
@@ -126,8 +137,9 @@ class Topology:
                 entity_id=component_id,
                 data={"known": False},
             )
-            return ComponentInfo(component_id=component_id, type="unknown", known=False,
-                                 evidence=[ev])
+            return ComponentInfo(
+                component_id=component_id, type="unknown", known=False, evidence=[ev]
+            )
         c = self.components[node]
         ev = Evidence.make(
             EvidenceKind.TOPOLOGY,
@@ -139,8 +151,13 @@ class Topology:
             data={"type": c["type"], "redundancy_group": c["redundancy_group"]},
         )
         return ComponentInfo(
-            component_id=node, type=c["type"], redundancy_group=c["redundancy_group"],
-            interfaces=c["interfaces"], endpoints=c["endpoints"], tier=c["tier"], evidence=[ev],
+            component_id=node,
+            type=c["type"],
+            redundancy_group=c["redundancy_group"],
+            interfaces=c["interfaces"],
+            endpoints=c["endpoints"],
+            tier=c["tier"],
+            evidence=[ev],
         )
 
     # ---------- traversal ----------
@@ -185,12 +202,13 @@ class Topology:
         groups: dict[str, list[Edge]] = defaultdict(list)
         for e in self._out.get(node, []):
             groups[e.group or f"__hard__{e.dst}"].append(e)
-        return all(any(self.satisfied(e.dst, failed, stack) for e in alts)
-                   for alts in groups.values())
+        return all(
+            any(self.satisfied(e.dst, failed, stack) for e in alts) for alts in groups.values()
+        )
 
-    def exposure(self, service: str, component: str) -> Literal[
-        "single_point", "redundant", "indirect"
-    ] | None:
+    def exposure(
+        self, service: str, component: str
+    ) -> Literal["single_point", "redundant", "indirect"] | None:
         node = svc_node(service)
         direct = self.closure(node, through_services=False)
         if component in direct:
@@ -234,31 +252,39 @@ class Topology:
                 uncertainties.append(
                     f"dependency {s} -> {svc_name(e.dst)} is {e.confidence}, not documented"
                 )
-            evidence.append(Evidence.make(
-                EvidenceKind.TOPOLOGY,
-                f"{s} depends on {len(comps)} network components",
-                f"topology:dependencies/{s}",
-                entity_id=svc_node(s),
-                data={"component_count": len(comps), "tier": self.tier(s)},
-            ))
+            evidence.append(
+                Evidence.make(
+                    EvidenceKind.TOPOLOGY,
+                    f"{s} depends on {len(comps)} network components",
+                    f"topology:dependencies/{s}",
+                    entity_id=svc_node(s),
+                    data={"component_count": len(comps), "tier": self.tier(s)},
+                )
+            )
         shared: dict[str, list[str]] = defaultdict(list)
         for s, comps in deps.items():
             for c in comps:
                 shared[c].append(s)
         shared_multi = {c: sorted(v) for c, v in sorted(shared.items()) if len(v) >= 2}
         for c, svcs in shared_multi.items():
-            evidence.append(Evidence.make(
-                EvidenceKind.TOPOLOGY,
-                f"{c} is a shared dependency of {', '.join(svcs)}",
-                f"topology:shared/{c}",
-                entity_id=c,
-                data={"service_count": len(svcs), "services": ",".join(svcs)},
-            ))
+            evidence.append(
+                Evidence.make(
+                    EvidenceKind.TOPOLOGY,
+                    f"{c} is a shared dependency of {', '.join(svcs)}",
+                    f"topology:shared/{c}",
+                    entity_id=c,
+                    data={"service_count": len(svcs), "services": ",".join(svcs)},
+                )
+            )
         for u in unknown:
             uncertainties.append(f"service {u} is not in the topology inventory")
         return DependencyResult(
-            services=known, dependencies=deps, shared_components=shared_multi,
-            unknown_services=unknown, uncertainties=uncertainties, evidence=evidence,
+            services=known,
+            dependencies=deps,
+            shared_components=shared_multi,
+            unknown_services=unknown,
+            uncertainties=uncertainties,
+            evidence=evidence,
         )
 
     def blast_radius(self, component_id: str) -> BlastRadius:
@@ -273,8 +299,9 @@ class Topology:
             if exp is None:
                 continue
             tier = self.tier(s)
-            impacts.append(ServiceImpact(service=s, tier=tier, exposure=exp,
-                                         impact=IMPACT_RULES[(exp, tier)]))
+            impacts.append(
+                ServiceImpact(service=s, tier=tier, exposure=exp, impact=IMPACT_RULES[(exp, tier)])
+            )
         impacts.sort(key=lambda i: (-IMPACT_ORDER[i.impact], i.service))
         comp = self.components[component_id]
         uncertainties = []
@@ -300,8 +327,13 @@ class Topology:
             entity_id=component_id,
             data={"services": ",".join(i.service for i in impacts), "max_impact": max_imp},
         )
-        return BlastRadius(component_id=component_id, impacts=impacts, rules=rules,
-                           uncertainties=uncertainties, evidence=[ev])
+        return BlastRadius(
+            component_id=component_id,
+            impacts=impacts,
+            rules=rules,
+            uncertainties=uncertainties,
+            evidence=[ev],
+        )
 
     def traffic_share(self, node: str, target: str, _stack: frozenset = frozenset()) -> float:
         """Approximate share of `node`'s traffic that crosses `target`.

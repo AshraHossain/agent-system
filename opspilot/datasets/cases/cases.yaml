@@ -40,7 +40,7 @@ cases:
       faults: [{type: physical, entity: lnk-l3-s2, start_min: -80}]
     labels:
       root_causes: [{category: link_physical_degradation, component: lnk-l3-s2}]
-      affected_services: [auth, checkout]
+      affected_services: [auth, checkout, search]
       status: investigated
       escalation: escalate
       relevant_runbooks: [RB-002]
@@ -69,7 +69,7 @@ cases:
       root_causes:
         - {category: link_congestion, component: lnk-l4-s1}
         - {category: dns_degradation, component: dns-1}
-      affected_services: [catalog, analytics, checkout, payments, auth]
+      affected_services: [catalog, analytics, search, checkout, payments, auth]
       status: investigated
       escalation: escalate
       relevant_runbooks: [RB-001, RB-004]
@@ -109,7 +109,7 @@ cases:
       faults: [{type: congestion, entity: lnk-l4-s2, start_min: -90}]
     labels:
       root_causes: [{category: link_congestion, component: lnk-l4-s2}]
-      affected_services: [catalog, analytics]
+      affected_services: [catalog, analytics, search]
       status: investigated
       escalation: monitor
       relevant_runbooks: [RB-001]
@@ -165,7 +165,7 @@ cases:
     tags: [tool_failure]
     world:
       faults: [{type: physical, entity: lnk-l3-s2, start_min: -80}]
-    run_faults: {tool_failure: [summarize_anomalies, compare_to_baseline]}
+    run_faults: {telemetry_unavailable: true}
     labels:
       root_causes: []
       score_root_cause: false

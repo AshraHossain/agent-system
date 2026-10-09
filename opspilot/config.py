@@ -68,7 +68,9 @@ class Settings:
     def from_env(cls) -> Settings:
         provider = os.getenv("OPSPILOT_MODEL_PROVIDER", "mock").lower()
         if provider not in ("mock", "gemini"):
-            raise ValueError(f"OPSPILOT_MODEL_PROVIDER must be 'mock' or 'gemini', got {provider!r}")
+            raise ValueError(
+                f"OPSPILOT_MODEL_PROVIDER must be 'mock' or 'gemini', got {provider!r}"
+            )
         return cls(
             provider=provider,  # type: ignore[arg-type]
             model=os.getenv("OPSPILOT_MODEL", cls.model),

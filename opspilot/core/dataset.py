@@ -158,8 +158,19 @@ class Dataset:
             " components, tags, root_cause_category, body FROM documents ORDER BY doc_id"
         )
         return [
-            Document(r[0], r[1], r[2], r[3], r[4], r[5], r[6], json.loads(r[7]),
-                     json.loads(r[8]), r[9], r[10])
+            Document(
+                r[0],
+                r[1],
+                r[2],
+                r[3],
+                r[4],
+                r[5],
+                r[6],
+                json.loads(r[7]),
+                json.loads(r[8]),
+                r[9],
+                r[10],
+            )
             for r in rows
         ]
 

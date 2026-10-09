@@ -25,12 +25,22 @@ HISTORY_MIN = 480
 INTERVAL_MIN = 5
 
 SERVICE_BASE_LATENCY = {
-    "checkout": 180.0, "payments": 220.0, "auth": 60.0, "search": 120.0,
-    "catalog": 90.0, "video-stream": 140.0, "notifications": 250.0, "analytics": 300.0,
+    "checkout": 180.0,
+    "payments": 220.0,
+    "auth": 60.0,
+    "search": 120.0,
+    "catalog": 90.0,
+    "video-stream": 140.0,
+    "notifications": 250.0,
+    "analytics": 300.0,
 }
 # Service latency multiplier when fully exposed to the fault type.
 SERVICE_EFFECT = {
-    "congestion": 2.2, "physical": 2.0, "saturation": 2.5, "dns": 1.8, "wan": 2.5,
+    "congestion": 2.2,
+    "physical": 2.0,
+    "saturation": 2.5,
+    "dns": 1.8,
+    "wan": 2.5,
 }
 
 
@@ -39,12 +49,20 @@ def _metrics_for(comp: dict) -> dict[str, tuple[float, float]]:
     t = comp["type"]
     if t == "link":
         if comp["id"] == "lnk-c1-wan":
-            return {"utilization_pct": (35, 3), "packet_loss_pct": (0.01, 0.005),
-                    "error_rate": (0.05, 0.03), "latency_ms": (12.0, 0.6),
-                    "probe_loss_pct": (0.01, 0.005)}
-        return {"utilization_pct": (40, 4), "packet_loss_pct": (0.01, 0.005),
-                "error_rate": (0.1, 0.05), "latency_ms": (0.5, 0.05),
-                "probe_loss_pct": (0.01, 0.005)}
+            return {
+                "utilization_pct": (35, 3),
+                "packet_loss_pct": (0.01, 0.005),
+                "error_rate": (0.05, 0.03),
+                "latency_ms": (12.0, 0.6),
+                "probe_loss_pct": (0.01, 0.005),
+            }
+        return {
+            "utilization_pct": (40, 4),
+            "packet_loss_pct": (0.01, 0.005),
+            "error_rate": (0.1, 0.05),
+            "latency_ms": (0.5, 0.05),
+            "probe_loss_pct": (0.01, 0.005),
+        }
     if t in ("switch", "router", "wan_router"):
         return {"cpu_pct": (25, 3), "mem_pct": (45, 1)}
     if t in ("firewall", "load_balancer"):
@@ -57,25 +75,37 @@ def _metrics_for(comp: dict) -> dict[str, tuple[float, float]]:
     return {}
 
 
-def _component_effect(ftype: str, metric: str, base: float, rng: np.random.Generator) -> float | None:
+def _component_effect(
+    ftype: str, metric: str, base: float, rng: np.random.Generator
+) -> float | None:
     """Faulted value for the faulty component itself (None = unchanged)."""
     table = {
-        "congestion": {"utilization_pct": lambda: rng.normal(97, 1.2),
-                       "latency_ms": lambda: base * rng.normal(6, 0.5),
-                       "packet_loss_pct": lambda: abs(rng.normal(0.6, 0.15)),
-                       "probe_loss_pct": lambda: abs(rng.normal(0.5, 0.15))},
-        "physical": {"error_rate": lambda: abs(rng.normal(60, 12)),
-                     "packet_loss_pct": lambda: abs(rng.normal(3.0, 0.6)),
-                     "probe_loss_pct": lambda: abs(rng.normal(2.8, 0.6)),
-                     "latency_ms": lambda: base * rng.normal(1.3, 0.05)},
-        "saturation": {"cpu_pct": lambda: min(100.0, rng.normal(97, 1.2)),
-                       "session_util_pct": lambda: min(100.0, rng.normal(98, 0.8)),
-                       "mem_pct": lambda: base + 12},
-        "dns": {"query_latency_ms": lambda: abs(rng.normal(220, 35)),
-                "cpu_pct": lambda: min(100.0, rng.normal(93, 2))},
-        "wan": {"latency_ms": lambda: abs(rng.normal(65, 7)),
-                "packet_loss_pct": lambda: abs(rng.normal(2.0, 0.4)),
-                "probe_loss_pct": lambda: abs(rng.normal(2.0, 0.4))},
+        "congestion": {
+            "utilization_pct": lambda: rng.normal(97, 1.2),
+            "latency_ms": lambda: base * rng.normal(6, 0.5),
+            "packet_loss_pct": lambda: abs(rng.normal(0.6, 0.15)),
+            "probe_loss_pct": lambda: abs(rng.normal(0.5, 0.15)),
+        },
+        "physical": {
+            "error_rate": lambda: abs(rng.normal(60, 12)),
+            "packet_loss_pct": lambda: abs(rng.normal(3.0, 0.6)),
+            "probe_loss_pct": lambda: abs(rng.normal(2.8, 0.6)),
+            "latency_ms": lambda: base * rng.normal(1.3, 0.05),
+        },
+        "saturation": {
+            "cpu_pct": lambda: min(100.0, rng.normal(97, 1.2)),
+            "session_util_pct": lambda: min(100.0, rng.normal(98, 0.8)),
+            "mem_pct": lambda: base + 12,
+        },
+        "dns": {
+            "query_latency_ms": lambda: abs(rng.normal(220, 35)),
+            "cpu_pct": lambda: min(100.0, rng.normal(93, 2)),
+        },
+        "wan": {
+            "latency_ms": lambda: abs(rng.normal(65, 7)),
+            "packet_loss_pct": lambda: abs(rng.normal(2.0, 0.4)),
+            "probe_loss_pct": lambda: abs(rng.normal(2.0, 0.4)),
+        },
         "phantom_loss": {"packet_loss_pct": lambda: abs(rng.normal(2.0, 0.35))},
     }
     fn = table.get(ftype, {}).get(metric)
@@ -96,7 +126,9 @@ def build_case(case_id: str, data_dir: Path) -> Path:
     rng = np.random.default_rng(_seed(case_id))
     reported = parse_ts(case["reported_at"])
     start = reported - timedelta(minutes=HISTORY_MIN)
-    times = [start + timedelta(minutes=INTERVAL_MIN * i) for i in range(HISTORY_MIN // INTERVAL_MIN)]
+    times = [
+        start + timedelta(minutes=INTERVAL_MIN * i) for i in range(HISTORY_MIN // INTERVAL_MIN)
+    ]
     offs = np.array([(t - reported).total_seconds() / 60 for t in times])
 
     rows: list[tuple[str, str, str, float]] = []
@@ -132,7 +164,8 @@ def build_case(case_id: str, data_dir: Path) -> Path:
                     keep &= offs <= -f["lag_min"]
             rows.extend(
                 (fmt_ts(times[i]), cid, metric, float(round(values[i], 4)))
-                for i in range(len(times)) if keep[i]
+                for i in range(len(times))
+                if keep[i]
             )
 
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -142,25 +175,54 @@ def build_case(case_id: str, data_dir: Path) -> Path:
     con = sqlite3.connect(tmp)
     try:
         con.executescript(SCHEMA)
-        con.executemany("INSERT INTO meta VALUES (?, ?)", [
-            ("dataset_id", case_id), ("reported_at", case["reported_at"]),
-            ("sample_interval_min", str(INTERVAL_MIN)), ("generator_version", GENERATOR_VERSION),
-            ("site", tspec["site"]),
-        ])
-        con.executemany("INSERT INTO components VALUES (?, ?, ?, ?, ?, ?)", [
-            (c["id"], c["type"], c["redundancy_group"], c["tier"],
-             json.dumps(c["interfaces"]), json.dumps(c["endpoints"]))
-            for c in doc_topo.components.values()
-        ])
-        con.executemany("INSERT INTO edges VALUES (?, ?, ?, ?)",
-                        [(e.src, e.dst, e.group, e.confidence) for e in doc_topo.edges])
+        con.executemany(
+            "INSERT INTO meta VALUES (?, ?)",
+            [
+                ("dataset_id", case_id),
+                ("reported_at", case["reported_at"]),
+                ("sample_interval_min", str(INTERVAL_MIN)),
+                ("generator_version", GENERATOR_VERSION),
+                ("site", tspec["site"]),
+            ],
+        )
+        con.executemany(
+            "INSERT INTO components VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    c["id"],
+                    c["type"],
+                    c["redundancy_group"],
+                    c["tier"],
+                    json.dumps(c["interfaces"]),
+                    json.dumps(c["endpoints"]),
+                )
+                for c in doc_topo.components.values()
+            ],
+        )
+        con.executemany(
+            "INSERT INTO edges VALUES (?, ?, ?, ?)",
+            [(e.src, e.dst, e.group, e.confidence) for e in doc_topo.edges],
+        )
         con.executemany("INSERT INTO telemetry VALUES (?, ?, ?, ?)", rows)
-        con.executemany("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
-            (d["doc_id"], d["doc_type"], d["title"], d["status"], d["updated"],
-             d.get("superseded_by"), d.get("supersedes"), json.dumps(d.get("components", [])),
-             json.dumps(d.get("tags", [])), d.get("root_cause_category"), d["body"])
-            for d in spec.corpus(world.get("extra_documents"))
-        ])
+        con.executemany(
+            "INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    d["doc_id"],
+                    d["doc_type"],
+                    d["title"],
+                    d["status"],
+                    d["updated"],
+                    d.get("superseded_by"),
+                    d.get("supersedes"),
+                    json.dumps(d.get("components", [])),
+                    json.dumps(d.get("tags", [])),
+                    d.get("root_cause_category"),
+                    d["body"],
+                )
+                for d in spec.corpus(world.get("extra_documents"))
+            ],
+        )
         con.commit()
     finally:
         con.close()
