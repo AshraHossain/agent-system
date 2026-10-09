@@ -280,6 +280,7 @@ class FinalizerAgent(BaseAgent):
             review=p["review"],
             topo=rt.topology,
             run_metrics=run_metrics(ctx, rt.settings),
+            max_chars=rt.settings.limits.max_report_chars,
         )
         yield _event(
             self,

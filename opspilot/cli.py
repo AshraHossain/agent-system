@@ -162,8 +162,9 @@ async def _investigate(args, settings: Settings) -> int:
 
     _ensure_data(settings, [args.dataset])
     out = await run_investigation(args.request, args.dataset, settings=settings)
-    print(out.report.model_dump_json(indent=2) if args.json else "")
-    if not args.json:
+    if args.json:
+        print(out.report.model_dump_json(indent=2))
+    else:
         print_outcome(out)
     return 0
 

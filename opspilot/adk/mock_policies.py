@@ -113,7 +113,7 @@ def telemetry_policy(t: Turn):
                 f"(peak {a['peak']:.3g}) vs baseline {a['baseline_mean']:.3g}"
                 + (f", first seen {a['first_seen']}" if a.get("first_seen") else "")
             ),
-            "evidence_ids": [a["evidence_id"]],
+            "evidence_ids": [a["evidence_id"]] if a["evidence_id"] else [],
         }
         for a in r["anomalies"]
     ]
@@ -272,7 +272,7 @@ def knowledge_policy(t: Turn):
             "doc_id": h["doc_id"],
             "title": h["title"],
             "note": note,
-            "evidence_ids": [h["evidence_id"]],
+            "evidence_ids": [h["evidence_id"]] if h["evidence_id"] else [],
         }
 
     runbooks = [
@@ -324,7 +324,7 @@ def knowledge_policy(t: Turn):
             "technical_references": tech,
             "outdated_or_conflicting": outdated,
             "suspicious_documents": suspicious,
-            "evidence_ids": [h["evidence_id"] for h in hits],
+            "evidence_ids": [h["evidence_id"] for h in hits if h["evidence_id"]],
             "errors": [
                 f"{r.get('error_type')}: {r.get('message')}"
                 for r in results

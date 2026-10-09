@@ -42,10 +42,21 @@ def _scope(tool_context: ToolContext) -> InvestigationScope:
     return InvestigationScope.model_validate(raw)
 
 
-def _record(tool_context: ToolContext, evidence: list[Evidence]) -> list[str]:
+def _record(tool_context: ToolContext, evidence: list[Evidence], cap: int) -> list[str]:
+    """Register evidence in session state, bounded per call and per investigation.
+
+    Evidence beyond the cap is not registered and its IDs are not returned, so it
+    cannot be cited (the verifier would reject it).
+    """
+    existing = sum(1 for k in tool_context.state.to_dict() if k.startswith(STATE_PREFIX))
     ids = []
     for ev in evidence[:MAX_EVIDENCE_PER_CALL]:
-        tool_context.state[ev.state_key()] = ev.model_dump(mode="json")
+        key = ev.state_key()
+        if key not in tool_context.state:
+            if existing >= cap:
+                continue
+            existing += 1
+        tool_context.state[key] = ev.model_dump(mode="json")
         ids.append(ev.evidence_id)
     return ids
 
@@ -74,9 +85,35 @@ def _call(tool_context: ToolContext, fn: Callable[[Runtime, InvestigationScope],
         payload = result.model_dump(mode="json", exclude={"evidence"})
     else:
         evidence, payload = result.pop("_evidence", []), result
-    payload["evidence_ids"] = _record(tool_context, evidence)
+    payload["evidence_ids"] = _record(
+        tool_context, evidence, rt.settings.limits.max_evidence_records
+    )
+    payload = _scrub(payload, lambda i: f"{STATE_PREFIX}{i}" in tool_context.state)
+    if len(payload["evidence_ids"]) < min(len(evidence), MAX_EVIDENCE_PER_CALL):
+        payload["warning"] = "evidence cap reached; some results are not citable"
     payload["status"] = "ok"
     return payload
+
+
+def _scrub(obj: Any, citable: Callable[[str], bool]) -> Any:
+    """Remove evidence IDs that are not registered (e.g. beyond the cap) so the
+    model is never handed an ID it could cite but the verifier would reject."""
+    if isinstance(obj, dict):
+        return {
+            k: (
+                None
+                if isinstance(v, str) and is_evidence_id(v) and not citable(v)
+                else _scrub(v, citable)
+            )
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [
+            _scrub(x, citable)
+            for x in obj
+            if not (isinstance(x, str) and is_evidence_id(x) and not citable(x))
+        ]
+    return obj
 
 
 def _v(model: type[BaseModel], **kwargs) -> BaseModel:

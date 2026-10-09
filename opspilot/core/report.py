@@ -152,6 +152,7 @@ def build_report(
     topo: Topology | None,
     run_metrics: RunMetrics | None = None,
     aborted: str | None = None,
+    max_chars: int | None = None,
 ) -> InvestigationReport:
     specialists = {
         "telemetry": telemetry.status if telemetry else None,
@@ -189,19 +190,22 @@ def build_report(
         components += [e for e in telemetry.affected_entities if not e.startswith("svc:")]
     components = list(dict.fromkeys(components))
 
-    # Risk: impact per service from the topology analyst's blast radius for
-    # the components behind non-weak hypotheses.
+    # Risk: impact per service for the components behind non-weak hypotheses.
+    # Prefer the topology analyst's rule-based blast radius; when it did not
+    # cover a component, compute the same rules here so escalation never
+    # silently degrades to "unknown".
     impacts: dict[str, str] = {}
-    if topology:
-        relevant = {h.component_id for h in hyps if h.confidence != "weak"}
-        for br in topology.blast_radius:
-            if br.component_id not in relevant:
-                continue
-            for i in br.impacts:
-                if i.service in affected and IMPACT_ORDER[i.impact] > IMPACT_ORDER.get(
-                    impacts.get(i.service, "none"), 0
-                ):
-                    impacts[i.service] = i.impact
+    relevant = {h.component_id for h in hyps if h.confidence != "weak"}
+    covered = {br.component_id: br.impacts for br in (topology.blast_radius if topology else [])}
+    for comp in relevant:
+        entries = covered.get(comp)
+        if entries is None and topo is not None and comp in topo.components:
+            entries = topo.blast_radius(comp).impacts
+        for i in entries or []:
+            if i.service in affected and IMPACT_ORDER[i.impact] > IMPACT_ORDER.get(
+                impacts.get(i.service, "none"), 0
+            ):
+                impacts[i.service] = i.impact
     risks = [
         ServiceRisk(service=s, tier=tiers.get(s), impact=impacts.get(s, "unknown"))
         for s in affected
@@ -292,7 +296,10 @@ def build_report(
     )
     escalation = decide_escalation(status, risks, security, anomalies, tiers)
 
-    if draft:
+    tainted = verification is not None and any(
+        i.code in ("injection_in_output", "secret_in_output") for i in verification.issues
+    )
+    if draft and not tainted:
         summary = _clean(draft.summary)
     elif hyps:
         summary = f"Leading hypothesis: {hyps[0].statement}"
@@ -300,6 +307,8 @@ def build_report(
         summary = "No network-level anomalies were detected in the investigation window."
     else:
         summary = "The investigation could not establish a cause."
+    if tainted:
+        summary += " (Drafted summary withheld: it echoed injection-like or secret-like text.)"
     summary = f"[{status.value}] {summary}"[:2500]
 
     missing = list(verification.missing_information) if verification else []
@@ -317,7 +326,7 @@ def build_report(
         if draft
         else f"{len(affected)} services affected; maximum potential impact {max_imp}."
     )
-    return InvestigationReport(
+    report = InvestigationReport(
         incident_id=scope.investigation_id,
         dataset_id=scope.dataset_id,
         generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -351,6 +360,46 @@ def build_report(
         unresolved_questions=unresolved[:20],
         run_metrics=run_metrics,
     )
+
+    return limit_report_size(report, max_chars)
+
+
+TRIM_ORDER = (
+    ("supporting_evidence", 10),
+    ("observed_anomalies", 10),
+    ("contradicting_evidence", 5),
+    ("historical_incident_references", 3),
+    ("missing_information", 8),
+    ("unresolved_questions", 8),
+    ("root_cause_hypotheses", 3),
+    ("recommended_diagnostic_steps", 8),
+)
+
+
+def limit_report_size(report: InvestigationReport, max_chars: int | None) -> InvestigationReport:
+    """Enforce the output-size limit by trimming long lists, recording what was cut."""
+    if not max_chars or len(report.model_dump_json()) <= max_chars:
+        return report
+    data = report.model_dump()
+    cut = []
+    for field, keep in TRIM_ORDER:
+        if len(data[field]) > keep:
+            cut.append(f"{field} {len(data[field])}->{keep}")
+            data[field] = data[field][:keep]
+            if len(InvestigationReport.model_validate(data).model_dump_json()) <= max_chars:
+                break
+    if (
+        data.get("verification")
+        and len(InvestigationReport.model_validate(data).model_dump_json()) > max_chars
+    ):
+        data["verification"]["checks"] = data["verification"]["checks"][:6]
+        data["verification"]["issues"] = data["verification"]["issues"][:10]
+        cut.append("verification details")
+    data["unresolved_questions"] = [
+        *data["unresolved_questions"],
+        f"report truncated to the output limit ({', '.join(cut)})",
+    ]
+    return InvestigationReport.model_validate(data)
 
 
 def knowledge_flagged(knowledge: KnowledgeFinding | None) -> list[str]:

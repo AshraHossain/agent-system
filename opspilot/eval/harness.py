@@ -40,6 +40,13 @@ async def run_eval(
     settings: Settings, case_ids: list[str] | None = None, *, build_data: bool = True
 ) -> dict:
     ids = case_ids or spec.case_ids()
+    skipped = []
+    if settings.provider != "mock":
+        # Model timeouts/quota errors can only be injected into the mock model.
+        skipped = [
+            c for c in ids if {"model_timeout", "model_quota"} & set(spec.get_case(c)["run_faults"])
+        ]
+        ids = [c for c in ids if c not in skipped]
     if build_data:
         generate.build_all(settings.data_dir, ids)
     scores, details = [], []
@@ -68,6 +75,7 @@ async def run_eval(
             "google_adk": version("google-adk"),
             "dataset_generator_version": generate.GENERATOR_VERSION,
             "cases": ids,
+            "skipped_cases": skipped,
             "git_revision": _git_rev(),
             "python": platform.python_version(),
             "limits": settings.limits.__dict__,

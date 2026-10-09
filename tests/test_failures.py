@@ -97,3 +97,15 @@ def test_limits_from_env(monkeypatch):
     monkeypatch.setenv("OPSPILOT_MAX_DURATION_S", "9.5")
     lim = Limits.from_env()
     assert lim.max_tool_calls == 7 and lim.max_duration_s == 9.5
+
+
+async def test_evidence_cap_is_enforced_without_breaking_citations(run_case, settings):
+    out = await run_case("C05", settings_override=_limits(settings, max_evidence_records=6))
+    n = sum(1 for k in out.state if k.startswith("evidence:"))
+    assert n <= 6 + 16  # tool-registered evidence capped; intake adds <=2 per service
+    assert out.report.verification.invalid_citations == []
+
+
+async def test_report_size_limit_applies_end_to_end(run_case, settings):
+    out = await run_case("C05", settings_override=_limits(settings, max_report_chars=9000))
+    assert "report truncated" in out.report.unresolved_questions[-1]

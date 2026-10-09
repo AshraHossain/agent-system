@@ -105,6 +105,7 @@ def _fallback_report(state: dict, aborted: str, metrics: RunMetrics | None) -> I
         topo=rt.topology,
         run_metrics=metrics,
         aborted=aborted,
+        max_chars=rt.settings.limits.max_report_chars,
     )
 
 
