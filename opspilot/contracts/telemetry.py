@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from opspilot.contracts.evidence import Evidence
 
-Verdict = Literal["normal", "elevated", "critical", "insufficient_data"]
+Verdict = Literal["normal", "elevated", "critical", "recovered", "insufficient_data"]
 
 
 class MetricStats(BaseModel):
@@ -38,13 +38,14 @@ class Anomaly(BaseModel):
     entity_id: str
     entity_type: str
     metric: str
-    verdict: Literal["elevated", "critical"]
+    verdict: Literal["elevated", "critical", "recovered"]
     baseline_mean: float
     window_mean: float
     peak: float
     delta_pct: float | None
     zscore: float | None
     first_seen: str | None
+    last_seen: str | None = None
     rule: str
     evidence_id: str
 

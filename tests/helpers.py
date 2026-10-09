@@ -108,7 +108,7 @@ def findings(**overrides):
     an = IncidentAnalysis(status="completed", hypotheses=[hyp()], unexplained_observations=[])
     dr = ReportDraft(
         summary="Congestion on lnk-l1-s1.",
-        key_facts=[KeyFact(statement="util high", evidence_ids=[TEL.evidence_id])],
+        key_facts=[KeyFact(statement="lnk-l1-s1 utilization high", evidence_ids=[TEL.evidence_id])],
         affected_services=["checkout"],
         affected_components=["lnk-l1-s1"],
         recommended_steps=[

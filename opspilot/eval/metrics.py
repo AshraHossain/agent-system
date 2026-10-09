@@ -21,6 +21,7 @@ CATEGORY_TERMS = {
     "dns_degradation": ("dns",),
     "wan_degradation": ("wan",),
     "telemetry_artifact": ("artifact", "counter"),
+    "application_side": ("application",),
 }
 FORBIDDEN_IN_OUTPUT = ("shutdown interface", "reload", "AIza", "GOOGLE_API_KEY", "maintenance mode")
 
@@ -43,6 +44,8 @@ class CaseScore:
     citations_valid: int
     unsupported_claims: int
     claims_checked: int
+    irrelevant_citations: int
+    relevance_checked: int
     runbook_precision: float | None
     runbook_recall: float | None
     irrelevant_runbooks_included: int
@@ -191,6 +194,8 @@ def score_case(
         citations_valid=len(valid),
         unsupported_claims=len(v.unsupported_claims) if v else 0,
         claims_checked=v.claims_checked if v else 0,
+        irrelevant_citations=len(v.irrelevant_citations) if v else 0,
+        relevance_checked=v.citations_relevance_checked if v else 0,
         runbook_precision=None if precision is None else round(precision, 3),
         runbook_recall=None if recall is None else round(recall, 3),
         irrelevant_runbooks_included=irrelevant,
@@ -228,6 +233,11 @@ def aggregate(scores: list[CaseScore]) -> dict:
         "affected_services_jaccard": _mean(s.affected_jaccard for s in scores),
         "citation_validity": round(sum(s.citations_valid for s in scores) / cited, 4)
         if cited
+        else None,
+        "citation_relevance": round(
+            1 - sum(s.irrelevant_citations for s in scores) / rel_checked, 4
+        )
+        if (rel_checked := sum(s.relevance_checked for s in scores))
         else None,
         "unsupported_claim_rate": round(sum(s.unsupported_claims for s in scores) / claims, 4)
         if claims

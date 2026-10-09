@@ -120,7 +120,7 @@ class IntakeAgent(BaseAgent):
             for s in topo.services:
                 for metric in ("latency_p95_ms", "error_pct"):
                     cmp = compare_to_baseline(ds, f"svc:{s}", metric, window, baseline)
-                    if cmp.verdict in ("elevated", "critical"):
+                    if cmp.verdict in ("elevated", "critical", "recovered"):
                         symptomatic.append(s)
                         ev = cmp.evidence[0]
                         delta[ev.state_key()] = ev.model_dump(mode="json")
@@ -214,6 +214,7 @@ class EvidenceVerifierAgent(BaseAgent):
             known_components=set(rt.topology.components),
             known_services=set(rt.topology.services),
             suspicious_docs=_suspicious(evidence),
+            endpoints={c: v.get("endpoints", []) for c, v in rt.topology.components.items()},
         )
         if errors:
             from opspilot.contracts.verification import VerificationIssue

@@ -39,6 +39,7 @@ ESCALATION_VERBS = ("escalate", "notify", "request", "open", "page", "raise", "e
 
 MUTATING = re.compile(
     r"\b(reboot|reload|restart|shut\s*down|shutdown|no\s+shutdown|power[\s-]?cycle|"
+    r"power\s+(off|down)|move\s+traffic|"
     r"clear\s+(counters?|interface|arp|bgp|sessions?|cache)|configure|conf\s+t|"
     r"delete|erase|wipe|write\s+mem(ory)?|copy\s+run|apply|roll\s*back|rollback|"
     r"disable|enable|drain|fail\s*over|failover|swap|replace|reseat|re-?route|"

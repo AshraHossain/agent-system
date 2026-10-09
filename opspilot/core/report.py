@@ -96,6 +96,10 @@ def decide_status(
         hyps[0].category == HypothesisCategory.TELEMETRY_ARTIFACT or hyps[0].confidence == "weak"
     ):
         return S.REQUIRES_HUMAN_REVIEW, "leading hypothesis needs human confirmation"
+    if hyps and hyps[0].category == HypothesisCategory.APPLICATION:
+        return S.REQUIRES_HUMAN_REVIEW, (
+            "no network fault found; likely application-side — hand over to service owners"
+        )
     if review is not None and any(c.severity == "warning" for c in review.concerns):
         return S.REQUIRES_HUMAN_REVIEW, "secondary reviewer raised warnings"
     return S.INVESTIGATED, "all checks passed"
@@ -107,6 +111,7 @@ def decide_escalation(
     security: bool,
     anomalies: bool,
     tiers: dict[str, int],
+    recovered_only: bool = False,
 ) -> Escalation:
     targets: list = []
     reasons = []
@@ -125,6 +130,8 @@ def decide_escalation(
         )
     elif not anomalies:
         level, reasons = "none", ["no anomalies detected"]
+    elif recovered_only:
+        level, reasons = "monitor", ["all anomalies have recovered; watch for recurrence"]
     elif max_impact >= IMPACT_ORDER["high"]:
         level, reasons = "escalate", ["potential impact is high or critical"]
     else:
@@ -226,7 +233,14 @@ def build_report(
         ]
     )
     deprecated = {e.entity_id for e in evidence.values() if e.data.get("status") == "deprecated"}
-    flagged = set(knowledge_flagged(knowledge))
+    # Quarantine applies to any suspicious document in the evidence registry,
+    # regardless of which agent or tool surfaced it.
+    evidence_flagged = {
+        e.entity_id
+        for e in evidence.values()
+        if e.entity_id and "suspected_injection" in str(e.data.get("flags", ""))
+    }
+    flagged = set(knowledge_flagged(knowledge)) | evidence_flagged
     for text, rationale, runbooks, ev_ids in source_steps:
         decision = check_step(text)
         bad_rb = [r for r in runbooks if r in deprecated or r in flagged]
@@ -263,6 +277,8 @@ def build_report(
     if knowledge:
         for r in knowledge.related_incidents:
             hist.setdefault(r.doc_id, DocRef(doc_id=r.doc_id, title=r.title, note=_clean(r.note)))
+    for doc_id in flagged:
+        hist.pop(doc_id, None)
     # Relevant runbooks = those the kept recommendations rely on; otherwise the
     # researcher's applicable candidates (only when there is something to investigate).
     candidates = {r.doc_id: r for r in (knowledge.relevant_runbooks if knowledge else [])}
@@ -291,10 +307,21 @@ def build_report(
     if knowledge and knowledge.suspicious_documents:
         for d in knowledge.suspicious_documents:
             security_notes.append(f"{d.doc_id} quarantined as untrusted: {_clean(d.issue)}")
-    security = bool(knowledge and knowledge.suspicious_documents) or (
-        "injection_suspected" in scope.request_flags
+    noted = {d.doc_id for d in (knowledge.suspicious_documents if knowledge else [])}
+    for doc_id in sorted(evidence_flagged - noted):
+        security_notes.append(
+            f"{doc_id} quarantined as untrusted: matched prompt-injection patterns"
+        )
+    security = bool(flagged) or ("injection_suspected" in scope.request_flags)
+    current = any(
+        e.kind == EvidenceKind.TELEMETRY and e.data.get("verdict") in ("elevated", "critical")
+        for e in evidence.values()
     )
-    escalation = decide_escalation(status, risks, security, anomalies, tiers)
+    recovered_only = not current and any(
+        e.kind == EvidenceKind.TELEMETRY and e.data.get("verdict") == "recovered"
+        for e in evidence.values()
+    )
+    escalation = decide_escalation(status, risks, security, anomalies, tiers, recovered_only)
 
     tainted = verification is not None and any(
         i.code in ("injection_in_output", "secret_in_output") for i in verification.issues

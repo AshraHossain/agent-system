@@ -40,6 +40,21 @@ def _hyp0(out: dict, **changes) -> dict:
     return out
 
 
+def _swap_support(out: dict) -> dict:
+    hyps = out.get("hypotheses", [])
+    if len(hyps) >= 2:
+        a, b = hyps[0]["supporting_evidence_ids"], hyps[1]["supporting_evidence_ids"]
+        hyps[0]["supporting_evidence_ids"], hyps[1]["supporting_evidence_ids"] = b, a
+    return out
+
+
+def _mislabel_fact(out: dict) -> dict:
+    facts = out.get("key_facts", [])
+    if facts:
+        facts[0] = {**facts[0], "statement": "lnk-l1-s1 shows rising CRC errors"}
+    return out
+
+
 PERTURBATIONS = [
     Perturbation(
         "fabricated_citation",
@@ -134,6 +149,22 @@ PERTURBATIONS = [
             "unsupported_hypothesis" in _codes(r)
             and r.status.value in ("requires_human_review", "inconclusive")
         ),
+    ),
+    Perturbation(
+        "fact_cites_unrelated_evidence",
+        "C04",
+        "report_drafter",
+        _mislabel_fact,
+        lambda r: (
+            "fact_citation_mismatch" in _codes(r) and r.status.value == "requires_human_review"
+        ),
+    ),
+    Perturbation(
+        "hypothesis_cites_other_component",
+        "C05",
+        "incident_analyst",
+        _swap_support,
+        lambda r: "irrelevant_support" in _codes(r) and r.status.value == "requires_human_review",
     ),
     Perturbation(
         "overstated_certainty",

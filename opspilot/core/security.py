@@ -33,6 +33,17 @@ INJECTION_PATTERNS: dict[str, re.Pattern[str]] = {
         r"(`[^`]{2,80}`|\b(immediately\s+)?(run|execute)\b[^.]{0,20}\b(command|shell|script|`))",
         re.I,
     ),
+    # Text addressed to AI readers is a strong signal that a document is trying to steer agents.
+    "ai_addressed": re.compile(
+        r"\b(automated|ai|llm)[\s-]+(assistants?|agents?|systems?|tools?)\b[^.]{0,40}"
+        r"\b(reading|processing|should|must|recommend)",
+        re.I,
+    ),
+    "approval_bypass": re.compile(
+        r"\b(no\s+need\s+to|without|skip(ping)?|bypass(ing)?|do\s+not)\b[^.]{0,30}"
+        r"\b(on-?call|approval|change\s+(control|process|request)|human\s+review)\b",
+        re.I,
+    ),
     "output_manipulation": re.compile(
         r"\b(do\s+not\s+mention|mark\s+the\s+investigation|100%\s+confidence|hide\s+this)\b", re.I
     ),

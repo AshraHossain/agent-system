@@ -115,6 +115,10 @@ class _Ctx:
         return self._cache[key]
 
 
+def _missing(cmp: BaselineComparison | None) -> bool:
+    return cmp is not None and cmp.verdict == "insufficient_data"
+
+
 def _conf(kinds: int, contradicted: bool, gaps: bool) -> tuple[str, str]:
     if contradicted:
         return "weak", "weak: at least one measurement contradicts this hypothesis"
@@ -142,6 +146,7 @@ def generate_candidates(
 ) -> CandidateSet:
     summary = summary or summarize_anomalies(ds, window, baseline)
     ctx = _Ctx(ds, window, baseline)
+    verdict_by_ev = {a.evidence_id: a.verdict for a in summary.anomalies}
     by_entity: dict[str, dict[str, Anomaly]] = defaultdict(dict)
     for a in summary.anomalies:
         by_entity[a.entity_id][a.metric] = a
@@ -167,6 +172,12 @@ def generate_candidates(
         conf, why = _conf(n, bool(contra), bool(gap_ids))
         if cap and CONF_RANK[conf] < CONF_RANK[cap]:
             conf, why = cap, f"{cap}: capped — {why.split(': ', 1)[1]}; needs confirmation"
+        recovered = [e for e in support if e in verdict_by_ev]
+        if recovered and all(verdict_by_ev[e] == "recovered" for e in recovered):
+            statement = f"Transient episode, now recovered: {statement}"
+            if CONF_RANK[conf] < CONF_RANK["moderate"]:
+                conf = "moderate"
+            why += "; all supporting measurements have returned to normal (recovered episode)"
         raw.append(
             dict(
                 category=cat,
@@ -269,6 +280,30 @@ def generate_candidates(
                     "a physical-layer fault, but error counters are missing.",
                     [ev.get("packet_loss_pct"), ev.get("probe_loss_pct")],
                 )
+            elif (
+                not util
+                and not err
+                and (loss or probe)
+                and _missing(ctx.cmp(entity, "utilization_pct"))
+            ):
+                normal_err = [
+                    c.evidence[0].evidence_id
+                    for c in (err_cmp,)
+                    if c is not None and c.verdict == "normal"
+                ]
+                add(
+                    C.LINK_CONGESTION,
+                    entity,
+                    f"Loss and latency on {entity} with normal error counters point to "
+                    "congestion, but utilization telemetry is missing.",
+                    [
+                        ev.get("packet_loss_pct"),
+                        ev.get("probe_loss_pct"),
+                        ev.get("latency_ms"),
+                        *normal_err,
+                    ],
+                    cap="moderate",
+                )
             elif not util and (loss or probe or lat):
                 add(
                     C.UNKNOWN,
@@ -310,17 +345,26 @@ def generate_candidates(
             explained_any.update(explained)
 
     if not raw and affected:
-        for s in affected:
+        # No network anomaly at all: attribute to the most upstream degraded services
+        # (those that do not themselves depend on another degraded service).
+        deps_of = {
+            s: {svc_name(n) for n in topo.closure(f"{SVC}{s}") if n.startswith(SVC)}
+            for s in affected
+        }
+        roots = [s for s in affected if not (deps_of[s] & set(affected))] or affected
+        for s in roots:
+            downstream = [t for t in affected if s in deps_of[t]]
             sev = [a.evidence_id for a in by_entity[f"{SVC}{s}"].values()]
             add(
                 C.APPLICATION,
                 s,
-                f"{s} is slow with no network anomaly on its documented dependency path; the "
-                "cause may be application-side.",
+                f"{s} is degraded with no network anomaly on its documented dependency path"
+                + (f"; {', '.join(downstream)} depend(s) on it" if downstream else "")
+                + ". The cause is likely application-side.",
                 sev,
-                kinds=0,
+                cap="moderate",
             )
-            raw[-1]["explained"] = [s]
+            raw[-1]["explained"] = sorted([s, *downstream])
 
     incidents = [d for d in ds.documents if d.doc_type == "incident_report"]
     hist_evidence: list[Evidence] = []
@@ -329,6 +373,10 @@ def generate_candidates(
         related = {comp, *ds.components.get(comp, {}).get("endpoints", [])}
         refs, alts = [], []
         for inc in incidents:
+            inc_ev = knowledge.document_evidence(ds, inc.doc_id)
+            if "suspected_injection" in str(inc_ev.data.get("flags", "")):
+                hist_evidence.append(inc_ev)  # registered so the report can quarantine it
+                continue
             overlap = related & set(inc.components)
             if inc.root_cause_category == r["category"].value and (overlap or not inc.components):
                 refs.append(inc.doc_id)

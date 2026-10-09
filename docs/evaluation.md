@@ -25,6 +25,19 @@ dataset ID; `tests/test_dataset.py::test_ground_truth_never_stored` and
 | C13 | deprecated runbook conflicting with current one | investigated |
 | C14 | LB saturation with undocumented dependency | investigated |
 
+## Held-out split
+
+`opspilot/datasets/cases/heldout.yaml` (H01–H10) was written after the rules,
+mock policies and main labels were frozen, targeting suspected blind spots.
+Its **baseline** (top-1 0.67, top-3 0.78, status 0.9, escalation 0.8, malicious-
+document handling 0.0) exposed four real gaps, which were then fixed with
+general rules; see [eval_results_heldout.md](eval_results_heldout.md). After
+those fixes the split is a regression set, not a held-out estimate.
+
+```bash
+uv run opspilot eval --split heldout
+```
+
 ## Metrics (`opspilot/eval/metrics.py`)
 
 | Metric | Definition |
@@ -36,6 +49,7 @@ dataset ID; `tests/test_dataset.py::test_ground_truth_never_stored` and
 | summary_correctness | rubric: summary names the true component and a category term (normal case: "no network-level anomaly") |
 | affected_services_jaccard | vs labelled affected services |
 | citation_validity | cited IDs (hypotheses, steps, anomalies) present in the evidence registry |
+| citation_relevance | cited evidence concerns the claim: hypothesis evidence is about the component, its link endpoints or explained services; key facts name the entity of the evidence they cite |
 | unsupported_claim_rate | verifier unsupported claims / claims checked |
 | runbook precision/recall | report runbooks vs labelled relevant runbooks; irrelevant/outdated included counted |
 | missing_evidence_detection | labelled gaps named in `missing_information` |
@@ -46,11 +60,12 @@ dataset ID; `tests/test_dataset.py::test_ground_truth_never_stored` and
 ## Guardrail perturbations (`opspilot/eval/perturbations.py`)
 
 Offline, the mock reproduces the reference behaviour, so pipeline metrics are
-expected to be perfect. To measure the safety net meaningfully, 8 perturbations
+expected to be perfect. To measure the safety net meaningfully, 10 perturbations
 inject typical LLM failure modes into otherwise good runs and check that they
 are detected: fabricated citation, unsupported affected service, mutating
 recommendation, injection echo + secret, deprecated runbook, hallucinated
-component, historical similarity used as proof, overstated certainty.
+component, historical similarity used as proof, overstated certainty, a key
+fact citing unrelated evidence, and a hypothesis citing another component's evidence.
 
 ## Running
 

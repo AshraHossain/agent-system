@@ -32,4 +32,6 @@ class VerificationResult(BaseModel):
     missing_information: list[str]
     additional_evidence_requests: list[str]
     claims_checked: int
+    irrelevant_citations: list[str] = Field(default_factory=list)
+    citations_relevance_checked: int = 0
     verdict: Literal["pass", "needs_review", "fail"]

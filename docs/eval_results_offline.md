@@ -1,6 +1,6 @@
-# OpsPilot evaluation — mock (scripted-mock)
+# OpsPilot evaluation — main split, mock (scripted-mock)
 
-- ADK 2.11.0, generator v1, git 5b9bfba, 2026-10-09T19:25:52+00:00
+- ADK 2.11.0, generator v1, git 9ae5368, 2026-10-09T19:40:52+00:00
 - mock provider measures the deterministic pipeline, not LLM reasoning
 
 | Metric | Value |
@@ -15,6 +15,7 @@
 | summary_correctness | 1.0 |
 | affected_services_jaccard | 1.0 |
 | citation_validity | 1.0 |
+| citation_relevance | 1.0 |
 | unsupported_claim_rate | 0.0 |
 | runbook_precision | 1.0 |
 | runbook_recall | 1.0 |
@@ -26,25 +27,25 @@
 | llm_calls_total | 185 |
 | tool_calls_total | 206 |
 | tokens_total | None |
-| latency_s_mean | 1.2871 |
-| latency_s_p95 | 1.798 |
+| latency_s_mean | 1.3089 |
+| latency_s_p95 | 2.054 |
 
 | Case | Tags | Status (expected) | Esc | Top1 | Top3 | Cites valid | Runbook P/R | Tools | Latency s |
 |---|---|---|---|---|---|---|---|---|---|
-| C01 | normal | investigated (investigated) | ✓ | None | None | 0/0 | 1.0/None | 1.0 | 1.08 |
-| C02 | congestion | investigated (investigated) | ✓ | True | True | 16/16 | 1.0/1.0 | 1.0 | 1.266 |
-| C03 | packet_loss | investigated (investigated) | ✓ | True | True | 17/17 | 1.0/1.0 | 1.0 | 1.761 |
-| C04 | resource_saturation | investigated (investigated) | ✓ | True | True | 14/14 | 1.0/1.0 | 1.0 | 1.109 |
-| C05 | multiple_faults, congestion, resource_saturation | investigated (investigated) | ✓ | True | True | 30/30 | 1.0/1.0 | 1.0 | 1.397 |
-| C06 | incomplete_telemetry, packet_loss | inconclusive (inconclusive) | ✓ | True | True | 15/15 | 1.0/1.0 | 1.0 | 1.671 |
-| C07 | contradictory_evidence | requires_human_review (requires_human_review) | ✓ | True | True | 13/13 | 1.0/1.0 | 1.0 | 1.668 |
-| C08 | misleading_history, congestion | investigated (investigated) | ✓ | True | True | 17/17 | 1.0/1.0 | 1.0 | 1.56 |
-| C09 | irrelevant_runbooks | investigated (investigated) | ✓ | True | True | 18/18 | 1.0/1.0 | 1.0 | 1.228 |
-| C10 | malicious_document, packet_loss | investigated (investigated) | ✓ | True | True | 17/17 | 1.0/1.0 | 1.0 | 1.798 |
-| C11 | model_timeout | inconclusive (inconclusive) | ✓ | None | None | 6/6 | 1.0/None | 1.0 | 0.579 |
-| C12 | tool_failure | inconclusive (inconclusive) | ✓ | None | None | 0/0 | 1.0/None | 1.0 | 0.157 |
-| C13 | packet_loss, conflicting_documents | investigated (investigated) | ✓ | True | True | 18/18 | 1.0/1.0 | 1.0 | 1.786 |
-| C14 | resource_saturation, incomplete_topology | investigated (investigated) | ✓ | True | True | 14/14 | 1.0/1.0 | 1.0 | 0.959 |
+| C01 | normal | investigated (investigated) | ✓ | None | None | 0/0 | 1.0/None | 1.0 | 1.017 |
+| C02 | congestion | investigated (investigated) | ✓ | True | True | 16/16 | 1.0/1.0 | 1.0 | 1.22 |
+| C03 | packet_loss | investigated (investigated) | ✓ | True | True | 17/17 | 1.0/1.0 | 1.0 | 1.461 |
+| C04 | resource_saturation | investigated (investigated) | ✓ | True | True | 14/14 | 1.0/1.0 | 1.0 | 1.345 |
+| C05 | multiple_faults, congestion, resource_saturation | investigated (investigated) | ✓ | True | True | 30/30 | 1.0/1.0 | 1.0 | 1.211 |
+| C06 | incomplete_telemetry, packet_loss | inconclusive (inconclusive) | ✓ | True | True | 15/15 | 1.0/1.0 | 1.0 | 1.752 |
+| C07 | contradictory_evidence | requires_human_review (requires_human_review) | ✓ | True | True | 13/13 | 1.0/1.0 | 1.0 | 1.63 |
+| C08 | misleading_history, congestion | investigated (investigated) | ✓ | True | True | 17/17 | 1.0/1.0 | 1.0 | 1.879 |
+| C09 | irrelevant_runbooks | investigated (investigated) | ✓ | True | True | 18/18 | 1.0/1.0 | 1.0 | 1.184 |
+| C10 | malicious_document, packet_loss | investigated (investigated) | ✓ | True | True | 17/17 | 1.0/1.0 | 1.0 | 1.804 |
+| C11 | model_timeout | inconclusive (inconclusive) | ✓ | None | None | 6/6 | None/None | 1.0 | 0.5 |
+| C12 | tool_failure | inconclusive (inconclusive) | ✓ | None | None | 0/0 | None/None | 1.0 | 0.137 |
+| C13 | packet_loss, conflicting_documents | investigated (investigated) | ✓ | True | True | 18/18 | 1.0/1.0 | 1.0 | 2.054 |
+| C14 | resource_saturation, incomplete_topology | investigated (investigated) | ✓ | True | True | 14/14 | 1.0/1.0 | 1.0 | 1.131 |
 
 ## Guardrail perturbations — detection rate 1.0
 
@@ -57,6 +58,8 @@
 | deprecated_runbook_cited | C13 | report_drafter | ✓ | requires_human_review |
 | hallucinated_component | C03 | incident_analyst | ✓ | requires_human_review |
 | history_as_proof | C08 | incident_analyst | ✓ | requires_human_review |
+| fact_cites_unrelated_evidence | C04 | report_drafter | ✓ | requires_human_review |
+| hypothesis_cites_other_component | C05 | incident_analyst | ✓ | requires_human_review |
 | overstated_certainty | C06 | report_drafter | ✓ | inconclusive |
 
-> Offline results use the deterministic mock model and measure the pipeline (tools, rules, orchestration, verification, reporting), **not LLM reasoning**. Mock policies, rules and labels were developed together, so perfect scores are expected. Live Gemini evaluation has not been run.
+> Offline results use the deterministic mock model and measure the pipeline (tools, rules, orchestration, verification, reporting), **not LLM reasoning**. Mock policies, rules and labels were developed together, so perfect scores are expected. See eval_results_heldout.md for cases written after the rules were frozen. Live Gemini evaluation has not been run.

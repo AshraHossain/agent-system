@@ -9,12 +9,13 @@
 ## High priority
 - [ ] Run live Gemini evaluation (several repetitions), record results, compare with mock
 - [ ] Validate Gemini `set_model_response` compliance for every output schema
-- [ ] Add relevance checking for cited evidence (existence is checked; relevance is not)
+- [x] Citation relevance check (entity alignment); sufficiency still unchecked
+- [x] Held-out split with recorded pre-fix baseline (now a regression set)
+- [ ] Independently authored evaluation set (different author)
 
 ## Medium priority
 - [ ] Optional bounded re-investigation loop (`LoopAgent`, max 2) when verification requests evidence
 - [ ] Semantic embedder option (Gemini embeddings) with an offline cache
-- [ ] Larger, independently authored evaluation set to reduce label/rule co-design bias
 - [ ] Cost estimation from recorded tokens with configurable price table
 
 ## Low priority

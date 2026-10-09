@@ -19,6 +19,7 @@ THRESHOLDS = {
     "root_cause_top3": 1.0,
     "summary_correctness": 1.0,
     "citation_validity": 1.0,
+    "citation_relevance": 1.0,
     "runbook_precision": 0.9,
     "runbook_recall": 0.9,
     "missing_evidence_detection": 1.0,

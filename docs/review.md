@@ -28,6 +28,19 @@ live model would investigate real incidents.
 | Live prerequisites documented | Met | `docs/model_configuration.md` |
 | Reproducible local setup | Met | `uv sync`, seeded generator, Docker image built and smoke-tested |
 
+## Follow-up after the review
+
+* A held-out split (H01–H10), written after the rules were frozen, scored
+  top-1 0.67 / top-3 0.78 / escalation 0.8 / malicious-document handling 0.0 at
+  baseline (`9ae5368`). The four gaps it exposed (recovered transients, missing
+  culprit utilization, application-fault localisation, AI-addressed injection
+  surfaced via historical references) were fixed with general rules. The split
+  is now a regression set; an independently authored set is still needed.
+* Weakness 9 below is partly addressed: the verifier now checks citation
+  *relevance* (hypothesis evidence must concern the component, its endpoints or
+  explained services; key facts must name the entity of the evidence they
+  cite). It still cannot judge whether the evidence is sufficient.
+
 ## Weaknesses, in order of importance
 
 1. **Offline evaluation is circular.** The hypothesis rules, the mock policies

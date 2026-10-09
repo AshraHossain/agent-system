@@ -52,6 +52,8 @@ Current value = median of the last 6 samples (30 min) in the window.
 | latency_ms / query_latency_ms | relative: +50% / +100%, z ≥3 |
 | latency_p95_ms (services) | relative: +20% / +50%, z ≥3 |
 
+A metric that is normal now but breached its rule for ≥3 consecutive samples
+in the window → `recovered` (with `first_seen`/`last_seen`).
 <50% coverage in window or baseline → `insufficient_data`. Missing ≥3 samples
 → `missing`; all metrics older than 2 intervals → `delayed`.
 
@@ -83,10 +85,12 @@ both signals without score calibration.
 | link: error_rate + loss/probe anomalous | `link_physical_degradation` |
 | link: loss anomalous, probes and errors normal | `telemetry_artifact` (capped moderate) + contradicted `link_physical_degradation` |
 | link: loss + probes anomalous, errors missing | `link_physical_degradation` (gaps lower confidence) |
+| link: loss/probes anomalous, errors normal, utilization missing | `link_congestion` (capped moderate, gap noted) |
 | WAN link: latency/loss | `wan_degradation` |
 | firewall/LB/switch/router: cpu/mem/session | `device_resource_saturation` |
 | DNS server: query latency/cpu | `dns_degradation` |
-| service anomalies, no network anomaly | `application_side` (weak) |
+| service anomalies, no network anomaly | `application_side` on the most upstream degraded service (service-to-service dependencies), capped moderate |
+| all supporting metrics `recovered` | same category, statement prefixed "Transient episode, now recovered", capped moderate |
 
 Confidence: strong (≥2 independent metrics, no contradiction, complete data),
 moderate (1 metric, or ≥2 with gaps), weak (contradicted or indirect only).

@@ -36,6 +36,15 @@ def evidence_from_state(state: dict) -> dict[str, Evidence]:
     return out
 
 
+def _mentions(statement: str, ev: Evidence) -> bool:
+    """Does the statement name the entity (or document) the evidence is about?"""
+    if not ev.entity_id:
+        return True
+    names = {ev.entity_id, ev.entity_id.removeprefix("svc:")}
+    text = statement.lower()
+    return any(n.lower() in text for n in names)
+
+
 def _ids(*groups: Iterable[str]) -> list[str]:
     out: list[str] = []
     for g in groups:
@@ -54,7 +63,11 @@ def verify(
     known_components: set[str],
     known_services: set[str],
     suspicious_docs: set[str],
+    endpoints: dict[str, list[str]] | None = None,
 ) -> VerificationResult:
+    endpoints = endpoints or {}
+    irrelevant: list[str] = []
+    relevance_checked = 0
     issues: list[VerificationIssue] = []
     checks: list[Check] = []
     unsupported: list[str] = []
@@ -112,17 +125,27 @@ def verify(
                 f"{h.hypothesis_id} has no direct (telemetry/topology) supporting evidence",
                 [h.hypothesis_id],
             )
-        related = {h.component_id, f"svc:{h.component_id}"}
-        off_target = [
-            e
-            for e in direct
-            if evidence[e].kind == EvidenceKind.TELEMETRY and evidence[e].entity_id not in related
-        ]
-        if off_target and len(off_target) == len(direct):
+        # Relevance: direct evidence must concern the hypothesised component, its
+        # link endpoints, or the services the hypothesis claims to explain.
+        related = {h.component_id, f"svc:{h.component_id}", *endpoints.get(h.component_id, [])}
+        related |= {f"svc:{x}" for x in h.explained_services}
+        relevance_checked += len(direct)
+        off_target = [e for e in direct if evidence[e].entity_id not in related]
+        irrelevant += off_target
+        if off_target:
             issue(
                 "warning",
-                "evidence_off_target",
-                f"{h.hypothesis_id} cites telemetry about other entities only",
+                "irrelevant_citation",
+                f"{h.hypothesis_id} cites evidence about other entities: "
+                + ", ".join(f"{e} ({evidence[e].entity_id})" for e in off_target),
+                off_target,
+            )
+        if direct and len(off_target) == len(direct):
+            unsupported.append(f"{h.hypothesis_id}: no cited evidence concerns {h.component_id}")
+            issue(
+                "error",
+                "irrelevant_support",
+                f"{h.hypothesis_id} ({h.component_id}) cites only evidence about other entities",
                 off_target,
             )
         if h.component_id not in known_components and h.component_id not in known_services:
@@ -200,6 +223,20 @@ def verify(
                 )
         for kf in draft.key_facts:
             claims += 1
+            valid_ids = [e for e in kf.evidence_ids if e in evidence]
+            mentioned = [e for e in valid_ids if _mentions(kf.statement, evidence[e])]
+            relevance_checked += len(valid_ids)
+            irrelevant += [e for e in valid_ids if e not in mentioned]
+            if valid_ids and not mentioned:
+                unsupported.append(
+                    f"fact cites evidence about something else: {kf.statement[:120]}"
+                )
+                issue(
+                    "error",
+                    "fact_citation_mismatch",
+                    f"key fact does not concern any cited evidence: {kf.statement[:80]}",
+                    valid_ids,
+                )
             if not kf.evidence_ids or not all(e in evidence for e in kf.evidence_ids):
                 unsupported.append(f"fact without valid evidence: {kf.statement[:120]}")
                 issue(
@@ -318,5 +355,7 @@ def verify(
         missing_information=list(dict.fromkeys(missing)),
         additional_evidence_requests=list(dict.fromkeys(requests)),
         claims_checked=claims,
+        irrelevant_citations=sorted(set(irrelevant)),
+        citations_relevance_checked=relevance_checked,
         verdict=verdict,
     )

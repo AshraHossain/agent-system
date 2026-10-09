@@ -30,6 +30,7 @@ from opspilot.core.dataset import Dataset, fmt_ts, parse_ts
 from opspilot.core.errors import InvalidArgument, NotFound
 
 RECENT_SAMPLES = 6
+EPISODE_SAMPLES = 3  # 15 min of consecutive breaches counts as an episode
 MIN_COVERAGE = 0.5
 MAX_WINDOW = timedelta(hours=24)
 
@@ -123,7 +124,36 @@ def _evaluate(
                 verdict = "critical"
             elif delta_pct >= rule.warn:
                 verdict = "elevated"
+    if verdict == "normal" and _episode(rule, cur.to_numpy(), bmean, floor) is not None:
+        verdict = "recovered"
     return verdict, assessed, delta_pct, z
+
+
+def _breaches(rule: Rule, values: np.ndarray, bmean: float, floor: float) -> np.ndarray:
+    if rule.kind == "absolute":
+        return (values >= rule.warn) & (values - bmean >= rule.min_delta)
+    return (values >= bmean * (1 + rule.warn / 100)) & ((values - bmean) / floor >= rule.min_z)
+
+
+def _episode(rule: Rule, values: np.ndarray, bmean: float, floor: float) -> tuple[int, int] | None:
+    """Longest run of >= EPISODE_SAMPLES consecutive breaching samples, as (start, end) indices."""
+    best, start = None, None
+    hits = _breaches(rule, values, bmean, floor)
+    for i, hit in enumerate([*hits, False]):
+        if hit and start is None:
+            start = i
+        elif not hit and start is not None:
+            if i - start >= EPISODE_SAMPLES and (best is None or i - start > best[1] - best[0]):
+                best = (start, i - 1)
+            start = None
+    return best
+
+
+def _last_seen(metric: str, cur: pd.DataFrame, bmean: float) -> str | None:
+    rule = METRIC_RULES[metric]
+    threshold = rule.warn if rule.kind == "absolute" else bmean * (1 + rule.warn / 100)
+    hit = cur[cur["value"] >= threshold]
+    return None if hit.empty else str(hit["ts"].iloc[-1])
 
 
 def _first_seen(metric: str, cur: pd.DataFrame, bmean: float) -> str | None:
@@ -314,7 +344,7 @@ def summarize_anomalies(
         for metric in catalog[entity]:
             mf = ef[ef["metric"] == metric]
             cmp = _compare(ds, mf, entity, metric, window, baseline)
-            if cmp.verdict in ("elevated", "critical"):
+            if cmp.verdict in ("elevated", "critical", "recovered"):
                 ev = cmp.evidence[0]
                 evidence.append(ev)
                 cur = mf[mf["ts"] >= fmt_ts(window.start)].sort_values("ts")
@@ -330,6 +360,9 @@ def summarize_anomalies(
                         delta_pct=cmp.delta_pct,
                         zscore=cmp.zscore,
                         first_seen=_first_seen(metric, cur, cmp.baseline.mean or 0.0),
+                        last_seen=_last_seen(metric, cur, cmp.baseline.mean or 0.0)
+                        if cmp.verdict == "recovered"
+                        else None,
                         rule=cmp.rule,
                         evidence_id=ev.evidence_id,
                     )
