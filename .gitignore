@@ -40,7 +40,8 @@ htmlcov/
 Thumbs.db
 
 # Data / runtime artifacts
-data/
+/data/*
+!/data/synthetic/
 *.db
 *.sqlite3
 logs/

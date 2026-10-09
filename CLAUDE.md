@@ -1,66 +1,75 @@
-# CLAUDE.md — agent-system
+# CLAUDE.md — NetPulse AI
 
 Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-A minimal FastAPI service exposing a single-node LangGraph agent: `GET
-/run?query=...` invokes a `planner` agent (OpenAI chat completion,
-`gpt-4o-mini`) that breaks the query into steps, and the resulting graph
-state is returned as JSON. This is an early-stage scaffold — read
-`PLANNING.md` before changing code; it documents the architecture, module
-responsibilities, and constraints in full.
+NetPulse AI investigates network anomalies on a **synthetic** network with a
+LangGraph `StateGraph`:
 
-## Framework conventions
+- **Detection is deterministic.** Detectors, topology analysis and retrieval
+  are plain code, not LLM calls.
+- **LLM use is confined to hypothesis generation.** Today that step is
+  rule-based (`HeuristicGenerator`); the Ollama provider arrives in Phase 7.
+- **Confidence is computed by rules,** as an ordinal level, never a
+  probability.
+- **The system is read-only.** Remediation is only ever *proposed*.
 
-This repo follows the SuperClaude Framework structure:
+Development runs in approved phases. Read these before changing code:
 
-- **`PLANNING.md`** — architecture reference: module map, request flow,
-  external dependencies, and known constraints. Read this before touching
-  `app/`.
-- **`TASK.md`** — prioritized backlog (High/Medium/Low). Check here before
-  starting work — several issues below are already tracked, not new
-  discoveries.
-- **`plugins/README.md`** — plugin extension point placeholder; no plugin
-  system exists yet, `tools/` ships standalone functions instead.
-- Dependency management is **UV-based** (`pyproject.toml` + `uv.lock`) —
-  use `uv sync` / `uv run`, not raw `pip install` + `python`.
+- `PLAN.md`: phases, design rationale, alternatives;
+- `ARCHITECTURE.md`;
+- `docs/graph_workflow.md` and `docs/state_model.md`;
+- `docs/tools.md` and `docs/detection.md`;
+- `docs/adr/`.
 
-## Known issue — do not "fix" silently
+## Hard rules
 
-`app/agents.py` constructs `OpenAI()` at **module import time**, reading
-`OPENAI_API_KEY`. `.env` currently sets `OPENROUTER_API_KEY`, not
-`OPENAI_API_KEY` — as shipped, importing `app.main` raises
-`openai.OpenAIError: Missing credentials`. This is a confirmed, tracked bug
-(see `TASK.md` "High priority"). Do not silently patch around it in
-unrelated changes; if you're asked to fix it, the tracked fix requires
-`load_dotenv()` plus either pointing the client at OpenRouter's
-OpenAI-compatible endpoint or renaming the env var.
+- **Never add code that changes a network** or runs shell, `eval` or `exec`.
+  `tests/test_repository.py` enforces part of this.
+- **`netpulse/` must never read ground truth.** That means `synthgen/`,
+  `eval/labels/`, or the `eval` package. `tests/test_synthetic_data.py` and
+  `tests/test_graph_e2e.py` enforce it.
+- **Numbers come only from deterministic tools.** A `Hypothesis` cites
+  evidence IDs and carries no measurements and no numeric confidence.
+- **Retrieved text and operator free text are untrusted.** Sanitize them and
+  flag injections. Untrusted evidence can never be the sole support for a
+  cause.
+- **Keep state JSON-only.** Each field has one owning node
+  (docs/state_model.md), and evidence is immutable once recorded.
+- **Every output is labelled synthetic.** Never imply the system observed a
+  real network.
 
 ## Commands
 
 ```bash
-uv sync                                          # setup
-uv run uvicorn app.main:app --reload --port 8000 # run locally
-uv run pytest                                    # tests (tests/ is currently empty)
+uv sync                                   # setup
+uv run pytest                             # full suite (~50 s)
+uv run ruff check . && uv run ruff format --check netpulse synthgen tests eval
+uv run netpulse investigate --case case-04            # demo one investigation
+uv run python -m synthgen.generate --check            # verify committed synthetic data
+uv run python -m eval.detection_benchmark             # detector precision/recall
 ```
 
 ## Layout
 
-- `app/main.py` — FastAPI app, single route `GET /run`.
-- `app/graph.py` — `StateGraph(AgentState)`, one node (`"planner"`, entry
-  and finish point).
-- `app/agents.py` — `planner_agent(query)`, calls the OpenAI SDK.
-- `app/state.py` — `AgentState` TypedDict: `query`, `steps`, `result`
-  (`result` is currently never populated — see `TASK.md`).
-- `memory/store.py` — empty placeholder for a future persistence layer.
-- `tools/calculator_tool.py`, `tools/search_tool.py` — standalone
-  functions, not yet bound into the graph.
-- `tests/` — empty; no test framework configured yet.
+| Path | Contents |
+|---|---|
+| `netpulse/models.py`, `netpulse/state.py` | Contracts and graph state with reducers |
+| `netpulse/data/` | `DatasetStore`, the only on-disk access, with visibility rules |
+| `netpulse/detection/` | Deterministic detectors and consolidation |
+| `netpulse/topology/` | Paths, blast radius, localization, change context |
+| `netpulse/retrieval/` | BM25, sanitization, conflicts |
+| `netpulse/llm/` | Generator protocol and heuristic generator |
+| `netpulse/graph/` | Nodes, wrapper (trace and errors), ranking, builder, runner |
+| `netpulse/policy/catalog.json` | Static action allowlist |
+| `synthgen/` | Dataset generator. **Ground truth, never imported by netpulse.** |
+| `eval/` | Benchmarks and scorers. They may read labels; netpulse may not. |
+| `data/synthetic/v1/`, `eval/datasets/v1/`, `eval/labels/v1/` | Committed, checksummed data |
 
 ## Conventions
 
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): description`.
-- Single-node graph today: adding agent steps means adding nodes/edges to
-  the `StateGraph` in `app/graph.py`.
-- No persistence yet: state does not survive a single `/run` call.
+- Tests are deterministic. Mock the LLM. Local-model tests use the separate
+  `-m ollama` profile (from Phase 7).
+- Each phase ends with a report and waits for approval before the next phase.

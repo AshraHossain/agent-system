@@ -1,0 +1,51 @@
+[
+  {
+    "entity_id": "link-agg-1-acc-1",
+    "event_type": "bgp_notice",
+    "message": "BGP keepalive from peer delayed 1.8 s",
+    "severity": "info",
+    "timestamp": "2026-04-09T19:05:00+00:00"
+  },
+  {
+    "entity_id": "pe-1",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-04-09T19:30:00+00:00"
+  },
+  {
+    "entity_id": "agg-4",
+    "event_type": "config_change",
+    "message": "Configuration committed by user netops-automation: SNMP location string update",
+    "severity": "notice",
+    "timestamp": "2026-04-09T19:50:00+00:00"
+  },
+  {
+    "entity_id": "agg-1",
+    "event_type": "ntp",
+    "message": "NTP resynchronised",
+    "severity": "info",
+    "timestamp": "2026-04-09T20:45:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-1-agg-2",
+    "event_type": "snmp",
+    "message": "SNMP poll retried once",
+    "severity": "info",
+    "timestamp": "2026-04-10T02:10:00+00:00"
+  },
+  {
+    "entity_id": "fw-2",
+    "event_type": "bgp_notice",
+    "message": "BGP keepalive from peer delayed 1.8 s",
+    "severity": "info",
+    "timestamp": "2026-04-10T10:20:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-2-acc-4",
+    "event_type": "bgp_notice",
+    "message": "BGP keepalive from peer delayed 1.8 s",
+    "severity": "info",
+    "timestamp": "2026-04-10T10:35:00+00:00"
+  }
+]

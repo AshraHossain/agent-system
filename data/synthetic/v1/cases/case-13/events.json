@@ -1,0 +1,51 @@
+[
+  {
+    "entity_id": "link-core-1-agg-2",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-26T10:05:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-1-acc-1",
+    "event_type": "ntp",
+    "message": "NTP resynchronised",
+    "severity": "info",
+    "timestamp": "2026-03-26T12:35:00+00:00"
+  },
+  {
+    "entity_id": "core-2",
+    "event_type": "config_change",
+    "message": "Configuration committed by user netops-automation: SNMP location string update",
+    "severity": "notice",
+    "timestamp": "2026-03-26T12:45:00+00:00"
+  },
+  {
+    "entity_id": "acc-1",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-26T13:30:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-4-acc-7",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-26T18:15:00+00:00"
+  },
+  {
+    "entity_id": "core-1",
+    "event_type": "snmp",
+    "message": "SNMP poll retried once",
+    "severity": "info",
+    "timestamp": "2026-03-27T02:15:00+00:00"
+  },
+  {
+    "entity_id": "link-core-1-dns-1",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-27T09:15:00+00:00"
+  }
+]

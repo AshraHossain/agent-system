@@ -1,0 +1,79 @@
+[
+  {
+    "entity_id": "link-agg-1-agg-2",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-06T15:20:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-1-acc-1",
+    "event_type": "snmp",
+    "message": "SNMP poll retried once",
+    "severity": "info",
+    "timestamp": "2026-03-06T17:30:00+00:00"
+  },
+  {
+    "entity_id": "acc-4",
+    "event_type": "config_change",
+    "message": "Configuration committed by user netops-automation: SNMP location string update",
+    "severity": "notice",
+    "timestamp": "2026-03-06T18:35:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-1-agg-2",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-06T23:40:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-4-acc-7",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-07T03:35:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-1-acc-1",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-07T04:00:00+00:00"
+  },
+  {
+    "entity_id": "acc-4",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-07T06:10:00+00:00"
+  },
+  {
+    "entity_id": "core-1",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-07T08:55:00+00:00"
+  },
+  {
+    "entity_id": "link-core-1-core-2",
+    "event_type": "interface_admin_down",
+    "message": "Interface administratively down (CHG-4471)",
+    "severity": "notice",
+    "timestamp": "2026-03-07T10:15:00+00:00"
+  },
+  {
+    "entity_id": "link-core-1-core-2",
+    "event_type": "interface_up",
+    "message": "Interface up after maintenance (CHG-4471)",
+    "severity": "notice",
+    "timestamp": "2026-03-07T12:45:00+00:00"
+  },
+  {
+    "entity_id": "link-pe-1-fw-1",
+    "event_type": "ntp",
+    "message": "NTP resynchronised",
+    "severity": "info",
+    "timestamp": "2026-03-07T13:45:00+00:00"
+  }
+]

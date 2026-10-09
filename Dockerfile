@@ -1,26 +1,21 @@
 FROM python:3.11-slim
 
-# Install uv (fast Python package manager)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
 
 WORKDIR /app
-
-# Install dependencies first for better layer caching
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project --no-dev
 
-# Copy application code
-COPY app/ ./app/
-COPY tools/ ./tools/
-COPY memory/ ./memory/
+COPY netpulse/ ./netpulse/
+COPY data/synthetic/ ./data/synthetic/
+COPY eval/datasets/ ./eval/datasets/
+RUN uv sync --frozen --no-dev
 
+# Ground-truth labels (eval/labels) and the generator (synthgen) are deliberately NOT copied.
 ENV PATH="/app/.venv/bin:$PATH"
+RUN useradd --create-home netpulse
+USER netpulse
 
-EXPOSE 8000
-
-# Entry point: app/main.py defines `app = FastAPI()`, imported as app.main:app.
-# Call uvicorn directly (venv is already synced and on PATH) rather than via
-# `uv run`, which would try to re-sync/build the project package at runtime
-# using pyproject.toml's `readme = "PLANNING.md"` reference — a file not
-# copied into this image.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Phase 6: CLI demo. The API service entry point arrives in Phase 9.
+ENTRYPOINT ["netpulse"]
+CMD ["investigate", "--case", "case-04"]
