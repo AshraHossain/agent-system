@@ -29,13 +29,35 @@ Every run is also saved to a local JSON Lines file.
 ## How it works
 
 ```mermaid
-flowchart LR
-    Q([GET /run?query=...]) --> P[planner]
-    P --> E[executor]
-    E -->|no tool errors, or 3 planner runs used| S[synthesizer]
-    E -->|a tool failed and attempts < 3| P
-    S --> R([JSON response + saved run])
+flowchart TD
+    client(["Client"]) -->|"GET /run?query=..."| main["app/main.py<br/>build initial AgentState"]
+    main --> planner
+
+    subgraph graph ["app/graph.py"]
+        planner["<b>planner</b> · LLM call<br/>planner_agent(query) → parse_steps<br/>attempts + 1, errors cleared"]
+        executor["<b>executor</b> · one LLM call per step<br/>route_step_to_tool(step) → label"]
+        calc["calculator_tool<br/>safe ast arithmetic"]
+        search["search_tool<br/>placeholder"]
+        pass["passthrough<br/>step text unchanged"]
+        check{"should_replan<br/>calculator error and<br/>fewer than 3 planner runs?"}
+        synth["<b>synthesizer</b><br/>steps + tool_results → result"]
+
+        planner --> executor
+        executor -. "calculator" .-> calc
+        executor -. "search" .-> search
+        executor -. "any other label" .-> pass
+        executor -->|"tool_results, errors"| check
+        check -->|"yes: re-plan, same query"| planner
+        check -->|no| synth
+    end
+
+    synth --> store["memory/store.py<br/>save_run → data/runs.jsonl"]
+    store -->|"JSON: run_id + final AgentState"| client
 ```
+
+The shaded box is the LangGraph `StateGraph` compiled in `app/graph.py`.
+Solid arrows are control flow between graph nodes; dotted arrows are the
+per-step dispatch inside `executor`.
 
 The graph lives in `app/graph.py` and passes a single `AgentState`
 (`app/state.py`) between three nodes:
