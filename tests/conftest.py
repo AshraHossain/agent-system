@@ -41,3 +41,33 @@ def topo_factory(ds_factory):
         return Topology.from_dataset(ds_factory(case_id))
 
     return _t
+
+
+@pytest.fixture(scope="session")
+def settings(data_dir):
+    from opspilot.config import Settings
+
+    return Settings(data_dir=data_dir)
+
+
+@pytest.fixture
+def run_case(settings):
+    """Run a labelled case end to end in memory with its configured run faults."""
+    from opspilot.adk.runner import run_investigation
+    from opspilot.adk.runtime import RunFaults
+    from opspilot.datasets.spec import get_case
+
+    async def _run(
+        case_id: str, *, request: str | None = None, settings_override=None, faults=None, **kw
+    ):
+        case = get_case(case_id)
+        return await run_investigation(
+            request or case["request"],
+            case_id,
+            settings=settings_override or settings,
+            faults=faults if faults is not None else RunFaults.from_spec(case["run_faults"]),
+            persist=False,
+            **kw,
+        )
+
+    return _run

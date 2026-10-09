@@ -259,11 +259,27 @@ def build_report(
     if knowledge:
         for r in knowledge.related_incidents:
             hist.setdefault(r.doc_id, DocRef(doc_id=r.doc_id, title=r.title, note=_clean(r.note)))
-    runbooks = [
-        DocRef(doc_id=r.doc_id, title=r.title, note=_clean(r.note))
-        for r in (knowledge.relevant_runbooks if knowledge else [])
-        if r.doc_id not in deprecated and r.doc_id not in flagged
-    ]
+    # Relevant runbooks = those the kept recommendations rely on; otherwise the
+    # researcher's applicable candidates (only when there is something to investigate).
+    candidates = {r.doc_id: r for r in (knowledge.relevant_runbooks if knowledge else [])}
+    cited = list(dict.fromkeys(rb for st in steps for rb in st.runbook_ids))
+    if cited:
+        runbooks = [
+            DocRef(
+                doc_id=rb,
+                note="referenced by recommended steps",
+                title=candidates[rb].title if rb in candidates else _title(evidence, rb),
+            )
+            for rb in cited
+        ]
+    elif hyps:
+        runbooks = [
+            DocRef(doc_id=r.doc_id, title=r.title, note=_clean(r.note))
+            for r in candidates.values()
+            if r.doc_id not in deprecated and r.doc_id not in flagged
+        ]
+    else:
+        runbooks = []
 
     security_notes = []
     if scope.request_flags:
