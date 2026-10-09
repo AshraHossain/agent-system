@@ -27,7 +27,7 @@ def _wrap(text: str, indent: str = "  ") -> str:
 def _ensure_data(settings: Settings, case_ids: list[str] | None = None) -> None:
     from opspilot.datasets import generate, spec
 
-    ids = case_ids or spec.case_ids()
+    ids = case_ids or spec.all_case_ids()
     missing = [c for c in ids if not (settings.data_dir / f"{c}.db").exists()]
     if missing:
         print(f"building synthetic datasets: {', '.join(missing)}")
@@ -209,7 +209,7 @@ async def _eval(args, settings: Settings) -> int:
     from opspilot.eval.perturbations import run_guardrail_eval
 
     s = with_provider(settings, args.live)
-    results = await run_eval(s, args.cases or None)
+    results = await run_eval(s, args.cases or None, split=args.split)
     if args.guardrails and not args.live:
         results["guardrails"] = await run_guardrail_eval(s)
     jpath, mpath = write_results(results, Path(args.out))
@@ -244,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("eval", help="run the evaluation suite")
     e.add_argument("--cases", nargs="*")
     e.add_argument("--guardrails", action="store_true")
+    e.add_argument("--split", choices=["main", "heldout"], default="main")
     e.add_argument("--out", default=str(REPO_ROOT / "var" / "eval"))
     args = p.parse_args(argv)
     settings = Settings.from_env()

@@ -36,6 +36,7 @@ SERVICE_BASE_LATENCY = {
 }
 # Service latency multiplier when fully exposed to the fault type.
 SERVICE_EFFECT = {
+    "app": 1.6,
     "congestion": 2.2,
     "physical": 2.0,
     "saturation": 2.5,
@@ -107,6 +108,11 @@ def _component_effect(
             "probe_loss_pct": lambda: abs(rng.normal(2.0, 0.4)),
         },
         "phantom_loss": {"packet_loss_pct": lambda: abs(rng.normal(2.0, 0.35))},
+        # Application-side slowness: the service itself degrades, the network does not.
+        "app": {
+            "latency_p95_ms": lambda: base * rng.normal(2.4, 0.1),
+            "error_pct": lambda: base + abs(rng.normal(1.5, 0.3)),
+        },
     }
     fn = table.get(ftype, {}).get(metric)
     return float(fn()) if fn else None
@@ -142,6 +148,8 @@ def build_case(case_id: str, data_dir: Path) -> Path:
                 if f["type"] in ("gap", "delay"):
                     continue
                 active = offs >= f["start_min"]
+                if "end_min" in f:  # transient fault that recovered before the report
+                    active &= offs < f["end_min"]
                 if f["entity"] == cid:
                     for i in np.nonzero(active)[0]:
                         v = _component_effect(f["type"], metric, values[i], rng)
@@ -231,7 +239,7 @@ def build_case(case_id: str, data_dir: Path) -> Path:
 
 
 def build_all(data_dir: Path, case_ids: list[str] | None = None) -> list[Path]:
-    return [build_case(c, data_dir) for c in (case_ids or spec.case_ids())]
+    return [build_case(c, data_dir) for c in (case_ids or spec.all_case_ids())]
 
 
 __all__ = ["SVC", "build_all", "build_case"]

@@ -17,24 +17,33 @@ def topology_spec() -> dict:
     return yaml.safe_load((HERE / "topology.yaml").read_text())
 
 
+SPLITS = {"main": "cases.yaml", "heldout": "heldout.yaml"}
+
+
 @cache
-def cases_spec() -> dict:
-    return yaml.safe_load((HERE / "cases" / "cases.yaml").read_text())
+def cases_spec(split: str = "main") -> dict:
+    return yaml.safe_load((HERE / "cases" / SPLITS[split]).read_text())
 
 
-def case_ids() -> list[str]:
-    return [c["id"] for c in cases_spec()["cases"]]
+def case_ids(split: str = "main") -> list[str]:
+    return [c["id"] for c in cases_spec(split)["cases"]]
+
+
+def all_case_ids() -> list[str]:
+    return [c for split in SPLITS for c in case_ids(split)]
 
 
 def get_case(case_id: str) -> dict:
-    spec = cases_spec()
-    for c in spec["cases"]:
-        if c["id"] == case_id:
-            merged = dict(c)
-            merged.setdefault("request", spec["defaults"]["request"])
-            merged.setdefault("reported_at", spec["defaults"]["reported_at"])
-            merged.setdefault("run_faults", {})
-            return merged
+    for split in SPLITS:
+        spec = cases_spec(split)
+        for c in spec["cases"]:
+            if c["id"] == case_id:
+                merged = dict(c)
+                merged.setdefault("request", spec["defaults"]["request"])
+                merged.setdefault("reported_at", spec["defaults"]["reported_at"])
+                merged.setdefault("run_faults", {})
+                merged["split"] = split
+                return merged
     raise KeyError(case_id)
 
 

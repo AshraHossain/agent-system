@@ -37,9 +37,13 @@ def _git_rev() -> str | None:
 
 
 async def run_eval(
-    settings: Settings, case_ids: list[str] | None = None, *, build_data: bool = True
+    settings: Settings,
+    case_ids: list[str] | None = None,
+    *,
+    build_data: bool = True,
+    split: str = "main",
 ) -> dict:
-    ids = case_ids or spec.case_ids()
+    ids = case_ids or spec.case_ids(split)
     skipped = []
     if settings.provider != "mock":
         # Model timeouts/quota errors can only be injected into the mock model.
@@ -74,6 +78,7 @@ async def run_eval(
             "model": settings.model if settings.provider == "gemini" else "scripted-mock",
             "google_adk": version("google-adk"),
             "dataset_generator_version": generate.GENERATOR_VERSION,
+            "split": split,
             "cases": ids,
             "skipped_cases": skipped,
             "git_revision": _git_rev(),
@@ -94,7 +99,7 @@ async def run_eval(
 def write_results(results: dict, out_dir: Path) -> tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = results["config"]["timestamp"].replace(":", "").replace("-", "")
-    name = f"eval_{results['config']['provider']}_{stamp}"
+    name = f"eval_{results['config']['provider']}_{results['config'].get('split', 'main')}_{stamp}"
     jpath = out_dir / f"{name}.json"
     jpath.write_text(json.dumps(results, indent=2, default=str))
     mpath = out_dir / f"{name}.md"
@@ -105,7 +110,7 @@ def write_results(results: dict, out_dir: Path) -> tuple[Path, Path]:
 def to_markdown(results: dict) -> str:
     c, a = results["config"], results["aggregate"]
     lines = [
-        f"# OpsPilot evaluation — {c['provider']} ({c['model']})",
+        f"# OpsPilot evaluation — {c.get('split', 'main')} split, {c['provider']} ({c['model']})",
         "",
         f"- ADK {c['google_adk']}, generator v{c['dataset_generator_version']}, "
         f"git {c['git_revision']}, {c['timestamp']}",

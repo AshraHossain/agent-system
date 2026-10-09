@@ -38,7 +38,7 @@ class CaseScore:
     top3: bool | None
     false_alarm: bool | None
     summary_correct: bool | None
-    affected_jaccard: float
+    affected_jaccard: float | None
     citations_total: int
     citations_valid: int
     unsupported_claims: int
@@ -98,15 +98,22 @@ def score_case(
     elif scored:
         summary_ok = "no network-level anomal" in summary
 
-    exp_svc, got_svc = set(labels["affected_services"]), set(report.affected_services)
-    jacc = 1.0 if not exp_svc and not got_svc else len(exp_svc & got_svc) / len(exp_svc | got_svc)
+    jacc = None
+    if labels.get("affected_services") is not None:
+        exp_svc, got_svc = set(labels["affected_services"]), set(report.affected_services)
+        jacc = (
+            1.0 if not exp_svc and not got_svc else len(exp_svc & got_svc) / len(exp_svc | got_svc)
+        )
 
     cited = _cited(report)
     valid = [c for c in cited if f"evidence:{c}" in state]
 
     rel = set(labels.get("relevant_runbooks", []))
     got_rb = {d.doc_id for d in report.relevant_runbooks}
-    precision = (len(got_rb & rel) / len(got_rb)) if got_rb else (None if rel else 1.0)
+    has_rb_labels = "relevant_runbooks" in labels
+    precision = None
+    if has_rb_labels:
+        precision = (len(got_rb & rel) / len(got_rb)) if got_rb else (None if rel else 1.0)
     recall = (len(got_rb & rel) / len(rel)) if rel else None
     irrelevant = len(
         got_rb & set(labels.get("irrelevant_runbooks", []) + labels.get("outdated_documents", []))
@@ -179,7 +186,7 @@ def score_case(
         top3=top3,
         false_alarm=false_alarm,
         summary_correct=summary_ok,
-        affected_jaccard=round(jacc, 3),
+        affected_jaccard=None if jacc is None else round(jacc, 3),
         citations_total=len(cited),
         citations_valid=len(valid),
         unsupported_claims=len(v.unsupported_claims) if v else 0,

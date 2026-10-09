@@ -4,11 +4,11 @@ import pytest
 
 from opspilot.core.dataset import open_dataset
 from opspilot.core.errors import InvalidArgument, NotFound
-from opspilot.datasets.spec import case_ids
+from opspilot.datasets.spec import all_case_ids
 
 
 def test_all_cases_built(data_dir):
-    assert sorted(p.stem for p in data_dir.glob("*.db")) == sorted(case_ids())
+    assert sorted(p.stem for p in data_dir.glob("*.db")) == sorted(all_case_ids())
 
 
 def test_dataset_connection_is_read_only(ds_factory):
