@@ -109,7 +109,7 @@ def telemetry_policy(t: Turn):
             "entity_id": a["entity_id"],
             "metric": a["metric"],
             "description": (
-                f"{a['verdict']}: {a['metric']} now ~{a['window_mean']:.3g} "
+                f"{a['verdict']}: {a['metric']} window mean {a['window_mean']:.3g} "
                 f"(peak {a['peak']:.3g}) vs baseline {a['baseline_mean']:.3g}"
                 + (f", first seen {a['first_seen']}" if a.get("first_seen") else "")
             ),

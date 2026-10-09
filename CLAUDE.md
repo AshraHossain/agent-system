@@ -1,66 +1,51 @@
-# CLAUDE.md — agent-system
+# CLAUDE.md — OpsPilot AI
 
 Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-A minimal FastAPI service exposing a single-node LangGraph agent: `GET
-/run?query=...` invokes a `planner` agent (OpenAI chat completion,
-`gpt-4o-mini`) that breaks the query into steps, and the resulting graph
-state is returned as JSON. This is an early-stage scaffold — read
-`PLANNING.md` before changing code; it documents the architecture, module
-responsibilities, and constraints in full.
-
-## Framework conventions
-
-This repo follows the SuperClaude Framework structure:
-
-- **`PLANNING.md`** — architecture reference: module map, request flow,
-  external dependencies, and known constraints. Read this before touching
-  `app/`.
-- **`TASK.md`** — prioritized backlog (High/Medium/Low). Check here before
-  starting work — several issues below are already tracked, not new
-  discoveries.
-- **`plugins/README.md`** — plugin extension point placeholder; no plugin
-  system exists yet, `tools/` ships standalone functions instead.
-- Dependency management is **UV-based** (`pyproject.toml` + `uv.lock`) —
-  use `uv sync` / `uv run`, not raw `pip install` + `python`.
-
-## Known issue — do not "fix" silently
-
-`app/agents.py` constructs `OpenAI()` at **module import time**, reading
-`OPENAI_API_KEY`. `.env` currently sets `OPENROUTER_API_KEY`, not
-`OPENAI_API_KEY` — as shipped, importing `app.main` raises
-`openai.OpenAIError: Missing credentials`. This is a confirmed, tracked bug
-(see `TASK.md` "High priority"). Do not silently patch around it in
-unrelated changes; if you're asked to fix it, the tracked fix requires
-`load_dotenv()` plus either pointing the client at OpenRouter's
-OpenAI-compatible endpoint or renaming the env var.
+OpsPilot AI: a read-only, multi-agent network-operations investigation system
+on **Google ADK 2.11.0** (pinned). Read [PLAN.md](PLAN.md) and
+[ARCHITECTURE.md](ARCHITECTURE.md) before changing code.
 
 ## Commands
 
 ```bash
-uv sync                                          # setup
-uv run uvicorn app.main:app --reload --port 8000 # run locally
-uv run pytest                                    # tests (tests/ is currently empty)
+uv sync                                   # setup (UV only; no raw pip)
+uv run pytest                             # offline suite (live tests excluded by default)
+uv run pytest -m live                     # needs GOOGLE_API_KEY or Vertex AI ADC
+uv run ruff check . && uv run ruff format --check .
+uv run opspilot demo --case C03           # end-to-end demo (mock model)
+uv run opspilot eval --guardrails         # evaluation -> var/eval/
+uv run adk web adk_apps                   # ADK dev UI
 ```
 
-## Layout
+## Layering rules (do not break)
 
-- `app/main.py` — FastAPI app, single route `GET /run`.
-- `app/graph.py` — `StateGraph(AgentState)`, one node (`"planner"`, entry
-  and finish point).
-- `app/agents.py` — `planner_agent(query)`, calls the OpenAI SDK.
-- `app/state.py` — `AgentState` TypedDict: `query`, `steps`, `result`
-  (`result` is currently never populated — see `TASK.md`).
-- `memory/store.py` — empty placeholder for a future persistence layer.
-- `tools/calculator_tool.py`, `tools/search_tool.py` — standalone
-  functions, not yet bound into the graph.
-- `tests/` — empty; no test framework configured yet.
+- `opspilot/contracts/` and `opspilot/core/` must not import `google.adk`.
+- Calculations, thresholds, graph rules, status and escalation live in `core/`
+  — never in prompts or LLM outputs.
+- Tools are Pydantic-validated, read-only, return `{"status": "ok"|"error", ...}`
+  and record evidence via `tool_context.state["evidence:<ID>"]`.
+- Tools never accept dataset IDs, paths, SQL, URLs or commands from the model.
+- Agents never see case labels (`cases.yaml` `labels`/`world` are read only by
+  the generator and `opspilot/eval`). `tests/test_evaluation.py` guards this.
+- New LLM agent ⇒ add an output contract, an instruction provider in
+  `adk/prompts.py`, a mock policy + `failed_output` in `adk/mock_policies.py`,
+  an allowlist entry in `adk/agents.py`, and contract tests.
+
+## ADK specifics verified for 2.11.0 (see tests/test_adk_contract.py)
+
+- `output_schema` + `tools` works via an injected `set_model_response` tool.
+- `include_contents="none"` still forwards the current user message — we
+  replace it in `before_model_callback` (`sanitize_user_content`).
+- `before_agent_callback` content is validated against `output_schema`, so
+  skips must return schema-valid JSON.
+- `ctx.end_invocation` does not stop a `SequentialAgent`; stages check
+  `intake_error` themselves.
 
 ## Conventions
 
-- Conventional commits: `feat|fix|test|refactor|docs|chore(scope): description`.
-- Single-node graph today: adding agent steps means adding nodes/edges to
-  the `StateGraph` in `app/graph.py`.
-- No persistence yet: state does not survive a single `/run` call.
+- Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.
+- Keep the mock deterministic; never assert live-model outputs exactly.
+- Do not claim production readiness.
