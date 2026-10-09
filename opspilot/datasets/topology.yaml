@@ -1,0 +1,103 @@
+# Synthetic data-centre topology (fictional). Edges point from a dependent to
+# what it requires. Edges sharing a `group` from the same source are redundant
+# alternatives (any one suffices); ungrouped edges are hard requirements.
+site: dc1
+components:
+  - {id: core-1, type: router, redundancy_group: core}
+  - {id: core-2, type: router, redundancy_group: core}
+  - {id: spine-1, type: switch, redundancy_group: spine}
+  - {id: spine-2, type: switch, redundancy_group: spine}
+  - {id: leaf-1, type: switch}
+  - {id: leaf-2, type: switch}
+  - {id: leaf-3, type: switch}
+  - {id: leaf-4, type: switch}
+  - {id: fw-1, type: firewall}
+  - {id: lb-1, type: load_balancer}
+  - {id: dns-1, type: dns_server, redundancy_group: dns}
+  - {id: dns-2, type: dns_server, redundancy_group: dns}
+  - {id: wan-1, type: wan_router}
+links:
+  - {id: lnk-l1-s1, a: "leaf-1:et49", b: "spine-1:et1", capacity_gbps: 40}
+  - {id: lnk-l1-s2, a: "leaf-1:et50", b: "spine-2:et1", capacity_gbps: 40}
+  - {id: lnk-l2-s1, a: "leaf-2:et49", b: "spine-1:et2", capacity_gbps: 40}
+  - {id: lnk-l2-s2, a: "leaf-2:et50", b: "spine-2:et2", capacity_gbps: 40}
+  - {id: lnk-l3-s1, a: "leaf-3:et49", b: "spine-1:et3", capacity_gbps: 40}
+  - {id: lnk-l3-s2, a: "leaf-3:et50", b: "spine-2:et3", capacity_gbps: 40}
+  - {id: lnk-l4-s1, a: "leaf-4:et49", b: "spine-1:et4", capacity_gbps: 40}
+  - {id: lnk-l4-s2, a: "leaf-4:et50", b: "spine-2:et4", capacity_gbps: 40}
+  - {id: lnk-s1-c1, a: "spine-1:et31", b: "core-1:et1", capacity_gbps: 100}
+  - {id: lnk-s2-c2, a: "spine-2:et31", b: "core-2:et1", capacity_gbps: 100}
+  - {id: lnk-c1-fw, a: "core-1:et10", b: "fw-1:eth1", capacity_gbps: 40}
+  - {id: lnk-c2-fw, a: "core-2:et10", b: "fw-1:eth2", capacity_gbps: 40}
+  - {id: lnk-fw-lb, a: "fw-1:eth3", b: "lb-1:eth1", capacity_gbps: 40}
+  - {id: lnk-c1-wan, a: "core-1:et20", b: "wan-1:ge0", capacity_gbps: 10}
+services:
+  - {id: checkout, tier: 1}
+  - {id: payments, tier: 1}
+  - {id: auth, tier: 1}
+  - {id: search, tier: 2}
+  - {id: catalog, tier: 2}
+  - {id: video-stream, tier: 2}
+  - {id: notifications, tier: 3}
+  - {id: analytics, tier: 3}
+edges:
+  # service hosting
+  - {src: "svc:checkout", dst: leaf-1}
+  - {src: "svc:video-stream", dst: leaf-1}
+  - {src: "svc:payments", dst: leaf-2}
+  - {src: "svc:notifications", dst: leaf-2}
+  - {src: "svc:auth", dst: leaf-3}
+  - {src: "svc:search", dst: leaf-3, group: host}
+  - {src: "svc:search", dst: leaf-4, group: host}
+  - {src: "svc:catalog", dst: leaf-4}
+  - {src: "svc:analytics", dst: leaf-4}
+  # service-to-service
+  - {src: "svc:checkout", dst: "svc:auth"}
+  - {src: "svc:checkout", dst: "svc:payments"}
+  # DNS (redundant pair)
+  - {src: "svc:checkout", dst: dns-1, group: dns}
+  - {src: "svc:checkout", dst: dns-2, group: dns}
+  - {src: "svc:payments", dst: dns-1, group: dns}
+  - {src: "svc:payments", dst: dns-2, group: dns}
+  - {src: "svc:auth", dst: dns-1, group: dns}
+  - {src: "svc:auth", dst: dns-2, group: dns}
+  # ingress path for customer-facing services
+  - {src: "svc:checkout", dst: lb-1}
+  - {src: "svc:video-stream", dst: lb-1}
+  - {src: "svc:search", dst: lb-1}
+  - {src: "svc:catalog", dst: lb-1}
+  - {src: lb-1, dst: lnk-fw-lb}
+  - {src: lnk-fw-lb, dst: fw-1}
+  - {src: fw-1, dst: lnk-c1-fw, group: core}
+  - {src: fw-1, dst: lnk-c2-fw, group: core}
+  - {src: lnk-c1-fw, dst: core-1}
+  - {src: lnk-c2-fw, dst: core-2}
+  # external WAN dependencies
+  - {src: "svc:payments", dst: wan-1}
+  - {src: "svc:notifications", dst: wan-1, confidence: inferred}
+  - {src: wan-1, dst: lnk-c1-wan}
+  - {src: lnk-c1-wan, dst: core-1}
+  # DNS servers attach to the core
+  - {src: dns-1, dst: core-1}
+  - {src: dns-2, dst: core-2}
+  # leaf uplinks (ECMP pair)
+  - {src: leaf-1, dst: lnk-l1-s1, group: uplink}
+  - {src: leaf-1, dst: lnk-l1-s2, group: uplink}
+  - {src: leaf-2, dst: lnk-l2-s1, group: uplink}
+  - {src: leaf-2, dst: lnk-l2-s2, group: uplink}
+  - {src: leaf-3, dst: lnk-l3-s1, group: uplink}
+  - {src: leaf-3, dst: lnk-l3-s2, group: uplink}
+  - {src: leaf-4, dst: lnk-l4-s1, group: uplink}
+  - {src: leaf-4, dst: lnk-l4-s2, group: uplink}
+  - {src: lnk-l1-s1, dst: spine-1}
+  - {src: lnk-l1-s2, dst: spine-2}
+  - {src: lnk-l2-s1, dst: spine-1}
+  - {src: lnk-l2-s2, dst: spine-2}
+  - {src: lnk-l3-s1, dst: spine-1}
+  - {src: lnk-l3-s2, dst: spine-2}
+  - {src: lnk-l4-s1, dst: spine-1}
+  - {src: lnk-l4-s2, dst: spine-2}
+  - {src: spine-1, dst: lnk-s1-c1}
+  - {src: spine-2, dst: lnk-s2-c2}
+  - {src: lnk-s1-c1, dst: core-1}
+  - {src: lnk-s2-c2, dst: core-2}
