@@ -30,9 +30,9 @@ Priority task list. See `PLANNING.md` for architecture context.
 ## Medium priority
 
 - [x] **Wire tools into the graph** — Fixed. `app/graph.py`'s new `executor`
-  node routes each parsed plan step to `calculator_tool` (arithmetic
-  detected via regex), `search_tool` (steps mentioning "search"/"look up"/
-  "find information"), or passes the step through unchanged otherwise.
+  node routes each parsed plan step to `calculator_tool`, `search_tool`, or
+  passes the step through unchanged. (Originally regex-based; replaced by
+  LLM routing, below.)
 - [x] **Implement `memory/store.py`** — Fixed. Append-only JSON-Lines store
   (`data/runs.jsonl`, gitignored): `save_run(state)` writes a run's final
   state and returns a `run_id`; `load_run(run_id)` / `list_runs()` read it
@@ -48,22 +48,31 @@ Priority task list. See `PLANNING.md` for architecture context.
   detects when a tool returns an error (e.g., division by zero) and populates
   `errors` with failed steps. A conditional edge routes to `synthesizer` if
   no errors occurred, or back to `planner` for re-planning if errors detected
-  (up to 3 retry attempts max to prevent infinite loops). Tests expanded to
+  (capped at 3 planner runs to prevent infinite loops). Tests expanded to
   verify error detection behavior (28/28 tests passing).
 - [x] **Replace regex-based tool routing with LLM-driven decisions** — Fixed.
   Added `route_step_to_tool` function in `app/agents.py` that calls the LLM
   to categorize steps as "calculator", "search", or "passthrough". Updated
   `execute_step` to use LLM routing instead of regex patterns. Made
   `calculator_tool` smarter to extract and handle nested arithmetic expressions
-  from prose. Tests updated to mock the routing function (29/29 tests passing).
+  from prose. Tests replace the router with a keyword-based fake via an
+  autouse fixture in `tests/conftest.py` (29/29 tests passing).
+- [ ] **Feed failures back into re-planning** — a re-plan currently re-sends
+  the same query, so the planner can't learn which steps failed and may
+  return the same plan. Pass the failed steps/errors into `planner_agent`.
+- [ ] **Wire `search_tool` to a real search API** — still a placeholder that
+  echoes its input.
+- [ ] **Handle word-phrased arithmetic** — steps like "Multiply 6 by 7" are
+  routed to the calculator but fail to parse, triggering a re-plan.
 
 ## Low priority / infra
 
 - [x] Git repository initialized (`git init`, local identity set).
 - [x] UV-based dependency management (`pyproject.toml` + `uv.lock`).
 - [x] Dockerfile for containerized runs.
-- [x] **CI workflow (lint/test on push)** — Fixed. GitHub Actions workflow created
-  (`.github/workflows/ci.yml`) that runs `pytest` on push and pull requests.
-  Uses `uv` for dependency management and Python 3.11. Runs on all commits to
-  main and feature branches, plus all PRs against main.
+- [x] **CI workflow (test on push)** — Fixed. GitHub Actions workflow
+  (`.github/workflows/ci.yml`) runs `uv sync` + `uv run pytest` on Python
+  3.11 for pushes and pull requests to `master`. No lint step yet.
+- [ ] `GET /runs/{run_id}` route (and/or reading past runs back into the
+  graph) so stored runs are actually used.
 - [ ] Structured logging / observability for the FastAPI service.

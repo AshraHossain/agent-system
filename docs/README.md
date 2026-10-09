@@ -6,4 +6,5 @@ Project documentation for `agent-system`.
 - Priority task list: see `../TASK.md`.
 
 This directory is reserved for deeper documentation (API reference, runbooks,
-eval reports) as the project grows beyond the current single-node scaffold.
+eval reports) as the project grows. Setup, API and configuration are in
+`../README.md`.
