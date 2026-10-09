@@ -36,6 +36,11 @@ def sanitize_user_content(callback_context: CallbackContext, llm_request: LlmReq
     return None
 
 
+def _completed(value) -> bool:
+    """An output counts as done unless missing or explicitly 'failed' (re-run on resume)."""
+    return value is not None and not (isinstance(value, dict) and value.get("status") == "failed")
+
+
 def skip_if_done(output_key: str):
     """before_agent_callback: skip a stage on resume or after an intake rejection.
 
@@ -48,7 +53,7 @@ def skip_if_done(output_key: str):
         state = callback_context.state
         if state.get("intake_error"):
             payload = failed_output(callback_context.agent_name, "request rejected at intake")
-        elif state.get(output_key) is not None:
+        elif _completed(state.get(output_key)):
             payload = state.get(output_key)
         else:
             return None

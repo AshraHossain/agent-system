@@ -30,6 +30,14 @@ from opspilot.core import report as report_core
 from opspilot.core.verification import evidence_from_state
 
 APP_NAME = "opspilot"
+# Stage outputs in pipeline order; specialists form one parallel group.
+STAGE_GROUPS = [
+    ["telemetry_finding", "topology_finding", "knowledge_finding"],
+    ["incident_analysis"],
+    ["report_draft"],
+    ["verification"],
+    ["review"],
+]
 USER_ID = "operator"
 
 
@@ -100,6 +108,30 @@ def _fallback_report(state: dict, aborted: str, metrics: RunMetrics | None) -> I
     )
 
 
+def resume_invalidation(state: dict) -> dict:
+    """State delta that clears failed/missing stages and everything downstream of them.
+
+    Completed upstream stages are kept (their agents skip on resume); evidence
+    records are content-addressed, so re-running a stage cannot duplicate them.
+    """
+    delta: dict = {"final_report": None}
+    stale = False
+    for group in STAGE_GROUPS:
+        if stale:
+            delta.update({k: None for k in group if state.get(k) is not None})
+            continue
+        bad = [
+            k
+            for k in group
+            if state.get(k) is None
+            or (isinstance(state[k], dict) and state[k].get("status") == "failed")
+        ]
+        if bad:
+            delta.update({k: None for k in bad if state.get(k) is not None})
+            stale = True
+    return delta
+
+
 async def run_investigation(
     request: str,
     dataset_id: str,
@@ -126,6 +158,15 @@ async def run_investigation(
             user_id=USER_ID,
             session_id=session_id,
             state={"investigation_id": inv, "dataset_id": dataset_id},
+        )
+    elif session.state.get("final_report") is not None or session.state.get("scope"):
+        await service.append_event(
+            session,
+            Event(
+                author="runner",
+                invocation_id=f"resume-{uuid.uuid4().hex[:8]}",
+                actions=EventActions(state_delta=resume_invalidation(dict(session.state))),
+            ),
         )
     inv = session.state["investigation_id"]
     register(inv, settings, session.state.get("dataset_id", dataset_id), faults)
