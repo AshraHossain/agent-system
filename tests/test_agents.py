@@ -81,7 +81,7 @@ async def test_knowledge_excludes_irrelevant_runbooks(settings):
     "case,expected", [("C02", "link_congestion"), ("C07", "telemetry_artifact")]
 )
 async def test_incident_analyst_contract(settings, case, expected):
-    state, _, plugin = await _run(settings, case, A.telemetry_analyst, A.incident_analyst)
+    state, _, _plugin = await _run(settings, case, A.telemetry_analyst, A.incident_analyst)
     f = IncidentAnalysis.model_validate(state["incident_analysis"])
     assert f.status == "completed" and f.hypotheses[0].category.value == expected
     for h in f.hypotheses:
