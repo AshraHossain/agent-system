@@ -1,6 +1,5 @@
 """Pytest configuration for agent-system tests."""
 
-import pytest
 import sys
 from pathlib import Path
 

@@ -1,0 +1,9 @@
+[
+  {
+    "description": "Planned optic swap on core interconnect",
+    "end": "2026-03-07T13:00:00+00:00",
+    "entity_id": "link-core-1-core-2",
+    "start": "2026-03-07T10:00:00+00:00",
+    "ticket": "CHG-4471"
+  }
+]

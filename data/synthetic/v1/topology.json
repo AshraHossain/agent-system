@@ -1,0 +1,369 @@
+{
+  "links": [
+    {
+      "a": "pe-1",
+      "b": "isp-transit",
+      "capacity_gbps": 10,
+      "link_id": "link-pe-1-isp-transit"
+    },
+    {
+      "a": "pe-1",
+      "b": "fw-1",
+      "capacity_gbps": 10,
+      "link_id": "link-pe-1-fw-1"
+    },
+    {
+      "a": "pe-1",
+      "b": "fw-2",
+      "capacity_gbps": 10,
+      "link_id": "link-pe-1-fw-2"
+    },
+    {
+      "a": "fw-1",
+      "b": "core-1",
+      "capacity_gbps": 10,
+      "link_id": "link-fw-1-core-1"
+    },
+    {
+      "a": "fw-2",
+      "b": "core-2",
+      "capacity_gbps": 10,
+      "link_id": "link-fw-2-core-2"
+    },
+    {
+      "a": "core-1",
+      "b": "core-2",
+      "capacity_gbps": 40,
+      "link_id": "link-core-1-core-2"
+    },
+    {
+      "a": "core-1",
+      "b": "dns-1",
+      "capacity_gbps": 1,
+      "link_id": "link-core-1-dns-1"
+    },
+    {
+      "a": "core-1",
+      "b": "agg-1",
+      "capacity_gbps": 40,
+      "link_id": "link-core-1-agg-1"
+    },
+    {
+      "a": "core-1",
+      "b": "agg-2",
+      "capacity_gbps": 40,
+      "link_id": "link-core-1-agg-2"
+    },
+    {
+      "a": "core-2",
+      "b": "agg-1",
+      "capacity_gbps": 40,
+      "link_id": "link-core-2-agg-1"
+    },
+    {
+      "a": "core-2",
+      "b": "agg-2",
+      "capacity_gbps": 40,
+      "link_id": "link-core-2-agg-2"
+    },
+    {
+      "a": "core-1",
+      "b": "agg-3",
+      "capacity_gbps": 40,
+      "link_id": "link-core-1-agg-3"
+    },
+    {
+      "a": "core-1",
+      "b": "agg-4",
+      "capacity_gbps": 40,
+      "link_id": "link-core-1-agg-4"
+    },
+    {
+      "a": "core-2",
+      "b": "agg-3",
+      "capacity_gbps": 40,
+      "link_id": "link-core-2-agg-3"
+    },
+    {
+      "a": "core-2",
+      "b": "agg-4",
+      "capacity_gbps": 40,
+      "link_id": "link-core-2-agg-4"
+    },
+    {
+      "a": "agg-1",
+      "b": "agg-2",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-1-agg-2"
+    },
+    {
+      "a": "agg-3",
+      "b": "agg-4",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-3-agg-4"
+    },
+    {
+      "a": "agg-1",
+      "b": "acc-1",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-1-acc-1"
+    },
+    {
+      "a": "agg-1",
+      "b": "acc-2",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-1-acc-2"
+    },
+    {
+      "a": "agg-2",
+      "b": "acc-3",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-2-acc-3"
+    },
+    {
+      "a": "agg-2",
+      "b": "acc-4",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-2-acc-4"
+    },
+    {
+      "a": "agg-3",
+      "b": "acc-5",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-3-acc-5"
+    },
+    {
+      "a": "agg-3",
+      "b": "acc-6",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-3-acc-6"
+    },
+    {
+      "a": "agg-4",
+      "b": "acc-7",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-4-acc-7"
+    },
+    {
+      "a": "agg-4",
+      "b": "acc-8",
+      "capacity_gbps": 10,
+      "link_id": "link-agg-4-acc-8"
+    }
+  ],
+  "nodes": [
+    {
+      "monitored": false,
+      "node_id": "isp-transit",
+      "role": "upstream_provider",
+      "tier": "external"
+    },
+    {
+      "monitored": true,
+      "node_id": "pe-1",
+      "role": "provider_edge_router",
+      "tier": "edge"
+    },
+    {
+      "monitored": true,
+      "node_id": "fw-1",
+      "role": "firewall",
+      "tier": "edge"
+    },
+    {
+      "monitored": true,
+      "node_id": "fw-2",
+      "role": "firewall",
+      "tier": "edge"
+    },
+    {
+      "monitored": true,
+      "node_id": "core-1",
+      "role": "core_router",
+      "tier": "core"
+    },
+    {
+      "monitored": true,
+      "node_id": "core-2",
+      "role": "core_router",
+      "tier": "core"
+    },
+    {
+      "monitored": true,
+      "node_id": "dns-1",
+      "role": "dns_server",
+      "tier": "core"
+    },
+    {
+      "monitored": true,
+      "node_id": "agg-1",
+      "role": "aggregation_switch",
+      "tier": "aggregation"
+    },
+    {
+      "monitored": true,
+      "node_id": "agg-2",
+      "role": "aggregation_switch",
+      "tier": "aggregation"
+    },
+    {
+      "monitored": true,
+      "node_id": "agg-3",
+      "role": "aggregation_switch",
+      "tier": "aggregation"
+    },
+    {
+      "monitored": true,
+      "node_id": "agg-4",
+      "role": "aggregation_switch",
+      "tier": "aggregation"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-1",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-2",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-3",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-4",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-5",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-6",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-7",
+      "role": "access_switch",
+      "tier": "access"
+    },
+    {
+      "monitored": true,
+      "node_id": "acc-8",
+      "role": "access_switch",
+      "tier": "access"
+    }
+  ],
+  "provenance": "synthetic",
+  "services": [
+    {
+      "criticality": "high",
+      "customers": 4200,
+      "depends_on": [
+        "acc-1",
+        "acc-2",
+        "acc-3",
+        "acc-4",
+        "agg-1",
+        "agg-2",
+        "core-1",
+        "core-2",
+        "fw-1",
+        "pe-1"
+      ],
+      "probe_path": [
+        "link-agg-1-acc-1",
+        "link-core-1-agg-1",
+        "link-fw-1-core-1",
+        "link-pe-1-fw-1"
+      ],
+      "service_id": "voip"
+    },
+    {
+      "criticality": "high",
+      "customers": 310,
+      "depends_on": [
+        "acc-3",
+        "acc-4",
+        "agg-2",
+        "core-1",
+        "fw-1",
+        "pe-1"
+      ],
+      "probe_path": [
+        "link-agg-2-acc-3",
+        "link-core-1-agg-2",
+        "link-fw-1-core-1",
+        "link-pe-1-fw-1"
+      ],
+      "service_id": "enterprise_vpn"
+    },
+    {
+      "criticality": "medium",
+      "customers": 9800,
+      "depends_on": [
+        "acc-5",
+        "acc-6",
+        "acc-7",
+        "acc-8",
+        "agg-3",
+        "agg-4",
+        "core-2",
+        "fw-2",
+        "pe-1"
+      ],
+      "probe_path": [
+        "link-agg-3-acc-6",
+        "link-core-2-agg-3",
+        "link-fw-2-core-2",
+        "link-pe-1-fw-2"
+      ],
+      "service_id": "video"
+    },
+    {
+      "criticality": "high",
+      "customers": 15500,
+      "depends_on": [
+        "acc-7",
+        "agg-4",
+        "core-2",
+        "fw-2",
+        "pe-1",
+        "isp-transit"
+      ],
+      "probe_path": [
+        "link-agg-4-acc-7",
+        "link-core-2-agg-4",
+        "link-fw-2-core-2",
+        "link-pe-1-fw-2",
+        "link-pe-1-isp-transit"
+      ],
+      "service_id": "internet"
+    },
+    {
+      "criticality": "high",
+      "customers": 15500,
+      "depends_on": [
+        "dns-1",
+        "core-1"
+      ],
+      "probe_path": [
+        "link-core-1-dns-1"
+      ],
+      "service_id": "dns"
+    }
+  ]
+}

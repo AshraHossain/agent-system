@@ -1,0 +1,44 @@
+[
+  {
+    "entity_id": "acc-7",
+    "event_type": "snmp",
+    "message": "SNMP poll retried once",
+    "severity": "info",
+    "timestamp": "2026-03-02T12:00:00+00:00"
+  },
+  {
+    "entity_id": "acc-8",
+    "event_type": "config_change",
+    "message": "Configuration committed by user netops-automation: SNMP location string update",
+    "severity": "notice",
+    "timestamp": "2026-03-02T12:50:00+00:00"
+  },
+  {
+    "entity_id": "link-pe-1-isp-transit",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-03T03:55:00+00:00"
+  },
+  {
+    "entity_id": "acc-2",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-03T08:30:00+00:00"
+  },
+  {
+    "entity_id": "link-core-2-agg-1",
+    "event_type": "auth",
+    "message": "Administrative login from jump host",
+    "severity": "info",
+    "timestamp": "2026-03-03T09:05:00+00:00"
+  },
+  {
+    "entity_id": "link-core-1-agg-3",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-03T13:25:00+00:00"
+  }
+]

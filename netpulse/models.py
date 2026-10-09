@@ -78,6 +78,8 @@ class Metric(StrEnum):
     ERROR_RATE = "error_rate"
     CPU_PCT = "cpu_pct"
     MEMORY_PCT = "memory_pct"
+    SERVICE_LATENCY_MS = "service_latency_ms"
+    SERVICE_SUCCESS_PCT = "service_success_pct"
 
 
 class EvidenceSource(StrEnum):

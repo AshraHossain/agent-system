@@ -1,0 +1,33 @@
+{
+  "dataset_id": "case-12",
+  "end": "2026-03-25T13:55:00+00:00",
+  "notice": "SIMULATED DATA. Every file in this directory was produced by synthgen for NetPulse AI development and evaluation. It does not describe, and was not observed from, any real network.",
+  "provenance": "synthetic",
+  "sample_minutes": 5,
+  "start": "2026-03-24T08:00:00+00:00",
+  "tables": {
+    "links": [
+      "timestamp",
+      "entity_id",
+      "utilization_pct",
+      "latency_ms",
+      "packet_loss_pct",
+      "error_rate",
+      "delay_s"
+    ],
+    "nodes": [
+      "timestamp",
+      "entity_id",
+      "cpu_pct",
+      "memory_pct",
+      "delay_s"
+    ],
+    "services": [
+      "timestamp",
+      "entity_id",
+      "service_latency_ms",
+      "service_success_pct",
+      "delay_s"
+    ]
+  }
+}

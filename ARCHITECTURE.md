@@ -85,20 +85,20 @@ netpulse/
   state.py             LangGraph state + reducers (implemented)
   config.py            Settings (env-driven): LLM provider, budgets, paths
   data/                Data-access layer: telemetry, topology, events, corpus (no label access)
-  synth/               Synthetic network + scenario generator (seeded)
   detection/           baseline, threshold, robust z-score, window comparison
   topology/            graph traversal, dependency + blast radius
   retrieval/           BM25 search over runbooks and past incidents, sanitization
   llm/                 provider protocol, Ollama adapter, FakeLLM, heuristic investigator, prompts
   graph/               nodes, routing functions, builder, node wrapper (timing/errors/budget)
-  policy/              action catalog + deterministic policy rules
+  policy/              catalog.json (static action allowlist) + deterministic policy rules
   persistence/         checkpointer factory, app DB (incidents, audit log)
   api/                 FastAPI app + routes + auth
   ui/                  Streamlit app (talks to API only)
   observability/       structured logging, trace records, optional LangSmith
+synthgen/              Seeded generator + scenarios (GROUND TRUTH; never imported by netpulse)
 eval/
   datasets/v1/cases.jsonl     investigator-visible inputs
-  datasets/v1/labels.jsonl    ground truth (scoring only)
+  labels/v1/labels.jsonl      ground truth (scoring only)
   run_eval.py, metrics.py, report.py
 data/synthetic/               generated, version-controlled with checksums
 ```

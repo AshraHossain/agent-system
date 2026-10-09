@@ -112,7 +112,7 @@ output. The verifier and the bounded retry exist for that reason, and the
 eval measures the effect.
 
 ### 2.6 Lexical retrieval (BM25) instead of a vector database — ADR-0006
-**Why.** The corpus is small (about 25 runbooks and 60 past incidents) and
+**Why.** The corpus is small (12 runbooks and 40 past incidents) and
 full of identifiers such as `core-1`, `BGP`, and `CRC errors`, which keyword
 search handles well. BM25 is deterministic and adds no embedding model.
 Being deterministic makes retrieval testable, including "irrelevant
@@ -152,33 +152,35 @@ rejected because the reviewer could be fooled by the same injection.
 - the past-incident corpus is generated from different seeds and scenarios
   than the eval cases, and is checked for overlap.
 
-## 3. Synthetic domain (Phase 3)
+## 3. Synthetic domain (Phase 3, implemented)
 
-- **Topology.** 18 nodes: 2 core routers, 4 aggregation switches,
-  8 access switches, 2 firewalls, 1 upstream provider edge, and 1 DNS
-  service host. There are about 26 links, a few with redundant paths. Five
-  services (`voip`, `internet`, `video`, `enterprise_vpn`, `dns`) are mapped
-  to the nodes they depend on.
-- **Telemetry.** 1-minute samples per node or link: utilization, packet
-  loss, latency, error rate, CPU, and memory. Diurnal pattern plus Gaussian
-  noise. Seeded generation with `numpy.random.Generator`.
-- **Scenarios.** Normal periods, traffic spike, congestion, packet loss,
-  link degradation (rising CRC errors), CPU/memory saturation, correlated
-  anomalies (an upstream fault seen downstream), missing and delayed
-  telemetry, noisy measurements, multiple simultaneous faults, and ambiguous
-  cases with insufficient evidence. There are also maintenance windows that
-  explain some anomalies, and a "fault outside the evidence" case (the true
-  cause is in an unmonitored device).
-- **Documents.** Runbooks, including two that deliberately conflict and one
-  that contains a prompt injection. Past incidents, including some that are
-  irrelevant but look similar.
-- **Format.** Telemetry is CSV (gzip) for diffability and no pyarrow
-  requirement. Topology, events, and documents are JSON/Markdown. A
-  `MANIFEST.json` stores the generator version, seed, and SHA-256 of every
-  file. A test regenerates the data and compares checksums.
-- **Labels.** Per case: true root-cause category and entity, true anomaly
-  intervals, the acceptable action catalog IDs, and whether escalation is
-  expected.
+Full description: [docs/synthetic_data.md](docs/synthetic_data.md).
+
+- **Topology.** 18 monitored nodes (1 provider edge, 2 firewalls, 2 core,
+  1 DNS host, 4 aggregation, 8 access), plus the unmonitored upstream
+  `isp-transit`. 25 links, and 5 services with dependency lists and probe
+  paths.
+- **Telemetry.** 5-minute samples over 30 hours per case (24 hours of
+  history, then 6 hours containing the incident). Tables: links, nodes, and
+  service probes. Each row carries `delay_s`, so late-arriving data can be
+  modelled.
+- **Ground truth without hand-labelling.** Each case is rendered twice from
+  the same noise draw, with and without its faults. A sample is anomalous
+  when the faulted value departs materially from the fault-free value. This
+  captures knock-on effects such as congestion raising latency and loss, and
+  it never labels pure noise.
+- **Scenarios.** 20 cases covering every category in the brief, plus all 8
+  required difficult cases.
+- **Documents.** 12 runbooks: RB-001 and RB-002 conflict, and RB-012 carries
+  an unmarked prompt injection. 40 past incidents dated 2025, including
+  look-alike `dns-1` records with different causes.
+- **Generator location.** `synthgen/` is a top-level package, deliberately
+  **outside** `netpulse/`, because it contains ground truth. Tests assert
+  that `netpulse` never imports it and never references the labels path.
+- **Format.** Gzip CSV (mtime zeroed) and sorted-key JSON. The output is
+  byte-for-byte deterministic. `MANIFEST.json` records the seed, the
+  generator version, and SHA-256 hashes. `python -m synthgen.generate
+  --check` verifies the committed data.
 
 Every dataset file, API response, report, and UI page carries the
 `SIMULATED DATA` notice.
@@ -213,7 +215,7 @@ approval before the next starts.**
 |---|---|---|
 | 1 ✅ | Repo and environment inspection | — |
 | 2 ✅ | This plan, ARCHITECTURE.md, workflow and state docs, ADRs 0001–0007, typed state model | State and reducer contract tests |
-| 3 | `netpulse/synth`, generated `data/synthetic/v1`, runbooks, past incidents, `eval/datasets/v1` cases and labels, manifest | Reproducibility checksum, schema validity, label/corpus separation |
+| 3 ✅ | `synthgen/` generator, generated `data/synthetic/v1`, runbooks, past incidents, `eval/datasets/v1` cases and labels, manifest | Reproducibility checksum, schema validity, label/corpus separation |
 | 4 | `netpulse/detection` (baseline, threshold, robust z, window comparison, gap handling) | Unit tests per algorithm, including noise, gaps, and flat series |
 | 5 | `netpulse/topology`, `netpulse/retrieval`, `netpulse/data`, tool I/O schemas | Traversal and blast radius, BM25 ranking, sanitization, error handling |
 | 6 | Minimal graph: intake → … → report with the heuristic investigator | Node unit tests, happy-path end-to-end |

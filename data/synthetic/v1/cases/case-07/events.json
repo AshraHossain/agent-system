@@ -1,0 +1,51 @@
+[
+  {
+    "entity_id": "pe-1",
+    "event_type": "config_change",
+    "message": "Configuration committed by user netops-automation: SNMP location string update",
+    "severity": "notice",
+    "timestamp": "2026-03-14T22:55:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-4-acc-8",
+    "event_type": "snmp",
+    "message": "SNMP poll retried once",
+    "severity": "info",
+    "timestamp": "2026-03-15T03:15:00+00:00"
+  },
+  {
+    "entity_id": "acc-3",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-15T03:20:00+00:00"
+  },
+  {
+    "entity_id": "link-core-1-agg-4",
+    "event_type": "bgp_notice",
+    "message": "BGP keepalive from peer delayed 1.8 s",
+    "severity": "info",
+    "timestamp": "2026-03-15T05:00:00+00:00"
+  },
+  {
+    "entity_id": "acc-3",
+    "event_type": "interface_flap",
+    "message": "Interface flapped and recovered within 2 s",
+    "severity": "info",
+    "timestamp": "2026-03-15T05:25:00+00:00"
+  },
+  {
+    "entity_id": "agg-3",
+    "event_type": "ntp",
+    "message": "NTP resynchronised",
+    "severity": "info",
+    "timestamp": "2026-03-15T06:50:00+00:00"
+  },
+  {
+    "entity_id": "link-agg-3-acc-6",
+    "event_type": "snmp",
+    "message": "SNMP poll retried once",
+    "severity": "info",
+    "timestamp": "2026-03-15T09:30:00+00:00"
+  }
+]

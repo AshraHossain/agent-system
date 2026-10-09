@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "note": "Static allowlist. The LLM can only select from these IDs. No entry is ever executed; remediation entries are proposals that require approval.",
+  "actions": [
+    {
+      "catalog_id": "inspect_interface_counters",
+      "kind": "diagnostic",
+      "description": "Read interface counters (errors, discards, utilization) on the target link endpoints.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "link",
+      "applies_to": [
+        "link_congestion",
+        "link_degradation",
+        "traffic_surge",
+        "telemetry_fault",
+        "maintenance_side_effect",
+        "unknown"
+      ]
+    },
+    {
+      "catalog_id": "check_optic_levels",
+      "kind": "diagnostic",
+      "description": "Read optical transmit/receive power levels for the target link.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "link",
+      "applies_to": [
+        "link_degradation"
+      ]
+    },
+    {
+      "catalog_id": "review_recent_config_changes",
+      "kind": "diagnostic",
+      "description": "List configuration commits on the target device in the last 24 hours.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "node",
+      "applies_to": [
+        "configuration_change",
+        "device_cpu_saturation"
+      ]
+    },
+    {
+      "catalog_id": "check_device_process_table",
+      "kind": "diagnostic",
+      "description": "Read the process and CPU table of the target device.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "node",
+      "applies_to": [
+        "device_cpu_saturation",
+        "configuration_change",
+        "device_memory_exhaustion"
+      ]
+    },
+    {
+      "catalog_id": "check_memory_allocation",
+      "kind": "diagnostic",
+      "description": "Read memory allocation by process on the target device.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "node",
+      "applies_to": [
+        "device_memory_exhaustion"
+      ]
+    },
+    {
+      "catalog_id": "check_firewall_session_table",
+      "kind": "diagnostic",
+      "description": "Read session-table occupancy on the target firewall.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "node",
+      "applies_to": [
+        "device_memory_exhaustion",
+        "device_cpu_saturation"
+      ]
+    },
+    {
+      "catalog_id": "verify_maintenance_schedule",
+      "kind": "diagnostic",
+      "description": "Check the change calendar for maintenance overlapping the incident window.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "any",
+      "applies_to": [
+        "maintenance_side_effect"
+      ]
+    },
+    {
+      "catalog_id": "check_collector_health",
+      "kind": "diagnostic",
+      "description": "Check the telemetry collector status and ingestion lag for the affected entities.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "any",
+      "applies_to": [
+        "telemetry_fault",
+        "unknown"
+      ]
+    },
+    {
+      "catalog_id": "run_path_trace",
+      "kind": "diagnostic",
+      "description": "Run a synthetic path trace for the affected service.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "service",
+      "applies_to": [
+        "upstream_dependency",
+        "unknown",
+        "link_degradation",
+        "device_cpu_saturation"
+      ]
+    },
+    {
+      "catalog_id": "check_upstream_provider_status",
+      "kind": "diagnostic",
+      "description": "Check the upstream provider status page and open-ticket list.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "any",
+      "applies_to": [
+        "upstream_dependency",
+        "link_congestion"
+      ]
+    },
+    {
+      "catalog_id": "compare_traffic_matrix",
+      "kind": "diagnostic",
+      "description": "Compare top talkers and traffic matrix against the same window yesterday.",
+      "reversible": true,
+      "required_role": "none",
+      "target_type": "link",
+      "applies_to": [
+        "traffic_surge",
+        "link_congestion"
+      ]
+    },
+    {
+      "catalog_id": "shift_traffic_to_redundant_path",
+      "kind": "remediation",
+      "description": "Raise routing cost on the target link so traffic moves to a redundant path.",
+      "reversible": true,
+      "required_role": "operator",
+      "target_type": "link",
+      "applies_to": [
+        "link_congestion",
+        "link_degradation",
+        "traffic_surge",
+        "device_memory_exhaustion"
+      ]
+    },
+    {
+      "catalog_id": "apply_rate_limit",
+      "kind": "remediation",
+      "description": "Apply a temporary rate limit to the dominant traffic class on the target link.",
+      "reversible": true,
+      "required_role": "operator",
+      "target_type": "link",
+      "applies_to": [
+        "traffic_surge",
+        "link_congestion"
+      ]
+    },
+    {
+      "catalog_id": "rollback_config_change",
+      "kind": "remediation",
+      "description": "Roll back the most recent configuration commit on the target device.",
+      "reversible": true,
+      "required_role": "senior_operator",
+      "target_type": "node",
+      "applies_to": [
+        "configuration_change"
+      ]
+    },
+    {
+      "catalog_id": "schedule_optic_replacement",
+      "kind": "remediation",
+      "description": "Raise a field ticket to replace the optic on the target link.",
+      "reversible": false,
+      "required_role": "operator",
+      "target_type": "link",
+      "applies_to": [
+        "link_degradation"
+      ]
+    },
+    {
+      "catalog_id": "restart_device",
+      "kind": "remediation",
+      "description": "Restart the target device.",
+      "reversible": false,
+      "required_role": "senior_operator",
+      "target_type": "node",
+      "applies_to": []
+    },
+    {
+      "catalog_id": "open_provider_ticket",
+      "kind": "remediation",
+      "description": "Open a ticket with the upstream provider.",
+      "reversible": true,
+      "required_role": "operator",
+      "target_type": "any",
+      "applies_to": [
+        "upstream_dependency"
+      ]
+    }
+  ]
+}

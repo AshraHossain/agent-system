@@ -1,6 +1,5 @@
 """Tests for agent-system FastAPI app (framework verification, no API keys required)."""
 
-import pytest
 from pathlib import Path
 
 
