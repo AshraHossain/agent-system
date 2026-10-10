@@ -24,10 +24,12 @@ jobs:
         run: |
           uv run ruff check .
           uv run ruff format --check .
-      - name: Tests (offline, no model credentials)
+      - name: Tests (offline, no model credentials) + coverage
         env:
           OPSPILOT_MODEL_PROVIDER: mock
-        run: uv run pytest -q
+        run: >
+          uv run pytest -q
+          --cov=opspilot --cov-report=term-missing --cov-report=html --cov-report=xml
       - name: Offline evaluation + guardrails
         run: uv run opspilot eval --guardrails --out var/eval
       - uses: actions/upload-artifact@v4
@@ -35,6 +37,16 @@ jobs:
         with:
           name: eval-results
           path: var/eval/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-html
+          path: var/htmlcov/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
 
   docker:
     runs-on: ubuntu-latest
