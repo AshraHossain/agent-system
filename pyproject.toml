@@ -20,6 +20,7 @@ opspilot = "opspilot.cli:main"
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "ruff>=0.6",
 ]
 
@@ -40,6 +41,27 @@ markers = [
 ]
 addopts = "-m 'not live' -p no:cacheprovider"
 filterwarnings = ["ignore::UserWarning", "ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["opspilot"]
+branch = true
+
+[tool.coverage.report]
+# Offline suite only (live Gemini paths are excluded by design, see docs/model_configuration.md).
+# 80 is a floor well below the current ~95% actual, so it catches real regressions without being
+# brittle; opspilot/cli.py and opspilot/eval/harness.py are the known-thin spots (manual/live paths).
+fail_under = 80
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.\\s*$",
+]
+
+[tool.coverage.html]
+directory = "var/htmlcov"
 
 [tool.ruff]
 line-length = 100
