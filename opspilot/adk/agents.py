@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
+from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
 
 from opspilot.adk import prompts
 from opspilot.adk import tools as t
 from opspilot.adk.callbacks import model_error_fallback, sanitize_user_content, skip_if_done
-from opspilot.adk.deterministic import EvidenceVerifierAgent, FinalizerAgent, IntakeAgent
+from opspilot.adk.deterministic import (
+    EvidenceVerifierAgent,
+    FinalizerAgent,
+    IntakeAgent,
+    ReinvestigationGateAgent,
+)
 from opspilot.adk.models import generate_config, make_model
 from opspilot.adk.runtime import RunFaults
 from opspilot.config import Settings
@@ -37,6 +42,14 @@ PIPELINE_ORDER = [
     "evidence_verifier",
     "review_verifier",
     "finalizer",
+]
+# With max_investigation_rounds=2, these stages run inside `investigation_rounds`.
+LOOP_ORDER = [
+    "specialists",
+    "incident_analyst",
+    "report_drafter",
+    "evidence_verifier",
+    "reinvestigation_gate",
 ]
 
 
@@ -152,18 +165,36 @@ def build_root_agent(
             knowledge_researcher(settings, faults),
         ],
     )
+    investigation = [
+        specialists,
+        incident_analyst(settings, faults),
+        report_drafter(settings, faults),
+        EvidenceVerifierAgent(
+            name="evidence_verifier",
+            description="Deterministic evidence and policy verification.",
+        ),
+    ]
+    rounds = settings.limits.max_investigation_rounds
+    if rounds > 1:
+        gate = ReinvestigationGateAgent(
+            name="reinvestigation_gate",
+            description="Retries failed stages in another round, or ends the loop.",
+            max_rounds=rounds,
+        )
+        investigation = [
+            LoopAgent(
+                name="investigation_rounds",
+                description=f"Up to {rounds} rounds; later rounds re-run only failed stages.",
+                sub_agents=[*investigation, gate],
+                max_iterations=rounds,
+            )
+        ]
     return SequentialAgent(
         name="opspilot_investigation",
         description="Read-only network degradation investigation pipeline.",
         sub_agents=[
             IntakeAgent(name="intake", description="Validates the request and fixes the scope."),
-            specialists,
-            incident_analyst(settings, faults),
-            report_drafter(settings, faults),
-            EvidenceVerifierAgent(
-                name="evidence_verifier",
-                description="Deterministic evidence and policy verification.",
-            ),
+            *investigation,
             review_verifier(settings, faults),
             FinalizerAgent(
                 name="finalizer", description="Builds the validated report; rule-based status."

@@ -72,6 +72,8 @@ class RunMetrics(BaseModel):
     budget_events: list[str] = Field(default_factory=list)
     model_time_ms: dict[str, float] = Field(default_factory=dict)
     tool_time_ms: dict[str, float] = Field(default_factory=dict)
+    investigation_rounds: int = 1
+    retried_stages: list[str] = Field(default_factory=list)
 
 
 class InvestigationReport(BaseModel):
