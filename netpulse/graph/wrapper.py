@@ -18,6 +18,7 @@ running in its worker thread until it returns. Its result is discarded.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +30,9 @@ from langgraph.errors import GraphBubbleUp
 from netpulse.errors import ToolError, ToolInputError, ToolTimeoutError
 from netpulse.graph.deps import Deps
 from netpulse.models import Budget, ErrorKind, ErrorRecord, NodeTrace
+from netpulse.observability import get_logger
+
+log = get_logger("graph")
 
 NodeFn = Callable[[dict, Deps], dict[str, Any]]
 
@@ -101,6 +105,17 @@ def instrument(
             detail=update.pop("_trace_detail", ""),
         )
         update["node_trace"] = [trace.model_dump(mode="json")]
+        log.log(
+            logging.WARNING if outcome == "error" else logging.INFO,
+            "node finished",
+            extra={
+                "incident_id": state.get("incident_id"),
+                "node": name,
+                "outcome": outcome,
+                "duration_ms": trace.duration_ms,
+                "error_kinds": [e["kind"] for e in update.get("errors") or []],
+            },
+        )
         return update
 
     node.__name__ = name

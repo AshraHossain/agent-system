@@ -40,5 +40,9 @@ def test_required_docs_exist():
         "docs/graph_workflow.md",
         "docs/state_model.md",
         "docs/adr/README.md",
+        "docs/api_ui.md",
+        "docs/evaluation.md",
+        "docs/security.md",
+        "docs/operations.md",
     ):
         assert (ROOT / doc).is_file(), doc

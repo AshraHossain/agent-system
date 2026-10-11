@@ -11,7 +11,8 @@ Endpoints:
 | `GET /incidents/{id}/evidence` | viewer | the evidence registry and telemetry/topology references |
 | `POST /incidents/{id}/approval` | operator | approve / reject / request more investigation |
 | `POST /incidents/{id}/resume` | operator | continue a run that stalled outside an approval pause |
-| `GET /eval/reports` | viewer | list evaluation reports (Phase 10; empty until then) |
+| `GET /eval/reports` | viewer | list evaluation reports (written by `python -m eval.report`) |
+| `GET /eval/reports/{name}` | viewer | one report as JSON |
 
 Every mutating endpoint (`POST`) enqueues work on a background job registry
 and returns 202 immediately; the caller polls `GET /incidents/{id}`. A
@@ -21,6 +22,7 @@ body — they come only from the authenticated bearer token (`auth.py`).
 
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -202,8 +204,16 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
 
     @app.get("/eval/reports")
     def eval_reports(_: Principal = Depends(principal_viewer)) -> dict:
-        reports = sorted(p.name for p in EVAL_REPORTS_DIR.glob("*.json")) if EVAL_REPORTS_DIR.is_dir() else []
-        return {"reports": reports, "note": "Evaluation report generation arrives in Phase 10."}
+        names = sorted(p.name for p in EVAL_REPORTS_DIR.glob("*.json")) if EVAL_REPORTS_DIR.is_dir() else []
+        return {"reports": names, "notice": SYNTHETIC_DATA_NOTICE}
+
+    @app.get("/eval/reports/{name}")
+    def eval_report(name: str, _: Principal = Depends(principal_viewer)) -> dict:
+        # Only names that exist in the reports directory are served; the name is never joined into a path unchecked.
+        known = {p.name: p for p in EVAL_REPORTS_DIR.glob("*.json")} if EVAL_REPORTS_DIR.is_dir() else {}
+        if name not in known:
+            raise HTTPException(status_code=404, detail="no such evaluation report")
+        return json.loads(known[name].read_text())
 
     @app.on_event("shutdown")
     def _shutdown() -> None:

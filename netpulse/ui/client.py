@@ -68,6 +68,9 @@ class ApiClient:
     def eval_reports(self) -> dict[str, Any]:
         return self._request("GET", "/eval/reports")
 
+    def eval_report(self, name: str) -> dict[str, Any]:
+        return self._request("GET", f"/eval/reports/{name}")
+
 
 def is_settled(status: dict[str, Any]) -> bool:
     """True when polling can stop: no job in flight and the run is paused or finished."""

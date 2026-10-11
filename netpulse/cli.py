@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from netpulse.errors import ToolError
 from netpulse.graph.deps import Deps
 from netpulse.models import SYNTHETIC_DATA_NOTICE, ReviewInput
+from netpulse.observability import apply_tracing_policy, configure_logging
 from netpulse.persistence.store import PersistentStore
 from netpulse.service import InvestigationService, RunStatus
 
@@ -102,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     rv.add_argument("--json", action="store_true")
 
     args = parser.parse_args(argv)
+    configure_logging(level=os.environ.get("NETPULSE_LOG_LEVEL", "WARNING"))
+    apply_tracing_policy()
     store = PersistentStore(args.db)
     try:
         return _run(parser, args, store)

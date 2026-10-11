@@ -22,6 +22,7 @@ from pathlib import Path
 from netpulse.api.app import create_app
 from netpulse.api.auth import TokenStore
 from netpulse.graph.deps import Deps
+from netpulse.observability import apply_tracing_policy, configure_logging
 from netpulse.persistence.store import PersistentStore
 from netpulse.service import InvestigationService
 
@@ -29,6 +30,8 @@ DEFAULT_DB = Path(".netpulse/netpulse.db")
 
 
 def build_app():
+    configure_logging()
+    apply_tracing_policy()
     spec = os.environ.get("NETPULSE_API_TOKENS")
     if not spec:
         raise RuntimeError(

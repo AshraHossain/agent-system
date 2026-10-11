@@ -1,0 +1,53 @@
+# NetPulse AI: SYNTHETIC DATA ONLY. Nothing here connects to or modifies a real network.
+#
+#   cp .env.example .env            # then set real tokens
+#   docker compose up --build       # api on :8000, ui on :8501 (heuristic provider)
+#   docker compose --profile ollama up --build   # adds a local Ollama server
+#   docker compose exec ollama ollama pull qwen2.5:7b-instruct
+
+x-netpulse: &netpulse
+  build: .
+  environment: &netpulse-env
+    NETPULSE_API_TOKENS: ${NETPULSE_API_TOKENS:?set NETPULSE_API_TOKENS in .env (token:role:name,...)}
+    NETPULSE_LLM_PROVIDER: ${NETPULSE_LLM_PROVIDER:-heuristic}
+    NETPULSE_OLLAMA_URL: ${NETPULSE_OLLAMA_URL:-http://ollama:11434}
+    NETPULSE_LOG_LEVEL: ${NETPULSE_LOG_LEVEL:-INFO}
+    NETPULSE_LANGSMITH_TRACING: ${NETPULSE_LANGSMITH_TRACING:-false}
+
+services:
+  api:
+    <<: *netpulse
+    command: ["uvicorn", "netpulse.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - netpulse-db:/app/.netpulse
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  ui:
+    build: .
+    command: ["streamlit", "run", "netpulse/ui/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    environment:
+      NETPULSE_API_URL: http://api:8000
+      NETPULSE_UI_TOKEN: ${NETPULSE_UI_TOKEN:-}
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+
+volumes:
+  netpulse-db:
+  ollama-models:

@@ -15,6 +15,10 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Literal
 
+from netpulse.observability import get_logger
+
+log = get_logger("api")
+
 JobState = Literal["queued", "running", "done", "error"]
 
 
@@ -29,7 +33,15 @@ class JobRegistry:
             existing = self._jobs.get(incident_id)
             if existing is not None and not existing.done():
                 raise JobInFlightError(f"an operation is already in progress for incident {incident_id!r}")
-            self._jobs[incident_id] = self._pool.submit(fn)
+            self._jobs[incident_id] = self._pool.submit(self._logged, incident_id, fn)
+
+    @staticmethod
+    def _logged(incident_id: str, fn: Callable[[], None]) -> None:
+        try:
+            fn()
+        except Exception as exc:
+            log.error("background job failed", extra={"incident_id": incident_id, "error_type": type(exc).__name__})
+            raise
 
     def state(self, incident_id: str) -> JobState | None:
         future = self._jobs.get(incident_id)

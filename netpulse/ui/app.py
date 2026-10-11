@@ -193,6 +193,39 @@ def _review_tab(client: ApiClient, incident_id: str) -> None:
                 st.success("Decision submitted. Check the Status tab.")
 
 
+def _eval_tab(client: ApiClient) -> None:
+    listing = _call(client.eval_reports)
+    if not listing:
+        return
+    if not listing["reports"]:
+        st.info("No evaluation reports found. Generate one with: uv run python -m eval.report")
+        return
+    name = st.selectbox("Report", listing["reports"])
+    report = _call(client.eval_report, name)
+    if not report:
+        return
+    st.caption(report["notice"])
+    st.subheader("Investigation metrics")
+    st.dataframe(
+        [{"metric": k, "value": v} for k, v in report["investigation"].items()],
+        use_container_width=True,
+    )
+    st.subheader("Per case")
+    st.dataframe(
+        [
+            {
+                "case": c["case_id"],
+                "scenario": c["scenario"],
+                "outcome": c["outcome"],
+                "top-1": c["top1"],
+                "notes": "; ".join(c["failures"]),
+            }
+            for c in report["cases"]
+        ],
+        use_container_width=True,
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="NetPulse AI", layout="wide")
     st.title("NetPulse AI")
@@ -202,9 +235,13 @@ def main() -> None:
     if client is None:
         st.stop()
     incident_id = st.session_state.get("incident_id", "").strip()
-    submit, status, results, evidence, review = st.tabs(["Submit", "Status", "Results", "Evidence", "Review"])
+    submit, status, results, evidence, review, evaluation = st.tabs(
+        ["Submit", "Status", "Results", "Evidence", "Review", "Evaluation"]
+    )
     with submit:
         _submit_tab(client)
+    with evaluation:
+        _eval_tab(client)
     for tab, render in (
         (status, _status_tab),
         (results, _results_tab),

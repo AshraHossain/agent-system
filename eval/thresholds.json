@@ -1,0 +1,19 @@
+{
+  "min": {
+    "outcome_accuracy": 0.95,
+    "root_cause_top1": 0.9,
+    "root_cause_top3": 0.9,
+    "citation_validity": 0.95,
+    "recommendation_recall": 0.9,
+    "recommendation_jaccard": 0.7,
+    "escalation_precision": 0.95,
+    "escalation_recall": 0.95,
+    "tool_call_success_rate": 0.99,
+    "detection_precision": 0.9,
+    "detection_recall": 0.95
+  },
+  "max": {
+    "unsupported_claim_rate": 0.05,
+    "executed_actions": 0
+  }
+}

@@ -17,13 +17,11 @@ workflow:
 - **Uncertain cases** come out as inconclusive reports that list what
   evidence is missing.
 
-**Status: Phase 8 of 12.** The end-to-end workflow runs with deterministic
-verification, bounded retries and investigation rounds, deadlines, timeouts,
-an escalation path, a deterministic policy engine, and **durable human
-approval**. A run pauses with `interrupt()`, is checkpointed to SQLite, and
-can be resumed from another process. The default LLM is local Ollama, which falls back
-*visibly* to a rule-based investigator if Ollama is unreachable. The API, the UI and evaluation reports come in later phases. See
-[PLAN.md](PLAN.md).
+**Status: Phase 10 of 12.** The workflow runs end to end with deterministic verification, bounded retries, a policy
+engine and **durable human approval** (a run pauses with `interrupt()`, is checkpointed to SQLite, and resumes from
+another process). A token-authenticated **FastAPI** service and a **Streamlit** UI sit on top, and an **evaluation
+harness** scores detection and investigation against held-out labels, with a CI regression gate. The default LLM is local
+Ollama, which falls back *visibly* to a rule-based investigator if Ollama is unreachable. See [PLAN.md](PLAN.md).
 
 ## Quick start
 
@@ -34,6 +32,15 @@ uv run netpulse --provider heuristic investigate --case case-04   # no Ollama ne
 uv run netpulse status --incident case-04
 uv run netpulse review --incident case-04 --reviewer alice --role operator --choice approve
 uv run pytest
+uv run python -m eval.report --provider heuristic --check   # evaluation report + regression gate
+```
+
+API and UI (set tokens first; see [docs/operations.md](docs/operations.md)), or `docker compose up --build`:
+
+```bash
+export NETPULSE_API_TOKENS='op:operator:olga,senior:senior_operator:sam,view:viewer:vic'
+uv run uvicorn netpulse.api.main:app --port 8000
+NETPULSE_UI_TOKEN=op uv run streamlit run netpulse/ui/app.py
 ```
 
 ## Documentation
@@ -49,6 +56,10 @@ uv run pytest
 | [docs/tools.md](docs/tools.md) | Data, topology, and retrieval tool contracts |
 | [docs/llm.md](docs/llm.md) | LLM providers, prompts, parsing, verification, budgets |
 | [docs/human_approval.md](docs/human_approval.md) | Policy, interrupt/resume, checkpoints, authorization, audit |
+| [docs/api_ui.md](docs/api_ui.md) | API endpoints, roles, UI rules |
+| [docs/evaluation.md](docs/evaluation.md) | Metrics, regression gate, heuristic baseline, known weaknesses |
+| [docs/security.md](docs/security.md) | Threats, controls, and the tests that enforce them |
+| [docs/operations.md](docs/operations.md) | Configuration, Docker Compose, logging, CI |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
 ## License

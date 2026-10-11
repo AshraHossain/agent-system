@@ -23,6 +23,7 @@ Development runs in approved phases. Read these before changing code:
 - `ARCHITECTURE.md`;
 - `docs/graph_workflow.md` and `docs/state_model.md`;
 - `docs/tools.md` and `docs/detection.md`;
+- `docs/evaluation.md`, `docs/security.md` and `docs/operations.md`;
 - `docs/adr/`.
 
 ## Hard rules
@@ -39,6 +40,8 @@ Development runs in approved phases. Read these before changing code:
   cause.
 - **Keep state JSON-only.** Each field has one owning node
   (docs/state_model.md), and evidence is immutable once recorded.
+- **Logs carry identifiers, never incident text or credentials.** Use `netpulse.observability`;
+  tracing to LangSmith stays opt-in.
 - **Every output is labelled synthetic.** Never imply the system observed a
   real network.
 - **Code before `interrupt()` in `human_approval` must be side-effect free.**
@@ -55,6 +58,9 @@ uv run netpulse --provider heuristic investigate --case case-04   # demo; may pa
 uv run netpulse review --incident case-04 --reviewer alice --role operator --choice approve
 uv run python -m synthgen.generate --check            # verify committed synthetic data
 uv run python -m eval.detection_benchmark             # detector precision/recall
+uv run python -m eval.report --provider heuristic --check   # full evaluation + regression gate
+uv run uvicorn netpulse.api.main:app --port 8000      # needs NETPULSE_API_TOKENS
+uv run streamlit run netpulse/ui/app.py               # talks to the API only
 NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ollama server
 ```
 
@@ -71,8 +77,10 @@ NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ol
 | `netpulse/graph/` | Nodes, verification, ranking, routing, wrapper (trace, timeouts, errors), builder, runner |
 | `netpulse/policy/` | `catalog.json` (static action allowlist) and `engine.py` (deterministic policy rules) |
 | `netpulse/persistence/`, `netpulse/service.py` | SQLite checkpoints and append-only audit; start/status/decide/resume service |
+| `netpulse/api/`, `netpulse/ui/` | FastAPI service (token roles, background jobs); Streamlit UI that only calls the API |
+| `netpulse/observability.py` | JSON logging, secret redaction, tracing policy |
 | `synthgen/` | Dataset generator. **Ground truth, never imported by netpulse.** |
-| `eval/` | Benchmarks and scorers. They may read labels; netpulse may not. |
+| `eval/` | Benchmarks, scorers, `report.py`, `thresholds.json`. They may read labels; netpulse may not. |
 | `data/synthetic/v1/`, `eval/datasets/v1/`, `eval/labels/v1/` | Committed, checksummed data |
 
 ## Conventions

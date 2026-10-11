@@ -87,3 +87,17 @@ def test_ui_never_imports_service_or_ground_truth():
             else:
                 continue
             assert not any(mod == b or mod.startswith(b + ".") for b in banned), (path, mod)
+
+
+def test_eval_reports_listing_and_fetch(api, tmp_path, monkeypatch):
+    import netpulse.api.app as api_app
+
+    (tmp_path / "v1-heuristic-abc1234.json").write_text('{"notice": "SYNTHETIC", "investigation": {}, "cases": []}')
+    monkeypatch.setattr(api_app, "EVAL_REPORTS_DIR", tmp_path)
+    client = _client(api, "view")
+    assert client.eval_reports()["reports"] == ["v1-heuristic-abc1234.json"]
+    assert client.eval_report("v1-heuristic-abc1234.json")["notice"] == "SYNTHETIC"
+    for bad in ("../../pyproject.toml", "nope.json", "..%2F..%2Fetc%2Fpasswd"):
+        with pytest.raises(ApiError) as exc:
+            client.eval_report(bad)
+        assert exc.value.status_code == 404

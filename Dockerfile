@@ -12,10 +12,14 @@ COPY eval/datasets/ ./eval/datasets/
 RUN uv sync --frozen --no-dev
 
 # Ground-truth labels (eval/labels) and the generator (synthgen) are deliberately NOT copied.
-ENV PATH="/app/.venv/bin:$PATH"
-RUN useradd --create-home netpulse
+ENV PATH="/app/.venv/bin:$PATH" \
+    NETPULSE_DB=/app/.netpulse/netpulse.db
+RUN useradd --create-home netpulse && mkdir -p /app/.netpulse && chown netpulse /app/.netpulse
 USER netpulse
 
-# Phase 6: CLI demo. The API service entry point arrives in Phase 9.
-ENTRYPOINT ["netpulse"]
-CMD ["investigate", "--case", "case-04"]
+# One image, three entry points (see docker-compose.yml):
+#   api: uvicorn netpulse.api.main:app --host 0.0.0.0 --port 8000
+#   ui:  streamlit run netpulse/ui/app.py --server.address 0.0.0.0
+#   cli: netpulse investigate --case case-04
+EXPOSE 8000 8501
+CMD ["netpulse", "--provider", "heuristic", "investigate", "--case", "case-04"]
