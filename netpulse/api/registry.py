@@ -15,6 +15,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Literal
 
+from netpulse.errors import ToolError
 from netpulse.observability import get_logger
 
 log = get_logger("api")
@@ -22,8 +23,14 @@ log = get_logger("api")
 JobState = Literal["queued", "running", "done", "error"]
 
 
+MAX_PENDING = 100  # queued + running jobs; beyond this new work is refused with 429
+MAX_FINISHED = 500  # finished job records kept for status; the checkpoint is the source of truth after that
+
+
 class JobRegistry:
-    def __init__(self, max_workers: int = 4) -> None:
+    def __init__(self, max_workers: int = 4, max_pending: int = MAX_PENDING, max_finished: int = MAX_FINISHED) -> None:
+        self._max_pending = max_pending
+        self._max_finished = max_finished
         self._pool = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="netpulse-api")
         self._jobs: dict[str, Future] = {}
         self._lock = threading.Lock()
@@ -33,7 +40,16 @@ class JobRegistry:
             existing = self._jobs.get(incident_id)
             if existing is not None and not existing.done():
                 raise JobInFlightError(f"an operation is already in progress for incident {incident_id!r}")
+            if sum(not f.done() for f in self._jobs.values()) >= self._max_pending:
+                raise JobQueueFullError("too many investigations are queued; retry later")
+            self._jobs.pop(incident_id, None)  # re-insert so insertion order tracks recency
             self._jobs[incident_id] = self._pool.submit(self._logged, incident_id, fn)
+            self._prune()
+
+    def _prune(self) -> None:
+        finished = [k for k, f in self._jobs.items() if f.done()]
+        for key in finished[: max(0, len(finished) - self._max_finished)]:
+            del self._jobs[key]
 
     @staticmethod
     def _logged(incident_id: str, fn: Callable[[], None]) -> None:
@@ -56,7 +72,10 @@ class JobRegistry:
         if future is None or not future.done():
             return None
         exc = future.exception()
-        return f"{type(exc).__name__}: {exc}" if exc else None
+        if exc is None:
+            return None
+        # Expected tool errors are written for operators; anything else may carry internals (SQL, paths).
+        return f"{type(exc).__name__}: {exc}" if isinstance(exc, ToolError) else "internal error; see the server log"
 
     def shutdown(self) -> None:
         self._pool.shutdown(wait=False, cancel_futures=False)
@@ -64,3 +83,7 @@ class JobRegistry:
 
 class JobInFlightError(Exception):
     """Raised when a second operation is requested for an incident that already has one running."""
+
+
+class JobQueueFullError(Exception):
+    """Raised when too many jobs are already queued or running."""

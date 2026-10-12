@@ -17,7 +17,7 @@ workflow:
 - **Uncertain cases** come out as inconclusive reports that list what
   evidence is missing.
 
-**Status: Phase 11 of 12.** The workflow runs end to end with deterministic verification, bounded retries, a policy
+**Status: Phase 12 of 12 (all phases done).** The workflow runs end to end with deterministic verification, bounded retries, a policy
 engine and **durable human approval** (a run pauses with `interrupt()`, is checkpointed to SQLite, and resumes from
 another process). A token-authenticated **FastAPI** service and a **Streamlit** UI sit on top, and an **evaluation
 harness** scores detection and investigation against held-out labels, with a CI regression gate. The default LLM is local
@@ -38,9 +38,9 @@ uv run python -m eval.report --provider heuristic --check   # evaluation report 
 API and UI (set tokens first; see [docs/operations.md](docs/operations.md)), or `docker compose up --build`:
 
 ```bash
-export NETPULSE_API_TOKENS='op:operator:olga,senior:senior_operator:sam,view:viewer:vic'
+export NETPULSE_API_TOKENS='dev-operator-token-0001:operator:olga,dev-senior-token-00002:senior_operator:sam,dev-viewer-token-00003:viewer:vic'
 uv run uvicorn netpulse.api.main:app --port 8000
-NETPULSE_UI_TOKEN=op uv run streamlit run netpulse/ui/app.py
+NETPULSE_UI_TOKEN=dev-operator-token-0001 uv run streamlit run netpulse/ui/app.py
 ```
 
 ## Documentation
@@ -60,6 +60,7 @@ NETPULSE_UI_TOKEN=op uv run streamlit run netpulse/ui/app.py
 | [docs/evaluation.md](docs/evaluation.md) | Metrics, regression gate, heuristic baseline, known weaknesses |
 | [docs/security.md](docs/security.md) | Threats, controls, and the tests that enforce them |
 | [docs/operations.md](docs/operations.md) | Configuration, Docker Compose, logging, CI |
+| [docs/production_readiness.md](docs/production_readiness.md) | What is fixed, what blocks real use, what is unverified |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
 ## License

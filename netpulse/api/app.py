@@ -30,7 +30,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 from netpulse.api.auth import API_ROLE_RANK, Principal, TokenStore, principal_dependency, require_role
-from netpulse.api.registry import JobInFlightError, JobRegistry
+from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry
 from netpulse.api.schemas import (
     ApprovalRequest,
     EvidenceResponse,
@@ -47,11 +47,14 @@ from netpulse.service import AuthorizationError, InvestigationService
 EVAL_REPORTS_DIR = Path(__file__).resolve().parents[2] / "eval" / "reports"
 
 
-def create_app(service: InvestigationService, tokens: TokenStore, max_workers: int = 4) -> FastAPI:
+def create_app(service: InvestigationService, tokens: TokenStore, max_workers: int = 4, docs: bool = True) -> FastAPI:
     app = FastAPI(
         title="NetPulse AI API",
         description="Evidence-backed, read-only network anomaly investigation. " + SYNTHETIC_DATA_NOTICE,
         version="0.1.0",
+        docs_url="/docs" if docs else None,
+        redoc_url="/redoc" if docs else None,
+        openapi_url="/openapi.json" if docs else None,
     )
     registry = JobRegistry(max_workers=max_workers)
     app.state.service = service
@@ -73,6 +76,7 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
         (DataCorruptError, 500),
         (AuthorizationError, 403),
         (JobInFlightError, 409),
+        (JobQueueFullError, 429),
     ]:
 
         def _handler(_request, exc, _code=status_code):
@@ -91,6 +95,12 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
     @app.post("/incidents", response_model=JobAccepted, status_code=202)
     def create_incident(body: IncidentCreateRequest, principal: Principal = Depends(principal_operator)):
         incident_id = body.incident_id or f"inc-{uuid.uuid4().hex[:12]}"
+        try:
+            service.status(incident_id)
+        except DataNotFoundError:
+            pass
+        else:  # never let a resubmission overwrite another run's job record
+            raise HTTPException(status_code=409, detail=f"incident {incident_id!r} already exists")
         submission = body.submission.model_dump(mode="json")
         submitted_at = service.deps.clock().isoformat()
 

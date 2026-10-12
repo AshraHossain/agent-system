@@ -112,3 +112,109 @@ def test_tracing_is_off_unless_explicitly_enabled(monkeypatch):
     assert apply_tracing_policy() is True
     monkeypatch.delenv("LANGSMITH_API_KEY")
     assert langsmith_enabled() is False
+
+
+# ------------------------------------------------------------------ Phase 12 hardening
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from netpulse.api.app import create_app  # noqa: E402
+from netpulse.api.auth import Principal, TokenStore  # noqa: E402
+from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry  # noqa: E402
+from netpulse.persistence.store import PersistentStore  # noqa: E402
+from netpulse.service import InvestigationService  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "spec",
+    ["a:viewer:x,a:senior_operator:y", ":operator:x", "tok:operator:", "tok:operator:bad name", "tok:root:x", "tok:op"],
+)
+def test_token_spec_rejects_ambiguous_or_malformed_entries(spec):
+    with pytest.raises(ValueError):
+        TokenStore.parse(spec)
+
+
+def test_principal_repr_never_contains_the_token():
+    secret = "s3cret-token-value"  # noqa: S105
+    assert secret not in repr(Principal(token=secret, name="n", role="viewer"))
+
+
+def test_weak_and_placeholder_tokens_are_identified():
+    store = TokenStore.parse("short:operator:a,change-me-operator-token:operator:b,0123456789abcdef-ok:viewer:c")
+    assert store.weak_tokens() == ["a", "b"]
+
+
+def test_api_refuses_to_start_with_weak_tokens(monkeypatch, tmp_path):
+    from netpulse.api.main import build_app
+
+    monkeypatch.setenv("NETPULSE_API_TOKENS", "change-me-operator-token:operator:olga")
+    monkeypatch.setenv("NETPULSE_DB", str(tmp_path / "x.db"))
+    with pytest.raises(RuntimeError, match="weak or placeholder"):
+        build_app()
+
+
+def _client(tmp_path, docs=True):
+    service = InvestigationService(shared_deps(), PersistentStore(tmp_path / "t.db"))
+    tokens = TokenStore.parse("op-token-0123456789:operator:olga,op2-token-012345678:operator:omar")
+    return TestClient(create_app(service, tokens, max_workers=1, docs=docs))
+
+
+def test_docs_and_openapi_can_be_switched_off(tmp_path):
+    with _client(tmp_path, docs=False) as c:
+        assert c.get("/docs").status_code == 404 and c.get("/openapi.json").status_code == 404
+        assert c.get("/health").status_code == 200
+
+
+def test_resubmitting_an_existing_incident_is_refused_without_touching_its_job_record(tmp_path):
+    """An operator could re-POST another run's incident_id and overwrite its job state with a bogus error."""
+    import time
+
+    case = CASES["case-02"]
+    with _client(tmp_path) as c:
+        auth = {"Authorization": "Bearer op-token-0123456789"}
+        other = {"Authorization": "Bearer op2-token-012345678"}
+        assert c.post("/incidents", headers=auth, json={"submission": case["submission"], "incident_id": "inc-a"})
+        for _ in range(200):
+            status = c.get("/incidents/inc-a", headers=auth).json()
+            if status["job_state"] == "done":
+                break
+            time.sleep(0.2)
+        again = c.post("/incidents", headers=other, json={"submission": case["submission"], "incident_id": "inc-a"})
+        assert again.status_code == 409
+        after = c.get("/incidents/inc-a", headers=auth).json()
+        assert after["job_state"] == "done" and after["error"] is None
+
+
+def test_registry_bounds_queue_and_history_and_hides_internal_errors():
+    import threading
+
+    gate = threading.Event()
+    reg = JobRegistry(max_workers=1, max_pending=2, max_finished=3)
+    reg.submit("a", gate.wait)
+    reg.submit("b", gate.wait)
+    with pytest.raises(JobQueueFullError):
+        reg.submit("c", gate.wait)
+    with pytest.raises(JobInFlightError):
+        reg.submit("a", gate.wait)
+    gate.set()
+    reg._pool.shutdown(wait=True)
+    reg = JobRegistry(max_workers=1, max_pending=50, max_finished=3)
+    for i in range(10):
+        reg.submit(f"j{i}", lambda: None)
+        reg._pool.submit(lambda: None).result()
+    assert len(reg._jobs) <= 4
+
+    def boom() -> None:
+        raise RuntimeError("sqlite3 path /var/lib/secret.db is locked")
+
+    reg.submit("bad", boom)
+    reg._pool.submit(lambda: None).result()
+    assert reg.state("bad") == "error" and "secret.db" not in (reg.error("bad") or "")
+
+
+def test_database_file_is_owner_only(tmp_path):
+    import stat
+
+    PersistentStore(tmp_path / "perm.db")
+    assert stat.S_IMODE((tmp_path / "perm.db").stat().st_mode) == 0o600

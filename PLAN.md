@@ -224,7 +224,7 @@ approval before the next starts.**
 | 9 ✅ | FastAPI endpoints (bearer-token roles, background jobs, polling), Streamlit UI that talks only to the API — see docs/api_ui.md | API round trip, UI client against the real app, UI import guard, UI render smoke |
 | 10 ✅ | Eval harness and report, structured logging, optional LangSmith, Dockerfile + Compose (api, ui, optional ollama), GitHub Actions (ruff, pytest, eval regression), docs/evaluation, security, human_approval, operations, README, CLAUDE.md | Eval regression, security (injection, label leakage, secret redaction) — see docs/evaluation.md, docs/security.md, docs/operations.md |
 | 11 ✅ | Full end-to-end runs, failure investigation — findings in docs/evaluation.md | Fixes plus regression tests (`tests/test_e2e_regressions.py`) |
-| 12 | Skeptical production-readiness review | — |
+| 12 ✅ | Skeptical production-readiness review — docs/production_readiness.md | Hardening tests in `tests/test_security.py` |
 
 ## 6. Repository migration (done in Phase 6)
 

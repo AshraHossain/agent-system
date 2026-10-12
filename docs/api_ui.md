@@ -5,12 +5,13 @@ All data shown is synthetic. The system is read-only; actions are only proposed.
 ## Run
 
 ```bash
-export NETPULSE_API_TOKENS='op-token:operator:olga,senior-token:senior_operator:sam,view-token:viewer:vic'
+export NETPULSE_API_TOKENS='dev-operator-token-0001:operator:olga,dev-senior-token-00002:senior_operator:sam,dev-viewer-token-00003:viewer:vic'
 uv run uvicorn netpulse.api.main:app --port 8000
-NETPULSE_UI_TOKEN=op-token uv run streamlit run netpulse/ui/app.py
+NETPULSE_UI_TOKEN=dev-operator-token-0001 uv run streamlit run netpulse/ui/app.py
 ```
 
-The API refuses to start without `NETPULSE_API_TOKENS`.
+The API refuses to start without `NETPULSE_API_TOKENS`, and refuses tokens shorter than 16 characters, tokens starting
+with `change-me`, duplicate tokens, and empty tokens or names. The `dev-*` tokens above are for local use only.
 
 ## Rules
 
@@ -20,4 +21,5 @@ The API refuses to start without `NETPULSE_API_TOKENS`.
 - Mutating endpoints return 202 and run on a background job; clients poll `GET /incidents/{id}`.
   One operation per incident at a time (409 otherwise).
 - Untrusted text (descriptions, evidence summaries) is rendered with `st.text`, not markdown.
-- `GET /eval/reports` is empty until Phase 10.
+- Submitting an `incident_id` that already exists returns 409. More than 100 queued or running jobs returns 429.
+- `/docs` and `/openapi.json` are off unless `NETPULSE_API_DOCS=true`.

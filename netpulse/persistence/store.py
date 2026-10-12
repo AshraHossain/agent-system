@@ -9,6 +9,7 @@ sensitive.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +39,7 @@ class PersistentStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
+        os.chmod(self.path, 0o600)  # incident data and reviewer identities; WAL/SHM files inherit this mode
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(AUDIT_SCHEMA)
         self.checkpointer = SqliteSaver(self.conn)

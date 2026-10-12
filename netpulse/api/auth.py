@@ -20,7 +20,8 @@ trusted. The principal always comes from the token.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from typing import Literal
 
 from fastapi import HTTPException, Security
@@ -28,11 +29,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 API_ROLE_RANK = {"viewer": 0, "operator": 1, "senior_operator": 2}
 ApiRole = Literal["viewer", "operator", "senior_operator"]
+_NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
+MIN_TOKEN_LENGTH = 16
 
 
 @dataclass(frozen=True)
 class Principal:
-    token: str
+    token: str = field(repr=False)
     name: str
     role: ApiRole
 
@@ -52,8 +55,20 @@ class TokenStore:
             if len(parts) != 3 or parts[1] not in API_ROLE_RANK:
                 raise ValueError(f"invalid token spec {entry!r}; expected token:role:name")
             token, role, name = parts
+            if not token or not _NAME.fullmatch(name):
+                raise ValueError(
+                    f"invalid token spec for {name!r}: empty token or a name outside [A-Za-z0-9._-]{{1,64}}"
+                )
+            if token in tokens:
+                raise ValueError(f"duplicate token for {name!r}: a token must identify exactly one principal")
             tokens[token] = Principal(token=token, name=name, role=role)  # type: ignore[arg-type]
         return cls(tokens)
+
+    def weak_tokens(self) -> list[str]:
+        """Names of principals whose token is too short or still a documented placeholder."""
+        return sorted(
+            p.name for t, p in self._tokens.items() if len(t) < MIN_TOKEN_LENGTH or t.lower().startswith("change-me")
+        )
 
     def resolve(self, token: str) -> Principal | None:
         return self._tokens.get(token)

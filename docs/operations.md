@@ -4,15 +4,15 @@
 
 ```bash
 uv sync
-export NETPULSE_API_TOKENS='op:operator:olga,senior:senior_operator:sam,view:viewer:vic'
+export NETPULSE_API_TOKENS='dev-operator-token-0001:operator:olga,dev-senior-token-00002:senior_operator:sam,dev-viewer-token-00003:viewer:vic'
 uv run uvicorn netpulse.api.main:app --port 8000
-NETPULSE_UI_TOKEN=op uv run streamlit run netpulse/ui/app.py
+NETPULSE_UI_TOKEN=dev-operator-token-0001 uv run streamlit run netpulse/ui/app.py
 ```
 
 ## Docker Compose
 
 ```bash
-cp .env.example .env              # set real tokens
+cp .env.example .env              # generate real tokens (see the file)
 docker compose up --build         # api :8000, ui :8501, heuristic provider
 docker compose --profile ollama up --build    # also starts Ollama; set NETPULSE_LLM_PROVIDER=ollama
 ```
@@ -28,6 +28,7 @@ validates.
 |---|---|---|
 | `NETPULSE_API_TOKENS` | none (required) | `token:role:name,...` |
 | `NETPULSE_API_WORKERS` | 4 | background job threads |
+| `NETPULSE_API_DOCS` | `false` | serve unauthenticated `/docs` and `/openapi.json` |
 | `NETPULSE_DB` | `.netpulse/netpulse.db` | SQLite checkpoints + audit |
 | `NETPULSE_LLM_PROVIDER` | `ollama` | `ollama` or `heuristic` |
 | `NETPULSE_LOG_LEVEL` | `INFO` (CLI: `WARNING`) | log level |

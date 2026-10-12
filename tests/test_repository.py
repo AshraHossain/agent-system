@@ -44,5 +44,6 @@ def test_required_docs_exist():
         "docs/evaluation.md",
         "docs/security.md",
         "docs/operations.md",
+        "docs/production_readiness.md",
     ):
         assert (ROOT / doc).is_file(), doc
