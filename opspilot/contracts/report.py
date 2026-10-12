@@ -67,6 +67,8 @@ class RunMetrics(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    estimated_cost: float | None = None
+    cost_currency: str | None = None
     tool_calls_by_agent: dict[str, list[str]] = Field(default_factory=dict)
     llm_calls_by_agent: dict[str, int] = Field(default_factory=dict)
     budget_events: list[str] = Field(default_factory=list)

@@ -21,8 +21,9 @@ from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.genai import types
 
 from opspilot.adk.agents import TOOL_ALLOWLIST, build_root_agent
+from opspilot.adk.deterministic import metrics_from_counters
 from opspilot.adk.plugins import BudgetPlugin
-from opspilot.adk.rounds import ROUNDS_KEY, STAGE_GROUPS, rounds_info
+from opspilot.adk.rounds import ROUNDS_KEY, STAGE_GROUPS
 from opspilot.adk.runtime import RunFaults, register, resolve, unregister
 from opspilot.config import Settings
 from opspilot.contracts.report import InvestigationReport, RunMetrics
@@ -206,17 +207,7 @@ async def run_investigation(
         c = plugin.runs.get(next(iter(plugin.runs), ""), None)
         metrics = None
         if c is not None:
-            rounds = rounds_info(state)
-            metrics = RunMetrics(
-                provider=settings.provider,
-                model=settings.model,
-                llm_calls=c.llm_calls,
-                tool_calls=c.tool_calls,
-                duration_s=round(c.elapsed(), 3),
-                budget_events=c.events,
-                investigation_rounds=rounds["round"],
-                retried_stages=list(rounds["retried"]),
-            )
+            metrics = metrics_from_counters(c, settings, state)
         report = _fallback_report(state, reason, metrics)
         with contextlib.suppress(Exception):
             await service.append_event(

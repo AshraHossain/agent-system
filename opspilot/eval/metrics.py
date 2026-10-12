@@ -56,6 +56,8 @@ class CaseScore:
     llm_calls: int
     tool_calls: int
     total_tokens: int | None
+    estimated_cost: float | None
+    cost_currency: str | None
     latency_s: float
     notes: list[str] = field(default_factory=list)
 
@@ -206,6 +208,8 @@ def score_case(
         llm_calls=m.llm_calls if m else 0,
         tool_calls=m.tool_calls if m else 0,
         total_tokens=m.total_tokens if m else None,
+        estimated_cost=m.estimated_cost if m else None,
+        cost_currency=m.cost_currency if m else None,
         latency_s=latency_s,
         notes=notes,
     )
@@ -220,6 +224,8 @@ def aggregate(scores: list[CaseScore]) -> dict:
     cited = sum(s.citations_total for s in scores)
     claims = sum(s.claims_checked for s in scores)
     tokens = [s.total_tokens for s in scores if s.total_tokens is not None]
+    costs = [s.estimated_cost for s in scores if s.estimated_cost is not None]
+    currencies = {s.cost_currency for s in scores if s.cost_currency}
     lat = sorted(s.latency_s for s in scores)
     return {
         "cases": len(scores),
@@ -252,6 +258,9 @@ def aggregate(scores: list[CaseScore]) -> dict:
         "llm_calls_total": sum(s.llm_calls for s in scores),
         "tool_calls_total": sum(s.tool_calls for s in scores),
         "tokens_total": sum(tokens) if tokens else None,
+        "cost_total": round(sum(costs), 6) if costs else None,
+        "cost_currency": currencies.pop() if len(currencies) == 1 else None,
+        "cost_per_case_mean": round(sum(costs) / len(costs), 6) if costs else None,
         "latency_s_mean": _mean(lat),
         "latency_s_p95": lat[min(len(lat) - 1, int(0.95 * len(lat)))] if lat else None,
     }

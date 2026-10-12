@@ -7,6 +7,7 @@ session, and are skipped on resume when their output already exists.
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from collections.abc import AsyncGenerator
@@ -17,7 +18,7 @@ from google.adk.events import Event, EventActions
 from google.genai import types
 from pydantic import ValidationError
 
-from opspilot.adk.plugins import BudgetPlugin
+from opspilot.adk.plugins import BudgetPlugin, RunCounters
 from opspilot.adk.rounds import plan_next_round, rounds_info
 from opspilot.adk.runtime import register, resolve
 from opspilot.config import Settings
@@ -34,10 +35,13 @@ from opspilot.contracts.report import RunMetrics
 from opspilot.contracts.request import InvestigationScope
 from opspilot.contracts.verification import VerificationResult
 from opspilot.core import report as report_core
+from opspilot.core.cost import estimate_cost
 from opspilot.core.errors import ToolError
 from opspilot.core.security import validate_request
 from opspilot.core.telemetry import compare_to_baseline, default_windows
 from opspilot.core.verification import evidence_from_state, verify
+
+log = logging.getLogger("opspilot.run")
 
 SYMPTOMS = (
     "latency",
@@ -252,23 +256,29 @@ class ReinvestigationGateAgent(BaseAgent):
         )
 
 
-def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None:
-    plugin = next(
-        (p for p in getattr(ctx.plugin_manager, "plugins", []) if isinstance(p, BudgetPlugin)), None
+def metrics_from_counters(c: RunCounters, settings: Settings, state: dict) -> RunMetrics:
+    rounds = rounds_info(state)
+    model = settings.model if settings.provider == "gemini" else "scripted-mock"
+    cost = estimate_cost(
+        settings.prices,
+        model,
+        prompt_tokens=c.prompt_tokens,
+        completion_tokens=c.completion_tokens,
+        total_tokens=c.total_tokens,
     )
-    if plugin is None:
-        return None
-    c = plugin.counters(ctx.invocation_id)
-    rounds = rounds_info(ctx.session.state)
+    if settings.prices and c.total_tokens is not None and cost is None:
+        log.warning("no price for model %s in OPSPILOT_PRICE_TABLE; cost not estimated", model)
     return RunMetrics(
         provider=settings.provider,
-        model=settings.model if settings.provider == "gemini" else "scripted-mock",
+        model=model,
         llm_calls=c.llm_calls,
         tool_calls=c.tool_calls,
         duration_s=round(c.elapsed(), 3),
         prompt_tokens=c.prompt_tokens,
         completion_tokens=c.completion_tokens,
         total_tokens=c.total_tokens,
+        estimated_cost=cost.total if cost else None,
+        cost_currency=cost.currency if cost else None,
         tool_calls_by_agent={k: list(v) for k, v in c.tools_by_agent.items()},
         llm_calls_by_agent=dict(c.llm_by_agent),
         budget_events=list(c.events),
@@ -277,6 +287,15 @@ def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None
         investigation_rounds=rounds["round"],
         retried_stages=list(rounds["retried"]),
     )
+
+
+def run_metrics(ctx: InvocationContext, settings: Settings) -> RunMetrics | None:
+    plugin = next(
+        (p for p in getattr(ctx.plugin_manager, "plugins", []) if isinstance(p, BudgetPlugin)), None
+    )
+    if plugin is None:
+        return None
+    return metrics_from_counters(plugin.counters(ctx.invocation_id), settings, ctx.session.state)
 
 
 class FinalizerAgent(BaseAgent):
