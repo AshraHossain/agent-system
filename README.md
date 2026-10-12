@@ -17,7 +17,7 @@ workflow:
 - **Uncertain cases** come out as inconclusive reports that list what
   evidence is missing.
 
-**Status: Phase 10 of 12.** The workflow runs end to end with deterministic verification, bounded retries, a policy
+**Status: Phase 11 of 12.** The workflow runs end to end with deterministic verification, bounded retries, a policy
 engine and **durable human approval** (a run pauses with `interrupt()`, is checkpointed to SQLite, and resumes from
 another process). A token-authenticated **FastAPI** service and a **Streamlit** UI sit on top, and an **evaluation
 harness** scores detection and investigation against held-out labels, with a CI regression gate. The default LLM is local

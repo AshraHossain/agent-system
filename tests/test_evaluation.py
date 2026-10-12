@@ -72,7 +72,7 @@ def test_report_files_are_named_by_dataset_provider_sha(tmp_path):
     assert json.loads(json_path.read_text())["provider"] == "heuristic"
 
 
-@pytest.mark.parametrize("scenario_case", ["case-05", "case-10"])
+@pytest.mark.parametrize("scenario_case", ["case-05", "case-17"])
 def test_known_hard_cases_are_reported_honestly(scenario_case):
     row = next(r for r in heuristic_run()["cases"] if r["case_id"] == scenario_case)
     assert row["failures"], "hard cases are expected to show up in the failure analysis"

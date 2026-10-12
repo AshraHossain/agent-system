@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -41,8 +40,10 @@ class PersistentStore:
         self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(AUDIT_SCHEMA)
-        self._lock = threading.Lock()
         self.checkpointer = SqliteSaver(self.conn)
+        # One connection is shared by the saver and the audit log. Both must take the saver's lock, otherwise one
+        # thread's commit lands inside another's transaction ("cannot commit - no transaction is active").
+        self._lock = self.checkpointer.lock
 
     def audit(self, incident_id: str, event: str, actor: str, payload: dict[str, Any], at: datetime) -> None:
         with self._lock, self.conn:
@@ -52,10 +53,11 @@ class PersistentStore:
             )
 
     def audit_log(self, incident_id: str) -> list[dict[str, Any]]:
-        rows = self.conn.execute(
-            "SELECT seq, event, actor, payload, at FROM netpulse_audit WHERE incident_id = ? ORDER BY seq",
-            (incident_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT seq, event, actor, payload, at FROM netpulse_audit WHERE incident_id = ? ORDER BY seq",
+                (incident_id,),
+            ).fetchall()
         return [{"seq": r[0], "event": r[1], "actor": r[2], "payload": json.loads(r[3]), "at": r[4]} for r in rows]
 
     def close(self) -> None:

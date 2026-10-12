@@ -97,7 +97,6 @@ class HeuristicGenerator:
         by_entity: dict[str, list[Anomaly]] = defaultdict(list)
         for a in confirmed:
             by_entity[a.entity_id].append(a)
-        localization_ids = [e.evidence_id for e in ctx.evidence if e.source == EvidenceSource.TOPOLOGY]
         candidates = {c.entity_id: c for c in loc.candidates}
 
         drafts: dict[tuple[str, str], dict] = {}
@@ -114,7 +113,10 @@ class HeuristicGenerator:
             for symptom in [root, *explained]:
                 draft["support"].update(a.evidence_id for a in by_entity.get(symptom, []))
             draft["support"].update(e.evidence_id for e in context_evidence)
-            draft["support"].update(localization_ids)
+            # Only topology evidence that touches this hypothesis's own entities; another cause's blast radius is
+            # not support for this one.
+            own_scope = self.graph.expand([root, entity, *explained])
+            draft["support"].update(e.evidence_id for e in self._evidence_on(ctx, EvidenceSource.TOPOLOGY, own_scope))
 
         hypotheses = [self._finish(ctx, n, d, loc) for n, d in enumerate(drafts.values(), start=1)]
         return GenerationResult(hypotheses=hypotheses[:MAX_HYPOTHESES], provider=self.provider)

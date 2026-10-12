@@ -128,6 +128,14 @@ def _coverage_gaps(state: dict) -> list[str]:
     return list((state.get("telemetry_window") or {}).get("gap_entities", []))
 
 
+def _stale_telemetry_entities(state: dict) -> list[str]:
+    """Entities with a visibility gap, or with data-quality evidence recorded for them (late or missing samples)."""
+    registry = state.get("evidence_references") or {}
+    dq_ids = (state.get("telemetry_window") or {}).get("data_quality_evidence_ids", [])
+    flagged = {e for i in dq_ids for e in (registry.get(i) or {}).get("entity_ids", [])}
+    return sorted(flagged | set(_coverage_gaps(state)))
+
+
 def _window(state: dict, deps: Deps) -> tuple[datetime, datetime]:
     """Investigation window; widened by one hour per extra investigation round (Phase 7 routing)."""
     sub = _submission(state)
@@ -212,7 +220,7 @@ def retrieve_telemetry(state: dict, deps: Deps) -> dict:
     evidence, dq_ids = {}, []
     for cov in window.coverage:
         if cov.coverage_ratio < COVERAGE_WARN:
-            item = coverage_evidence(cov, alloc.next("dq"))
+            item = alloc.intern("dq", lambda eid, cov=cov: coverage_evidence(cov, eid))
             evidence[item.evidence_id] = _dump(item)
             dq_ids.append(item.evidence_id)
     ref = window.ref.model_copy(update={"data_quality_evidence_ids": dq_ids})
@@ -257,7 +265,7 @@ def detect_anomalies(state: dict, deps: Deps) -> dict:
                     )
                 )
             for found in report.anomalies:
-                item = to_evidence(found, alloc.next("anom"), deps.detection)
+                item = alloc.intern("anom", lambda eid, found=found: to_evidence(found, eid, deps.detection))
                 evidence[item.evidence_id] = _dump(item)
                 anomalies.append(
                     _dump(
@@ -317,13 +325,13 @@ def analyze_topology(state: dict, deps: Deps) -> dict:
         }
 
     loc = graph.localize(LocalizationQuery(symptomatic_entities=symptoms, max_candidates=20))
-    ids = [add(localization_evidence(loc, alloc.next("topo")))]
+    ids = [add(alloc.intern("topo", lambda eid: localization_evidence(loc, eid)))]
     roots = loc.minimal_cover or [c.entity_id for c in loc.candidates[:3]]
     blast = []
     for root in roots:
         br = graph.blast_radius(root)
         blast.append(_dump(br))
-        ids.append(add(blast_radius_evidence(br, alloc.next("topo"))))
+        ids.append(add(alloc.intern("topo", lambda eid, br=br: blast_radius_evidence(br, eid))))
 
     start, end = (
         datetime.fromisoformat(state["telemetry_window"]["start"]),
@@ -335,9 +343,9 @@ def analyze_topology(state: dict, deps: Deps) -> dict:
         deps.store.events(dataset, start - timedelta(hours=2), end, _as_of(state)), scope, start, end
     ):
         if event.severity != "info":
-            ids.append(add(event_evidence(event, alloc.next("evt"))))
+            ids.append(add(alloc.intern("evt", lambda eid, event=event: event_evidence(event, eid))))
     for window in graph.overlapping_maintenance(deps.store.maintenance(dataset), scope, start, end):
-        ids.append(add(maintenance_evidence(window, alloc.next("mnt"))))
+        ids.append(add(alloc.intern("mnt", lambda eid, window=window: maintenance_evidence(window, eid))))
 
     services = {s for s in symptoms if graph.topology.kind(s) == "service"}
     nodes = set()
@@ -386,7 +394,7 @@ def retrieve_history(state: dict, deps: Deps) -> dict:
     alloc = EvidenceIdAllocator(state.get("evidence_references") or {})
     evidence, refs = {}, []
     for doc in result.documents:
-        item = document_evidence(doc, alloc.next("hist"))
+        item = alloc.intern("hist", lambda eid, doc=doc: document_evidence(doc, eid))
         evidence[item.evidence_id] = _dump(item)
         refs.append(
             _dump(
@@ -407,7 +415,7 @@ def retrieve_runbooks(state: dict, deps: Deps) -> dict:
     alloc = EvidenceIdAllocator(state.get("evidence_references") or {})
     evidence, refs = {}, []
     for doc in result.documents:
-        item = document_evidence(doc, alloc.next("rb"))
+        item = alloc.intern("rb", lambda eid, doc=doc: document_evidence(doc, eid))
         evidence[item.evidence_id] = _dump(item)
         refs.append(
             _dump(
@@ -417,13 +425,16 @@ def retrieve_runbooks(state: dict, deps: Deps) -> dict:
             )
         )
     for conflict in result.conflicts:
-        item = EvidenceItem(
-            evidence_id=alloc.next("rb"),
-            source="runbook",
-            summary=f"Runbook conflict: {conflict.note}. Neither runbook is applied automatically."[:600],
-            source_ref="runbook-conflict:" + "+".join(conflict.runbooks),
-            method="declared_conflict",
-            trusted=False,
+        item = alloc.intern(
+            "rb",
+            lambda eid, conflict=conflict: EvidenceItem(
+                evidence_id=eid,
+                source="runbook",
+                summary=f"Runbook conflict: {conflict.note}. Neither runbook is applied automatically."[:600],
+                source_ref="runbook-conflict:" + "+".join(conflict.runbooks),
+                method="declared_conflict",
+                trusted=False,
+            ),
         )
         evidence[item.evidence_id] = _dump(item)
     return {"retrieved_runbooks": refs, "evidence_references": evidence}
@@ -637,8 +648,9 @@ def recommend_actions(state: dict, deps: Deps) -> dict:
                     and target_fits(entry, hyp.suspected_root_entity)
                 ):
                     propose(entry.catalog_id, [hyp.suspected_root_entity], hyp)
-    if _coverage_gaps(state):
-        propose("check_collector_health", _coverage_gaps(state), None)
+    stale = _stale_telemetry_entities(state)
+    if stale:
+        propose("check_collector_health", stale, None)
     if not actions:
         propose("run_path_trace", state.get("affected_services") or [], None)
     return {"recommended_actions": [_dump(a) for a in actions]}

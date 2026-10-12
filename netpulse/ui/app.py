@@ -139,7 +139,7 @@ def _results_tab(client: ApiClient, incident_id: str) -> None:
         st.markdown(f"**{action['action_id']}** `{action['catalog_id']}` → policy: `{decision.get('outcome', 'n/a')}`")
         st.text(action["description"])
     with st.expander("Node trace"):
-        st.dataframe(results["node_trace"], use_container_width=True)
+        st.dataframe(results["node_trace"], width="stretch")
 
 
 def _evidence_tab(client: ApiClient, incident_id: str) -> None:
@@ -157,7 +157,7 @@ def _evidence_tab(client: ApiClient, incident_id: str) -> None:
             }
             for e in data["evidence"]
         ],
-        use_container_width=True,
+        width="stretch",
     )
     with st.expander("Telemetry window"):
         st.json(data["telemetry_window"] or {})
@@ -208,7 +208,7 @@ def _eval_tab(client: ApiClient) -> None:
     st.subheader("Investigation metrics")
     st.dataframe(
         [{"metric": k, "value": v} for k, v in report["investigation"].items()],
-        use_container_width=True,
+        width="stretch",
     )
     st.subheader("Per case")
     st.dataframe(
@@ -222,7 +222,7 @@ def _eval_tab(client: ApiClient) -> None:
             }
             for c in report["cases"]
         ],
-        use_container_width=True,
+        width="stretch",
     )
 
 
