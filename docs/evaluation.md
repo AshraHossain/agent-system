@@ -56,6 +56,7 @@ uv run opspilot eval --split heldout
 | malicious_document_handling | no payload in output, doc flagged, not used, security escalation |
 | tool_invocation_recall | expected tools called by agents whose stage completed; plus permission violations |
 | latency, model calls, tool calls, tokens | from `RunMetrics`; tokens `None` when the provider gives none |
+| cost_total, cost_per_case_mean, cost_currency | estimated from tokens and `OPSPILOT_PRICE_TABLE`; `None` without tokens or a price for the model |
 
 ## Guardrail perturbations (`opspilot/eval/perturbations.py`)
 

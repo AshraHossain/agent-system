@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from opspilot.core.cost import PriceTable, load_price_table
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = Path(__file__).resolve().parent
 
@@ -74,6 +76,7 @@ class Settings:
     session_db_url: str = f"sqlite+aiosqlite:///{REPO_ROOT / 'var' / 'sessions.db'}"
     default_dataset: str = "C02"
     limits: Limits = field(default_factory=Limits)
+    prices: PriceTable | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -89,4 +92,7 @@ class Settings:
             session_db_url=os.getenv("OPSPILOT_SESSION_DB", cls.session_db_url),
             default_dataset=os.getenv("OPSPILOT_DEFAULT_DATASET", cls.default_dataset),
             limits=Limits.from_env(),
+            prices=load_price_table(Path(table))
+            if (table := os.getenv("OPSPILOT_PRICE_TABLE"))
+            else None,
         )

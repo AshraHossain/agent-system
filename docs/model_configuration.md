@@ -42,9 +42,34 @@ rather than inventing numbers.
 `RunMetrics` in every report: provider, model, model calls (total and per
 agent), tool calls (per agent), wall-clock duration, per-agent model time,
 per-tool time, budget events, and — **only when the provider returns
-`usage_metadata`** — prompt/completion/total tokens. Cost is not computed:
-pricing varies by model, tier and region; multiply recorded tokens by your
-contract price if needed.
+`usage_metadata`** — prompt/completion/total tokens, plus an estimated cost when
+a price table is configured (below).
+
+## Cost estimation
+
+Pricing varies by model, tier, region and contract, so **no prices ship in code**.
+Point `OPSPILOT_PRICE_TABLE` at a JSON file you maintain
+([`prices.example.json`](../prices.example.json) shows the format; its figures
+are illustrative — replace them with your contract prices):
+
+```json
+{"currency": "USD",
+ "models": {"gemini-2.5-flash": {"input_per_mtok": 0.30, "output_per_mtok": 2.50}}}
+```
+
+* `estimated_cost` and `cost_currency` appear in `RunMetrics`, in the CLI
+  summary (`est. cost=0.0123 USD`) and in the evaluation aggregate
+  (`cost_total`, `cost_per_case_mean`, `cost_currency`).
+* The calculation is `core/cost.py`: tokens ÷ 1M × the price for
+  `OPSPILOT_MODEL`. It is `None` — never a guess — when no table is set, the
+  model has no entry (a warning is logged), or the provider reported no usage.
+  The mock model reports none, so offline runs always show `n/a`.
+* Gemini's total token count includes thinking tokens, which are billed as
+  output but are not in the candidate count. Anything in the total beyond
+  prompt + candidates is therefore charged at the output rate.
+* The estimate covers model tokens only, for one run. It does not model
+  context-cache discounts, tiered or batch pricing, or tool/infrastructure
+  costs. An invalid or unreadable table fails at start-up.
 
 ## Failure handling
 

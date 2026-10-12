@@ -34,6 +34,12 @@ def _ensure_data(settings: Settings, case_ids: list[str] | None = None) -> None:
         generate.build_all(settings.data_dir, missing)
 
 
+def _cost(m) -> str:
+    if m.estimated_cost is None:
+        return "n/a"
+    return f"{m.estimated_cost:.4f} {m.cost_currency}"
+
+
 def print_outcome(out, *, case: dict | None = None, show_labels: bool = False) -> None:
     r, st = out.report, out.state
     _h("2. AGENT PIPELINE (ADK events)")
@@ -128,7 +134,8 @@ def print_outcome(out, *, case: dict | None = None, show_labels: bool = False) -
     if m:
         print(
             f"  run: {m.llm_calls} model calls, {m.tool_calls} tool calls, {m.duration_s}s, "
-            f"tokens={m.total_tokens if m.total_tokens is not None else 'n/a (mock)'}"
+            f"tokens={m.total_tokens if m.total_tokens is not None else 'n/a (mock)'}, "
+            f"est. cost={_cost(m)}"
         )
         if m.investigation_rounds > 1:
             print(f"  rounds: {m.investigation_rounds} (retried: {', '.join(m.retried_stages)})")

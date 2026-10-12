@@ -1,0 +1,6 @@
+{
+  "currency": "USD",
+  "models": {
+    "gemini-2.5-flash": {"input_per_mtok": 0.30, "output_per_mtok": 2.50}
+  }
+}
