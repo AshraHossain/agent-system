@@ -20,5 +20,6 @@
 - [x] Cost estimation from recorded tokens with configurable price table (`OPSPILOT_PRICE_TABLE`), per run and per agent
 
 ## Low priority
-- [ ] OpenTelemetry exporter configuration example
+- [x] OpenTelemetry exporter configuration example (`docs/observability.md`; export via `uv run --with`, not yet in the lockfile)
+- [ ] Decide whether to ship the OTLP exporter as an `otel` extra: it forces `protobuf` 7.x -> 6.x across the shared lockfile and Docker image
 - [ ] Authentication in front of `adk api_server` for any shared use

@@ -106,7 +106,7 @@ escalation, verification results and status (`investigated`, `inconclusive`,
 [agent catalog](docs/agent_catalog.md) · [orchestration](docs/orchestration.md) ·
 [tool contracts](docs/tool_contracts.md) · [evaluation](docs/evaluation.md) ·
 [security](docs/security.md) · [sessions](docs/session_management.md) ·
-[models](docs/model_configuration.md) · [deployment](docs/deployment.md) ·
+[models](docs/model_configuration.md) · [observability](docs/observability.md) · [deployment](docs/deployment.md) ·
 [ADRs](docs/adr/README.md) · [architecture review](docs/review.md)
 
 ## License
