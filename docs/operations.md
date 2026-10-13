@@ -27,7 +27,11 @@ validates.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `NETPULSE_API_TOKENS` | none (required) | `token:role:name,...` |
+| `NETPULSE_AUTH_MODE` | `tokens` | `oidc` for production; `tokens` is development only |
+| `NETPULSE_API_TOKENS` | none | `tokens` mode: `token:role:name,...` |
+| `NETPULSE_OIDC_ISSUER` / `_AUDIENCE` / `_ROLE_MAP` | none | `oidc` mode, all required |
+| `NETPULSE_OIDC_JWKS_URL` / `_ROLE_CLAIM` / `_NAME_CLAIM` | discovery / `groups` / `sub` | `oidc` mode, optional |
+| `NETPULSE_UI_TOKEN_HEADER` | empty | UI: read the bearer token from this proxy-set header instead of a text box |
 | `NETPULSE_AUDIT_KEY` | none (API refuses to start) | HMAC key, 32+ characters, for the audit hash chain |
 | `NETPULSE_API_WORKERS` | 4 | background job threads |
 | `NETPULSE_API_DOCS` | `false` | serve unauthenticated `/docs` and `/openapi.json` |
@@ -52,6 +56,38 @@ regression gate (`docs/evaluation.md`). Ollama tests are opt-in and not run in C
 
 SQLite suits a single host with a small worker pool. The in-flight job registry is per process, so run one API process
 per database.
+
+## Identity (OIDC)
+
+Production authenticates callers with access tokens (JWTs) from your identity provider. NetPulse issues no tokens and
+sees no passwords.
+
+```bash
+export NETPULSE_AUTH_MODE=oidc
+export NETPULSE_OIDC_ISSUER=https://idp.example.com
+export NETPULSE_OIDC_AUDIENCE=netpulse-api
+export NETPULSE_OIDC_ROLE_MAP='netpulse-viewers=viewer,netpulse-operators=operator,netpulse-seniors=senior_operator'
+```
+
+At the IdP: register an API (audience `netpulse-api`), put users in the three groups, and make the access token carry a
+`groups` claim (or set `NETPULSE_OIDC_ROLE_CLAIM`). Keep access-token lifetimes short.
+
+- **Checked on every request:** asymmetric signature against the IdP's published keys (discovered from
+  `<issuer>/.well-known/openid-configuration`, or `NETPULSE_OIDC_JWKS_URL`), issuer, audience, expiry, not-before, and
+  that `sub` exists. `none` and `HS*` algorithms and tokens without a `kid` are refused.
+- **Roles** come only from the group claim through the role map. An authenticated user in no mapped group gets 403, not
+  viewer. If several groups map, the highest role wins.
+- **Audit identity** is the `sub` claim (stable), not an email or display name.
+- **Keys** are cached 10 minutes; an unknown `kid` triggers at most one refetch per 30 seconds; if the IdP is unreachable
+  cached keys keep working for up to 24 hours, then authentication fails closed.
+- **Not covered:** no revocation or introspection. Disabling a user at the IdP takes effect when their access token
+  expires.
+- The issuer and JWKS URLs must be https (plain http only for localhost).
+- **UI:** run Streamlit behind an authenticating proxy (for example oauth2-proxy with access-token passing) and set
+  `NETPULSE_UI_TOKEN_HEADER=X-Forwarded-Access-Token`. The UI forwards that token and the API validates it, so a client
+  that sets the header itself gains nothing. Bind the UI to localhost or a private network so only the proxy reaches it.
+- **Not verified:** a real IdP (Keycloak, Entra ID, Okta, Auth0). Tests use a fake IdP, plus a live run against a stub
+  IdP over HTTP. Claim names and group formats differ between providers; check yours.
 
 ## Audit log integrity
 

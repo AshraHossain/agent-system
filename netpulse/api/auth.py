@@ -41,7 +41,9 @@ class Principal:
 
 
 class TokenStore:
-    """In-memory token → Principal map. Built from env (api/main.py) or injected directly in tests."""
+    """In-memory token → Principal map: development only. Production uses ``netpulse.api.oidc.OidcVerifier``."""
+
+    mode = "tokens"
 
     def __init__(self, tokens: dict[str, Principal]) -> None:
         self._tokens = tokens
@@ -75,17 +77,19 @@ class TokenStore:
 
 
 _bearer = HTTPBearer(auto_error=False)
+_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
 def principal_dependency(store: TokenStore):
-    """Build a FastAPI dependency that resolves the caller's ``Principal`` from the bearer token."""
+    """Build a dependency that resolves the caller's ``Principal``. ``store`` needs ``resolve(token)``: a ``TokenStore``
+    or an ``OidcVerifier``."""
 
     def get_principal(credentials: HTTPAuthorizationCredentials | None = Security(_bearer)) -> Principal:
         if credentials is None:
-            raise HTTPException(status_code=401, detail="missing bearer token")
+            raise HTTPException(status_code=401, detail="missing bearer token", headers=_CHALLENGE)
         principal = store.resolve(credentials.credentials)
         if principal is None:
-            raise HTTPException(status_code=401, detail="invalid bearer token")
+            raise HTTPException(status_code=401, detail="invalid bearer token", headers=_CHALLENGE)
         return principal
 
     return get_principal

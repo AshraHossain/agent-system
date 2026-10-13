@@ -33,18 +33,27 @@ hash without the key. **Residual risk:** deleting the newest rows leaves a valid
 against a head (`seq:hash`) you recorded elsewhere; and anyone holding the key can forge a chain. Nothing yet records
 the head automatically or verifies on a schedule; that is an operational task.
 
+## Fixed after the review: identity
+
+Static bearer tokens had no expiry, rotation or revocation and identified no one in particular. With
+`NETPULSE_AUTH_MODE=oidc` the API validates access tokens from your identity provider (signature against published keys,
+issuer, audience, expiry, group-to-role mapping; audit identity is the stable `sub`). Static tokens remain for
+development and the API logs a warning when they are used (`docs/operations.md`). **Residual risk:** no revocation
+(access lasts until the token expires, so keep lifetimes short); never tested against a real IdP; the UI needs an
+authenticating proxy in front of it for sign-in.
+
 ## Open: blocking for real use
 
-1. **Static bearer tokens.** No expiry, rotation, revocation, per-user identity provider, or lockout. Tokens live in an
-   environment variable. Use OIDC or a gateway that injects identity.
-2. **No transport security or rate limiting.** The API and UI speak plain HTTP and Compose binds to 127.0.0.1 only for that
+1. **No transport security or rate limiting.** The API and UI speak plain HTTP and Compose binds to 127.0.0.1 only for that
    reason. Put TLS, request-size limits (a 5 MB body is parsed before validation) and rate limits in a reverse proxy.
-3. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller. The API derives the role
-   from the token; the CLI should not be reachable by anyone who must not approve.
-4. **No separation of duties.** The submitter can approve their own incident (`submitted_by` is never compared with the
+2. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller, and the audit records
+   whatever `--reviewer` says. Anyone with the CLI and the database already holds the keys to the data, so treat it as an
+   administrator tool and keep it off machines whose users must not approve. The API derives role and identity from the
+   validated token.
+3. **No separation of duties.** The submitter can approve their own incident (`submitted_by` is never compared with the
    reviewer). Whether to require a second person is a policy decision for you.
-5. **No tenancy.** Any viewer can read every incident. Single-team only.
-6. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
+4. **No tenancy.** Any viewer can read every incident. Single-team only.
+5. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
    deletion, no backup procedure. Running `uvicorn --workers N` would split job state across processes. Upgrading
    LangGraph may invalidate stored checkpoints.
 

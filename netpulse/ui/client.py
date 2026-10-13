@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -77,3 +78,18 @@ def is_settled(status: dict[str, Any]) -> bool:
     if status.get("job_state") in {"queued", "running"}:
         return False
     return status.get("status") is not None or status.get("job_state") == "error"
+
+
+def forwarded_token(headers: Mapping[str, str] | None, header_name: str) -> str:
+    """Bearer token from a header set by an authenticating reverse proxy (for example oauth2-proxy).
+
+    The UI only forwards it; the API validates it, so a client that sets this header itself gains nothing.
+    """
+    if not headers or not header_name:
+        return ""
+    wanted = header_name.lower()
+    for name, value in headers.items():
+        if name.lower() == wanted:
+            value = value.strip()
+            return value[7:].strip() if value.lower().startswith("bearer ") else value
+    return ""

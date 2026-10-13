@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 import streamlit as st
 
-from netpulse.ui.client import ApiClient, ApiError, is_settled
+from netpulse.ui.client import ApiClient, ApiError, forwarded_token, is_settled
 
 SYNTHETIC_BANNER = (
     "SYNTHETIC DATA: every result below comes from a simulated network. "
@@ -24,9 +24,19 @@ SYNTHETIC_BANNER = (
 POLL_SECONDS = 2
 
 
+TOKEN_HEADER = os.environ.get("NETPULSE_UI_TOKEN_HEADER", "")
+
+
+def _request_headers() -> dict[str, str]:
+    try:
+        return dict(st.context.headers)
+    except Exception:  # noqa: BLE001 - headers are unavailable outside a live browser session
+        return {}
+
+
 def _client() -> ApiClient | None:
     url = st.session_state.get("api_url", "")
-    token = st.session_state.get("api_token", "")
+    token = forwarded_token(_request_headers(), TOKEN_HEADER) if TOKEN_HEADER else st.session_state.get("api_token", "")
     if not url:
         return None
     return ApiClient(url, token)
@@ -45,7 +55,15 @@ def _sidebar() -> None:
         st.session_state["incident_id"] = st.session_state.pop("_new_incident_id")
     st.sidebar.header("Connection")
     st.sidebar.text_input("API URL", key="api_url", value=os.environ.get("NETPULSE_API_URL", "http://localhost:8000"))
-    st.sidebar.text_input("API token", key="api_token", type="password", value=os.environ.get("NETPULSE_UI_TOKEN", ""))
+    if TOKEN_HEADER:
+        signed_in = bool(forwarded_token(_request_headers(), TOKEN_HEADER))
+        st.sidebar.caption(
+            "Signed in through your identity provider." if signed_in else "Not signed in: no token from the proxy."
+        )
+    else:
+        st.sidebar.text_input(
+            "API token", key="api_token", type="password", value=os.environ.get("NETPULSE_UI_TOKEN", "")
+        )
     client = _client()
     if client and st.sidebar.button("Check connection"):
         health = _call(client.health)

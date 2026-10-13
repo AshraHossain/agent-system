@@ -18,7 +18,8 @@ with `change-me`, duplicate tokens, and empty tokens or names. The `dev-*` token
 
 - The UI talks only to the API over HTTP (`netpulse/ui/client.py`). It never imports `netpulse.service`,
   the graph, persistence, `synthgen` or `eval`; `tests/test_ui_client.py` enforces this.
-- Reviewer identity and role come only from the bearer token, never from a request body.
+- Reviewer identity and role come only from the validated bearer token (an OIDC access token in production, a static
+  token in development), never from a request body. `/health` reports `auth_mode`.
 - Mutating endpoints return 202 and run on a background job; clients poll `GET /incidents/{id}`.
   One operation per incident at a time (409 otherwise).
 - Untrusted text (descriptions, evidence summaries) is rendered with `st.text`, not markdown.

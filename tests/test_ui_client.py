@@ -101,3 +101,15 @@ def test_eval_reports_listing_and_fetch(api, tmp_path, monkeypatch):
         with pytest.raises(ApiError) as exc:
             client.eval_report(bad)
         assert exc.value.status_code == 404
+
+
+def test_forwarded_token_reads_the_proxy_header_case_insensitively():
+    from netpulse.ui.client import forwarded_token
+
+    assert forwarded_token({"x-forwarded-access-token": "abc.def.ghi"}, "X-Forwarded-Access-Token") == "abc.def.ghi"
+    assert forwarded_token({"Authorization": "Bearer abc"}, "authorization") == "abc"
+    assert forwarded_token({"Authorization": "bearer   abc "}, "Authorization") == "abc"
+    assert forwarded_token({}, "Authorization") == ""
+    assert forwarded_token(None, "Authorization") == ""
+    assert forwarded_token({"Other": "x"}, "Authorization") == ""
+    assert forwarded_token({"Authorization": "x"}, "") == ""

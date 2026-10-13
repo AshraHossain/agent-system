@@ -35,7 +35,7 @@ uv run pytest
 uv run python -m eval.report --provider heuristic --check   # evaluation report + regression gate
 ```
 
-API and UI (set tokens first; see [docs/operations.md](docs/operations.md)), or `docker compose up --build`:
+API and UI (development tokens below; production uses OIDC; see [docs/operations.md](docs/operations.md)), or `docker compose up --build`:
 
 ```bash
 export NETPULSE_AUDIT_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"

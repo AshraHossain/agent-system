@@ -31,6 +31,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 from netpulse.api.auth import API_ROLE_RANK, Principal, TokenStore, principal_dependency, require_role
+from netpulse.api.oidc import OidcVerifier
 from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry
 from netpulse.api.schemas import (
     ApprovalRequest,
@@ -49,7 +50,9 @@ from netpulse.service import AuthorizationError, InvestigationService
 EVAL_REPORTS_DIR = Path(__file__).resolve().parents[2] / "eval" / "reports"
 
 
-def create_app(service: InvestigationService, tokens: TokenStore, max_workers: int = 4, docs: bool = True) -> FastAPI:
+def create_app(
+    service: InvestigationService, tokens: TokenStore | OidcVerifier, max_workers: int = 4, docs: bool = True
+) -> FastAPI:
     app = FastAPI(
         title="NetPulse AI API",
         description="Evidence-backed, read-only network anomaly investigation. " + SYNTHETIC_DATA_NOTICE,
@@ -95,7 +98,11 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(
-            status="ok", durable=service.durable, audit_keyed=service.audit_keyed, data_notice=SYNTHETIC_DATA_NOTICE
+            status="ok",
+            durable=service.durable,
+            audit_keyed=service.audit_keyed,
+            auth_mode=tokens.mode,
+            data_notice=SYNTHETIC_DATA_NOTICE,
         )
 
     # ------------------------------------------------------------- incidents

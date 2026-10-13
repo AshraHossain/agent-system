@@ -73,6 +73,7 @@ class HealthResponse(_Model):
     status: str
     durable: bool
     audit_keyed: bool
+    auth_mode: str
     data_notice: str
 
 
