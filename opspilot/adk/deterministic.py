@@ -31,7 +31,7 @@ from opspilot.contracts.findings import (
     TelemetryFinding,
     TopologyFinding,
 )
-from opspilot.contracts.report import RunMetrics
+from opspilot.contracts.report import RunMetrics, TokenUsage
 from opspilot.contracts.request import InvestigationScope
 from opspilot.contracts.verification import VerificationResult
 from opspilot.core import report as report_core
@@ -268,6 +268,18 @@ def metrics_from_counters(c: RunCounters, settings: Settings, state: dict) -> Ru
     )
     if settings.prices and c.total_tokens is not None and cost is None:
         log.warning("no price for model %s in OPSPILOT_PRICE_TABLE; cost not estimated", model)
+    tokens_by_agent = {a: TokenUsage(**u) for a, u in c.usage_by_agent.items()}
+    cost_by_agent = {}
+    for agent, u in tokens_by_agent.items():
+        share = estimate_cost(
+            settings.prices,
+            model,
+            prompt_tokens=u.prompt_tokens,
+            completion_tokens=u.completion_tokens,
+            total_tokens=u.total_tokens,
+        )
+        if share:
+            cost_by_agent[agent] = share.total
     return RunMetrics(
         provider=settings.provider,
         model=model,
@@ -279,6 +291,8 @@ def metrics_from_counters(c: RunCounters, settings: Settings, state: dict) -> Ru
         total_tokens=c.total_tokens,
         estimated_cost=cost.total if cost else None,
         cost_currency=cost.currency if cost else None,
+        tokens_by_agent=tokens_by_agent,
+        cost_by_agent=cost_by_agent,
         tool_calls_by_agent={k: list(v) for k, v in c.tools_by_agent.items()},
         llm_calls_by_agent=dict(c.llm_by_agent),
         budget_events=list(c.events),

@@ -60,6 +60,14 @@ are illustrative — replace them with your contract prices):
 * `estimated_cost` and `cost_currency` appear in `RunMetrics`, in the CLI
   summary (`est. cost=0.0123 USD`) and in the evaluation aggregate
   (`cost_total`, `cost_per_case_mean`, `cost_currency`).
+* **Per agent:** `RunMetrics.tokens_by_agent` (prompt/completion/total, reported
+  whenever the provider returns usage, with or without a price table) and
+  `cost_by_agent` (with a price for the model). Usage is attributed to the agent
+  whose model call produced it, so a retried stage accumulates on its own agent,
+  and the shares add up to `estimated_cost` within rounding. The CLI prints the
+  breakdown ranked by cost; the evaluation sums it across cases
+  (`cost_by_agent` in the aggregate, as its own table in the markdown report).
+  Agents that make no model calls (the deterministic stages) do not appear.
 * The calculation is `core/cost.py`: tokens ÷ 1M × the price for
   `OPSPILOT_MODEL`. It is `None` — never a guess — when no table is set, the
   model has no entry (a warning is logged), or the provider reported no usage.

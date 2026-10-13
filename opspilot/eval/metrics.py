@@ -58,6 +58,7 @@ class CaseScore:
     total_tokens: int | None
     estimated_cost: float | None
     cost_currency: str | None
+    cost_by_agent: dict[str, float]
     latency_s: float
     notes: list[str] = field(default_factory=list)
 
@@ -210,6 +211,7 @@ def score_case(
         total_tokens=m.total_tokens if m else None,
         estimated_cost=m.estimated_cost if m else None,
         cost_currency=m.cost_currency if m else None,
+        cost_by_agent=dict(m.cost_by_agent) if m else {},
         latency_s=latency_s,
         notes=notes,
     )
@@ -226,6 +228,10 @@ def aggregate(scores: list[CaseScore]) -> dict:
     tokens = [s.total_tokens for s in scores if s.total_tokens is not None]
     costs = [s.estimated_cost for s in scores if s.estimated_cost is not None]
     currencies = {s.cost_currency for s in scores if s.cost_currency}
+    by_agent: dict[str, float] = {}
+    for s in scores:
+        for agent, cost in s.cost_by_agent.items():
+            by_agent[agent] = by_agent.get(agent, 0.0) + cost
     lat = sorted(s.latency_s for s in scores)
     return {
         "cases": len(scores),
@@ -261,6 +267,10 @@ def aggregate(scores: list[CaseScore]) -> dict:
         "cost_total": round(sum(costs), 6) if costs else None,
         "cost_currency": currencies.pop() if len(currencies) == 1 else None,
         "cost_per_case_mean": round(sum(costs) / len(costs), 6) if costs else None,
+        "cost_by_agent": {
+            a: round(v, 6) for a, v in sorted(by_agent.items(), key=lambda kv: -kv[1])
+        }
+        or None,
         "latency_s_mean": _mean(lat),
         "latency_s_p95": lat[min(len(lat) - 1, int(0.95 * len(lat)))] if lat else None,
     }

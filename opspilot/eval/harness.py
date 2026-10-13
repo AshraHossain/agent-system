@@ -119,7 +119,10 @@ def to_markdown(results: dict) -> str:
         "| Metric | Value |",
         "|---|---|",
     ]
-    lines += [f"| {k} | {v} |" for k, v in a.items()]
+    lines += [f"| {k} | {v} |" for k, v in a.items() if not isinstance(v, dict)]
+    if a.get("cost_by_agent"):
+        lines += ["", f"| Agent | Cost ({a.get('cost_currency')}) |", "|---|---|"]
+        lines += [f"| {agent} | {cost} |" for agent, cost in a["cost_by_agent"].items()]
     lines += [
         "",
         "| Case | Tags | Status (expected) | Esc | Top1 | Top3 | Cites valid | "

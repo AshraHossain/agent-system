@@ -38,6 +38,7 @@ class RunCounters:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    usage_by_agent: dict[str, dict[str, int]] = field(default_factory=lambda: defaultdict(dict))
     events: list[str] = field(default_factory=list)
     model_time_ms: dict[str, float] = field(default_factory=lambda: defaultdict(float))
     tool_time_ms: dict[str, float] = field(default_factory=lambda: defaultdict(float))
@@ -100,6 +101,8 @@ class BudgetPlugin(BasePlugin):
             ):
                 if src is not None:
                     setattr(c, attr, (getattr(c, attr) or 0) + src)
+                    mine = c.usage_by_agent[agent]
+                    mine[attr] = mine.get(attr, 0) + src
         return None
 
     async def before_tool_callback(

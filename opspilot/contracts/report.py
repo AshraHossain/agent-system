@@ -58,6 +58,12 @@ class DiagnosticStep(BaseModel):
     evidence_ids: list[str]
 
 
+class TokenUsage(BaseModel):
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+
 class RunMetrics(BaseModel):
     provider: str
     model: str
@@ -69,6 +75,8 @@ class RunMetrics(BaseModel):
     total_tokens: int | None = None
     estimated_cost: float | None = None
     cost_currency: str | None = None
+    tokens_by_agent: dict[str, TokenUsage] = Field(default_factory=dict)
+    cost_by_agent: dict[str, float] = Field(default_factory=dict)
     tool_calls_by_agent: dict[str, list[str]] = Field(default_factory=dict)
     llm_calls_by_agent: dict[str, int] = Field(default_factory=dict)
     budget_events: list[str] = Field(default_factory=list)
