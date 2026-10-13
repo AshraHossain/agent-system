@@ -77,6 +77,12 @@ char trigrams; min cosine 0.2), fused with RRF (k 60). The hashing embedder is
 queries mix exact identifiers (`lnk-l3-s2`, `CRC`) with paraphrase; RRF keeps
 both signals without score calibration.
 
+`OPSPILOT_EMBEDDER=gemini` swaps the vector side for Gemini embeddings with a
+persistent cache and a separate cosine cutoff (default 0.6); if embeddings are
+unavailable, search falls back to keyword scoring. See
+[model configuration](model_configuration.md#semantic-embeddings-optional) and
+[ADR-0011](adr/0011-optional-gemini-embeddings.md).
+
 ## Hypothesis rules (`core/analysis.py`)
 
 | Signature on a component | Category |

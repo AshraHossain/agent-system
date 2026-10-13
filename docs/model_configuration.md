@@ -79,6 +79,33 @@ are illustrative — replace them with your contract prices):
   context-cache discounts, tiered or batch pricing, or tool/infrastructure
   costs. An invalid or unreadable table fails at start-up.
 
+## Semantic embeddings (optional)
+
+Knowledge search fuses BM25 with a vector signal. By default that signal is the
+offline hashing vector (lexical overlap, not semantics). To use Gemini embeddings
+instead (credentials as above; [ADR-0011](adr/0011-optional-gemini-embeddings.md)):
+
+```bash
+export OPSPILOT_EMBEDDER=gemini          # default: hashing
+# OPSPILOT_EMBEDDING_MODEL=gemini-embedding-001
+# OPSPILOT_EMBEDDING_DIMS=768            # 1-3072
+# OPSPILOT_EMBEDDING_CACHE=var/embeddings.db
+# OPSPILOT_EMBEDDING_MIN_COSINE=0.6      # default 0.6 for gemini, 0.2 for hashing
+```
+
+* **Cache.** Every vector is stored in SQLite on first use, keyed by a hash of
+  model, dimensions, document-or-query and text (the text itself is not stored). Later
+  runs, including the whole corpus and any repeated query, are answered from the
+  cache with no network or credentials. Delete the file to rebuild it.
+* **Fallback.** If Gemini is unreachable and the cache has no answer, search uses
+  keyword scoring only and logs a warning; the investigation still completes. An
+  index built that way stays keyword-only until the process restarts.
+* **Data egress.** Document and query text is sent to the Gemini API (secrets
+  redacted first), even when the language model is the mock. The default sends nothing.
+* **Not validated live.** The cutoff, model name, batch size and dimensions are
+  unverified starting points. The evaluation records the embedder in its config, so
+  compare `opspilot --live eval` runs with the option on and off.
+
 ## Failure handling
 
 | Failure | Behaviour |
@@ -94,4 +121,5 @@ are illustrative — replace them with your contract prices):
   surface as validation errors → stage failure.
 * Live models may cite irrelevant-but-existing evidence; the verifier checks
   existence and kind, not relevance.
-* Live behaviour has not been evaluated in this environment (no credentials).
+* Live behaviour has not been evaluated in this environment (no credentials). This
+  includes the Gemini embedding option above.

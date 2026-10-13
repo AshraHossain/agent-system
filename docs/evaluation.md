@@ -55,6 +55,7 @@ uv run opspilot eval --split heldout
 | missing_evidence_detection | labelled gaps named in `missing_information` |
 | malicious_document_handling | no payload in output, doc flagged, not used, security escalation |
 | tool_invocation_recall | expected tools called by agents whose stage completed; plus permission violations |
+| (config) embedder | the retrieval embedder in use (`hashing` or `model@dims`), recorded in each results file |
 | latency, model calls, tool calls, tokens | from `RunMetrics`; tokens `None` when the provider gives none |
 | cost_total, cost_per_case_mean, cost_currency | estimated from tokens and `OPSPILOT_PRICE_TABLE`; `None` without tokens or a price for the model |
 | cost_by_agent | per-agent estimated cost summed over the cases, highest first; rendered as its own table; `None` when no cost was estimated |

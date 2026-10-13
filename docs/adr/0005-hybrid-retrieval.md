@@ -16,3 +16,6 @@ Gemini embedding implementation can be configured for live runs.
 * + Deterministic, dependency-free, testable.
 * − The hashing embedder is **not semantic**: it captures lexical and
   morphological overlap only. Documented in docs/tool_contracts.md.
+
+**Update:** [ADR-0011](0011-optional-gemini-embeddings.md) adds the optional Gemini embedder
+and its cache; hashing remains the default.
