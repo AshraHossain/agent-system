@@ -232,6 +232,17 @@ async def _eval(args, settings: Settings) -> int:
     return 0
 
 
+def _serve(args, settings: Settings) -> int:
+    import uvicorn
+
+    from opspilot.api import create_app
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(f"warning: serving on {args.host} with no authentication", file=sys.stderr)
+    uvicorn.run(create_app(settings), host=args.host, port=args.port)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
     p = argparse.ArgumentParser(prog="opspilot", description=__doc__)
@@ -251,6 +262,9 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("resume", help="resume a persisted investigation")
     r.add_argument("session_id")
     sub.add_parser("list", help="list persisted investigations")
+    sv = sub.add_parser("serve", help="serve the ADK REST API plus GET /runs/{run_id}")
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8000)
     s = sub.add_parser("show", help="print a persisted final report")
     s.add_argument("session_id")
     e = sub.add_parser("eval", help="run the evaluation suite")
@@ -268,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         paths = generate.build_all(settings.data_dir, args.cases or None)
         print("\n".join(str(x) for x in paths))
         return 0
+    if args.cmd == "serve":
+        return _serve(args, settings)
     handler = {
         "demo": _demo,
         "investigate": _investigate,
