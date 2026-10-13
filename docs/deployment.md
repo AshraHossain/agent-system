@@ -15,6 +15,20 @@ uv run adk api_server adk_apps \
   --session_service_uri sqlite+aiosqlite:///var/sessions.db   # REST + durable sessions
 ```
 
+`opspilot serve` runs the same ADK REST API on `OPSPILOT_SESSION_DB` and adds one
+read-only route, `GET /runs/{run_id}`, which returns a persisted investigation's
+validated report (`404` for an unknown id, `status: "incomplete"` with no report
+while a run has not finished). It finds runs started by the CLI and by the ADK API
+([ADR-0010](adr/0010-read-only-run-lookup.md)):
+
+```bash
+uv run opspilot serve --port 8000
+curl -s http://127.0.0.1:8000/runs/<session_id> | jq '.status, .report.investigation_summary'
+```
+
+It has no authentication and binds loopback by default; `--host` anything else
+prints a warning.
+
 `adk_apps/opspilot_ai/agent.py` exposes both `root_agent` and an `App`
 (`app`) carrying the `BudgetPlugin`, so budgets and tool allowlists also apply
 under `adk web` / `adk api_server`. The dataset for dev-UI sessions is

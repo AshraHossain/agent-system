@@ -31,4 +31,5 @@ architectural; heuristics add defence in depth. Prompt injection is mitigated,
 * Redaction patterns cover common key formats only.
 * The read-only policy is a verb/keyword filter over English text.
 * Session state is stored unencrypted in local SQLite.
-* `adk web` has no authentication; keep it on loopback.
+* `adk web`, `adk api_server` and `opspilot serve` (including `GET /runs/{run_id}`)
+  have no authentication; keep them on loopback.
