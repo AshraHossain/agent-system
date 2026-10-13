@@ -25,6 +25,8 @@ with `change-me`, duplicate tokens, and empty tokens or names. The `dev-*` token
 - Untrusted text (descriptions, evidence summaries) is rendered with `st.text`, not markdown.
 - The person who submitted an incident cannot approve it (403, four-eyes); `GET /me` returns the caller's identity and `/health`
   reports `four_eyes`.
-- `GET /audit/verify` (senior operators) re-verifies the audit hash chain; `/health` reports `audit_keyed`.
+- Callers see only their own tenant's incidents; other tenants' IDs return 404 (`docs/operations.md`). `/me` reports the
+  tenant and `/health` reports `multi_tenant`.
+- `GET /audit/verify` (senior operators; in multi-tenant mode `_platform` identities only) re-verifies the audit hash chain; `/health` reports `audit_keyed`.
 - Submitting an `incident_id` that already exists returns 409. More than 100 queued or running jobs returns 429.
 - `/docs` and `/openapi.json` are off unless `NETPULSE_API_DOCS=true`.

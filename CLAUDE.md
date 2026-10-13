@@ -44,6 +44,8 @@ Development runs in approved phases. Read these before changing code:
   tracing to LangSmith stays opt-in.
 - **Four-eyes:** the submitter of an incident never approves it. Keep the rule in `policy/engine.py`, enforced in the
   service, the API and the `human_approval` node.
+- **Tenants:** a client-supplied incident ID becomes a storage key only through `ref_for` / `scope_incident_id`
+  (`netpulse/api/tenancy.py`). Never pass a raw path ID to the service.
 - **Every output is labelled synthetic.** Never imply the system observed a
   real network.
 - **Code before `interrupt()` in `human_approval` must be side-effect free.**

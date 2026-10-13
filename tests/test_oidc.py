@@ -359,3 +359,68 @@ def test_audit_records_the_idp_subject_for_submit_and_review(api, idp):
     events = [(e["event"], e["actor"]) for e in api.service.audit_log("oidc-1")]
     assert ("submitted", "oidc|operator-1") in events and ("review_submitted", "oidc|senior-9") in events
     assert api.get("/audit/verify", headers=senior).json()["ok"] is True
+
+
+# ---------------------------------------------------------------- tenant claim
+
+
+def test_tenant_comes_from_the_configured_claim(idp):
+    v = verifier(idp, tenant_claim="org")
+    principal = v.resolve(idp.mint(org="acme"))
+    assert principal.tenant == "acme" and v.multi_tenant
+
+
+def test_without_a_tenant_claim_setting_everyone_is_the_default_tenant_and_claims_are_ignored(idp):
+    v = verifier(idp)
+    assert not v.multi_tenant
+    assert v.resolve(idp.mint(org="acme")).tenant == "default"
+
+
+@pytest.mark.parametrize("org", [None, "", "Acme", "has space", "a~b", "default", "_other", 7, ["acme"]])
+def test_multi_tenant_mode_refuses_identities_without_a_valid_tenant(idp, org):
+    with pytest.raises(HTTPException) as exc:
+        verifier(idp, tenant_claim="org").resolve(idp.mint(org=org))
+    assert exc.value.status_code == 403
+
+
+def test_platform_tenant_can_be_asserted_only_by_the_identity_provider(idp):
+    assert verifier(idp, tenant_claim="org").resolve(idp.mint(org="_platform")).tenant == "_platform"
+
+
+def test_oidc_tenants_cannot_see_each_others_incidents(tmp_path, idp):
+    from netpulse.api.tenancy import DatasetPolicy
+
+    service = InvestigationService(shared_deps(), PersistentStore(tmp_path / "t.db", audit_key="k" * 40))
+    policy = DatasetPolicy.parse("acme=case-04;globex=case-04")
+    v = verifier(idp, tenant_claim="org")
+    with TestClient(create_app(service, v, max_workers=1, datasets=policy)) as client:
+        acme = auth(idp, sub="acme-user", org="acme", groups=["np-operators"])
+        globex = auth(idp, sub="globex-user", org="globex", groups=["np-operators"])
+        submission = CASES["case-04"]["submission"]
+        assert client.post("/incidents", headers=acme, json={"submission": submission, "incident_id": "secret"})
+        for _ in range(200):
+            if client.get("/incidents/secret", headers=acme).json()["status"] == "awaiting_approval":
+                break
+            time.sleep(0.1)
+        assert client.get("/incidents/secret", headers=globex).status_code == 404
+        assert client.get("/incidents/secret/results", headers=globex).status_code == 404
+        assert client.get("/incidents/secret", headers=acme).status_code == 200
+        assert client.get("/me", headers=acme).json()["tenant"] == "acme"
+
+
+def test_api_wires_the_tenant_claim_and_dataset_policy_from_the_environment(monkeypatch, tmp_path):
+    from netpulse.api.main import build_app
+
+    monkeypatch.setenv("NETPULSE_AUTH_MODE", "oidc")
+    monkeypatch.setenv("NETPULSE_OIDC_ISSUER", ISSUER)
+    monkeypatch.setenv("NETPULSE_OIDC_AUDIENCE", AUDIENCE)
+    monkeypatch.setenv("NETPULSE_OIDC_ROLE_MAP", "np-seniors=senior_operator")
+    monkeypatch.setenv("NETPULSE_OIDC_TENANT_CLAIM", "org")
+    monkeypatch.setenv("NETPULSE_AUDIT_KEY", "a" * 40)
+    monkeypatch.setenv("NETPULSE_DB", str(tmp_path / "x.db"))
+    monkeypatch.setenv("NETPULSE_TENANT_DATASETS", "acme=case-04")
+    with TestClient(build_app()) as client:
+        assert client.get("/health").json()["multi_tenant"] is True
+    monkeypatch.setenv("NETPULSE_TENANT_DATASETS", "not a valid entry")
+    with pytest.raises(RuntimeError, match="NETPULSE_TENANT_DATASETS"):
+        build_app()

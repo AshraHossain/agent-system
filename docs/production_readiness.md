@@ -60,14 +60,26 @@ needs a different senior. **Residual risk:** identities are compared as strings,
 (or two OIDC subjects) defeats it; teams with a single qualified reviewer need `NETPULSE_FOUR_EYES=off` or a second
 reviewer; it does not stop two people colluding; the CLI's `--reviewer` is self-asserted, so it can name anyone.
 
+## Fixed after the review: tenancy
+
+Every identity now belongs to a tenant (a static-token field or an OIDC claim). A non-default tenant's incidents live in
+their own key namespace (`<tenant>~<id>`), so another tenant's ID resolves to a key that does not exist: 404, with no
+existence leak, and no per-endpoint ownership check that a future route could forget. A test fails if any route that
+takes `{incident_id}` is not wired through the scoping dependency. Telemetry datasets are restricted per tenant
+(`NETPULSE_TENANT_DATASETS`, deny by default); one tenant cannot fill the shared job queue; the global audit chain can be
+verified only by `_platform` identities, who cannot read incidents. Single-tenant deployments are unchanged.
+**Residual risk:** the reference corpus (runbooks, past incidents) and topology are shared knowledge, not per tenant;
+the SQLite file, logs and the audit chain hold every tenant's data, so the platform operator sees everything and there is
+no per-tenant encryption or backup; no per-tenant quotas beyond the queue cap; tenant membership is only as trustworthy as
+the IdP claim; the CLI is a platform tool and can address any raw key; the eval reports are shared.
+
 ## Open: blocking for real use
 
 1. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller, and the audit records
    whatever `--reviewer` says. Anyone with the CLI and the database already holds the keys to the data, so treat it as an
    administrator tool and keep it off machines whose users must not approve. The API derives role and identity from the
    validated token.
-2. **No tenancy.** Any viewer can read every incident. Single-team only.
-3. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
+2. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
    deletion, no backup procedure. Running `uvicorn --workers N` would split job state across processes. Upgrading
    LangGraph may invalidate stored checkpoints.
 

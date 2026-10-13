@@ -34,6 +34,7 @@ import jwt
 from fastapi import HTTPException
 
 from netpulse.api.auth import API_ROLE_RANK, Principal
+from netpulse.api.tenancy import DEFAULT_TENANT, valid_tenant
 from netpulse.observability import get_logger
 
 log = get_logger("auth")
@@ -73,6 +74,7 @@ class OidcConfig:
     jwks_url: str | None = None
     role_claim: str = "groups"
     name_claim: str = "sub"
+    tenant_claim: str | None = None  # set => multi-tenant: every identity must carry a valid tenant
     leeway: int = 60
     jwks_ttl: int = 600
     min_refresh: int = 30
@@ -101,6 +103,10 @@ class OidcVerifier:
     """Drop-in for ``TokenStore``: ``resolve(token)`` returns a ``Principal`` or ``None`` (401), or raises 403."""
 
     mode = "oidc"
+
+    @property
+    def multi_tenant(self) -> bool:
+        return self.config.tenant_claim is not None
 
     def __init__(
         self,
@@ -212,4 +218,11 @@ class OidcVerifier:
         if role is None:
             log.info("authenticated identity has no NetPulse role", extra={"reason": "no_role_mapping"})
             raise HTTPException(status_code=403, detail="this identity has no NetPulse role")
-        return Principal(token="", name=name, role=role)  # type: ignore[arg-type]
+        tenant = DEFAULT_TENANT
+        if self.config.tenant_claim:
+            claimed = claims.get(self.config.tenant_claim)
+            if not isinstance(claimed, str) or not valid_tenant(claimed) or claimed == DEFAULT_TENANT:
+                log.info("authenticated identity has no tenant", extra={"reason": "no_tenant"})
+                raise HTTPException(status_code=403, detail="this identity is not assigned to a tenant")
+            tenant = claimed
+        return Principal(token="", name=name, role=role, tenant=tenant)  # type: ignore[arg-type]

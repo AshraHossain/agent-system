@@ -31,6 +31,8 @@ validates.
 | `NETPULSE_API_TOKENS` | none | `tokens` mode: `token:role:name,...` |
 | `NETPULSE_OIDC_ISSUER` / `_AUDIENCE` / `_ROLE_MAP` | none | `oidc` mode, all required |
 | `NETPULSE_OIDC_JWKS_URL` / `_ROLE_CLAIM` / `_NAME_CLAIM` | discovery / `groups` / `sub` | `oidc` mode, optional |
+| `NETPULSE_OIDC_TENANT_CLAIM` | none | claim naming the caller's tenant; setting it turns on multi-tenancy |
+| `NETPULSE_TENANT_DATASETS` | none | `acme=case-01,case-02;globex=case-03`: datasets each tenant may investigate (`*` = all) |
 | `NETPULSE_FOUR_EYES` | `on` | `off` lets a submitter approve their own incident (labs only) |
 | `NETPULSE_REQUIRE_HTTPS` | `true` in oidc mode | refuse requests whose scheme is not https (`/health` exempt) |
 | `NETPULSE_ALLOWED_HOSTS` | any | comma-separated Host header allowlist |
@@ -62,6 +64,25 @@ regression gate (`docs/evaluation.md`). Ollama tests are opt-in and not run in C
 
 SQLite suits a single host with a small worker pool. The in-flight job registry is per process, so run one API process
 per database.
+
+## Multi-tenancy
+
+By default there is one tenant (`default`) and nothing changes. To isolate several organizations:
+
+- **OIDC:** set `NETPULSE_OIDC_TENANT_CLAIM` (for example `org`). Every identity must then carry a tenant in that claim
+  (`[a-z0-9][a-z0-9_-]{0,31}`); one without gets 403. The tenant name `default` is refused in multi-tenant mode.
+- **Static tokens (development):** a fourth field, `token:role:name:tenant`.
+- **Platform operators:** a tenant named `_platform` may run `GET /audit/verify` (the chain is global, so tenant
+  seniors may not) and may read or submit no incidents.
+- **Datasets:** set `NETPULSE_TENANT_DATASETS`. In multi-tenant mode a tenant with no entry can analyse nothing (403).
+- **Isolation model:** a tenant's incident `x` is stored as `<tenant>~x` in the checkpoints and audit log. Two tenants
+  may use the same incident ID without knowing about each other. Another tenant's ID returns 404, identical to an
+  ID that never existed. Job-queue slots are capped per tenant (25 of 100).
+- **Four-eyes, rate limits and audit identities** all work within a tenant.
+
+What is shared, so decide whether it is acceptable: the runbook and past-incident corpus and the topology; the SQLite file,
+logs and audit chain (the platform operator sees all tenants); the evaluation reports. There is no per-tenant encryption,
+backup or quota beyond the queue cap.
 
 ## Transport security and rate limiting
 

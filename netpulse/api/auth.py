@@ -27,6 +27,8 @@ from typing import Literal
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from netpulse.api.tenancy import DEFAULT_TENANT, valid_tenant
+
 API_ROLE_RANK = {"viewer": 0, "operator": 1, "senior_operator": 2}
 ApiRole = Literal["viewer", "operator", "senior_operator"]
 _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -38,6 +40,7 @@ class Principal:
     token: str = field(repr=False)
     name: str
     role: ApiRole
+    tenant: str = DEFAULT_TENANT
 
 
 class TokenStore:
@@ -54,17 +57,24 @@ class TokenStore:
         tokens: dict[str, Principal] = {}
         for entry in filter(None, (e.strip() for e in spec.split(","))):
             parts = entry.split(":")
-            if len(parts) != 3 or parts[1] not in API_ROLE_RANK:
-                raise ValueError(f"invalid token spec {entry!r}; expected token:role:name")
-            token, role, name = parts
+            if len(parts) not in (3, 4) or parts[1] not in API_ROLE_RANK:
+                raise ValueError(f"invalid token spec {entry!r}; expected token:role:name[:tenant]")
+            token, role, name = parts[:3]
+            tenant = parts[3] if len(parts) == 4 else DEFAULT_TENANT
+            if not valid_tenant(tenant):
+                raise ValueError(f"invalid tenant {tenant!r} for {name!r}")
             if not token or not _NAME.fullmatch(name):
                 raise ValueError(
                     f"invalid token spec for {name!r}: empty token or a name outside [A-Za-z0-9._-]{{1,64}}"
                 )
             if token in tokens:
                 raise ValueError(f"duplicate token for {name!r}: a token must identify exactly one principal")
-            tokens[token] = Principal(token=token, name=name, role=role)  # type: ignore[arg-type]
+            tokens[token] = Principal(token=token, name=name, role=role, tenant=tenant)  # type: ignore[arg-type]
         return cls(tokens)
+
+    @property
+    def multi_tenant(self) -> bool:
+        return any(p.tenant != DEFAULT_TENANT for p in self._tokens.values())
 
     def weak_tokens(self) -> list[str]:
         """Names of principals whose token is too short or still a documented placeholder."""

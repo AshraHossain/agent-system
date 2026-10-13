@@ -9,6 +9,8 @@
 | ``NETPULSE_API_TOKENS`` | *(none)* | ``tokens`` mode: ``token:role:name,...`` |
 | ``NETPULSE_OIDC_ISSUER`` / ``_AUDIENCE`` / ``_ROLE_MAP`` | *(none)* | ``oidc`` mode, all required |
 | ``NETPULSE_OIDC_JWKS_URL`` / ``_ROLE_CLAIM`` / ``_NAME_CLAIM`` | discovery / ``groups`` / ``sub`` | optional |
+| ``NETPULSE_OIDC_TENANT_CLAIM`` | *(none)* | claim naming the tenant; setting it enables multi-tenancy |
+| ``NETPULSE_TENANT_DATASETS`` | *(none)* | ``tenant=ds1,ds2;tenant2=*``: datasets each tenant may investigate |
 | ``NETPULSE_AUDIT_KEY`` | *(none — refuses to start)* | HMAC key (32+ chars) for the audit hash chain |
 | ``NETPULSE_API_WORKERS`` | ``4`` | background job threads |
 | ``NETPULSE_API_DOCS`` | ``false`` | serve ``/docs`` and ``/openapi.json`` (unauthenticated) |
@@ -31,6 +33,7 @@ from netpulse.api.app import create_app
 from netpulse.api.auth import TokenStore
 from netpulse.api.oidc import OidcConfig, OidcVerifier, parse_role_map
 from netpulse.api.protection import Protection
+from netpulse.api.tenancy import DatasetPolicy, valid_tenant
 from netpulse.graph.deps import Deps
 from netpulse.observability import apply_tracing_policy, configure_logging, get_logger
 from netpulse.persistence.store import PersistentStore
@@ -63,6 +66,7 @@ def _build_oidc() -> OidcVerifier:
             jwks_url=env("NETPULSE_OIDC_JWKS_URL") or None,
             role_claim=env("NETPULSE_OIDC_ROLE_CLAIM", "groups"),
             name_claim=env("NETPULSE_OIDC_NAME_CLAIM", "sub"),
+            tenant_claim=env("NETPULSE_OIDC_TENANT_CLAIM") or None,
         )
     except ValueError as exc:
         raise RuntimeError(f"invalid OIDC configuration: {exc}") from exc
@@ -104,7 +108,15 @@ def build_app():
     protection = Protection.from_env(require_https_default=authenticator.mode == "oidc")
     if not protection.require_https:
         log.warning("plain http is allowed; set NETPULSE_REQUIRE_HTTPS=true behind TLS in production")
-    return create_app(service, authenticator, max_workers=workers, docs=docs, protection=protection)
+    try:
+        datasets = DatasetPolicy.parse(os.environ.get("NETPULSE_TENANT_DATASETS", ""))
+    except ValueError as exc:
+        raise RuntimeError(f"invalid NETPULSE_TENANT_DATASETS: {exc}") from exc
+    if authenticator.multi_tenant:
+        unknown = sorted(t for t in datasets.allowed if not valid_tenant(t))
+        if unknown or not datasets.allowed:
+            log.warning("multi-tenant mode: tenants without a NETPULSE_TENANT_DATASETS entry can use no dataset")
+    return create_app(service, authenticator, max_workers=workers, docs=docs, protection=protection, datasets=datasets)
 
 
 def __getattr__(name: str):

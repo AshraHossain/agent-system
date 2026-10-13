@@ -75,6 +75,7 @@ class HealthResponse(_Model):
     audit_keyed: bool
     auth_mode: str
     four_eyes: bool
+    multi_tenant: bool
     data_notice: str
 
 
@@ -91,3 +92,4 @@ class AuditVerifyResponse(_Model):
 class MeResponse(_Model):
     name: str
     role: str
+    tenant: str

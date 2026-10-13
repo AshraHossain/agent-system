@@ -216,7 +216,7 @@ def test_api_senior_submitter_needs_another_senior(api):
 
 
 def test_me_and_health_report_identity_and_the_rule(api):
-    assert api.get("/me", headers=bearer("olga")).json() == {"name": "olga", "role": "operator"}
+    assert api.get("/me", headers=bearer("olga")).json() == {"name": "olga", "role": "operator", "tenant": "default"}
     assert api.get("/health").json()["four_eyes"] is True
 
 

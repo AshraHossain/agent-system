@@ -123,10 +123,10 @@ class Limits:
         self.write = make(config.write_per_min, config.write_burst)
         self.auth_fail = make(config.auth_fail_per_min, config.auth_fail_burst)
 
-    def check_principal(self, name: str, method: str) -> None:
+    def check_principal(self, name: str, method: str, tenant: str = "") -> None:
         """Per-identity limit: writes are costly (each starts background work), reads are cheap."""
         limiter = self.read if method in {"GET", "HEAD", "OPTIONS"} else self.write
-        if limiter and (wait := limiter.consume(name)):
+        if limiter and (wait := limiter.consume(f"{tenant}/{name}")):
             raise HTTPException(429, "rate limit exceeded", headers={"Retry-After": str(max(1, round(wait)))})
 
 
