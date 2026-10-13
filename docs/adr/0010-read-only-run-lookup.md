@@ -28,6 +28,6 @@ ADK's.
 * **Input.** `run_id` must match `[A-Za-z0-9_-]{1,128}` or the request is
   rejected with 422 before any lookup.
 
-**Not solved:** there is still no authentication. `opspilot serve` binds
-loopback by default and warns on any other host; sharing it needs the auth
-item in `TASK.md` first. There is no listing route and no pagination.
+**Not solved:** there is no listing route and no pagination. Authentication was
+added afterwards by [ADR-0012](0012-bearer-token-authentication.md); this decision
+originally shipped without it.

@@ -117,6 +117,6 @@ live model would investigate real incidents.
 4. Decide whether to keep the Incident Analyst as an LLM; if live runs show no
    gain over the rule ranking, make it deterministic and use the LLM only for
    explanation.
-5. Before any shared deployment: authentication, managed session DB,
-   encryption at rest, secret manager, OTel export, real read-only data
-   integrations.
+5. Before any shared deployment: per-user identity, roles and TLS (a shared
+   bearer token exists, ADR-0012), managed session DB, encryption at rest,
+   secret manager, OTel export, real read-only data integrations.

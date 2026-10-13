@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from opspilot.core.auth import parse_digests
 from opspilot.core.cost import PriceTable, load_price_table
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -114,6 +115,8 @@ class Settings:
     limits: Limits = field(default_factory=Limits)
     prices: PriceTable | None = None
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    # SHA-256 digests of the bearer tokens `opspilot serve` accepts; empty = no authentication.
+    api_token_digests: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -130,6 +133,7 @@ class Settings:
             default_dataset=os.getenv("OPSPILOT_DEFAULT_DATASET", cls.default_dataset),
             limits=Limits.from_env(),
             embedding=EmbeddingConfig.from_env(),
+            api_token_digests=parse_digests(os.getenv("OPSPILOT_API_TOKEN_SHA256")),
             prices=load_price_table(Path(table))
             if (table := os.getenv("OPSPILOT_PRICE_TABLE"))
             else None,
