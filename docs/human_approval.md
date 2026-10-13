@@ -97,7 +97,9 @@ authentication.
 
 - **Store.** `PersistentStore` opens one SQLite file holding LangGraph's
   `SqliteSaver` tables and an `netpulse_audit` table. The audit table is
-  append-only, enforced by `UPDATE`/`DELETE` triggers.
+  append-only against accidents (`UPDATE`/`DELETE` triggers) and tamper-evident against
+  edits to the file: each row is chained to the previous one with an HMAC keyed by
+  `NETPULSE_AUDIT_KEY` (see `docs/security.md` and `docs/operations.md`).
 - **Restart.** A paused run is a checkpoint with a pending interrupt.
   `tests/test_human_approval.py::test_pause_survives_process_restart` starts
   an investigation in one OS process and approves it from a **different**

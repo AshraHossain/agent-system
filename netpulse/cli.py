@@ -103,14 +103,32 @@ def main(argv: list[str] | None = None) -> int:
     rv.add_argument("--comment", default="")
     rv.add_argument("--json", action="store_true")
 
+    av = sub.add_parser("audit-verify", help="verify the audit log hash chain (exit 1 if it was tampered with)")
+    av.add_argument("--expect-head", help="recorded head <seq>:<hash>; also detects truncation of the newest rows")
+
     args = parser.parse_args(argv)
     configure_logging(level=os.environ.get("NETPULSE_LOG_LEVEL", "WARNING"))
     apply_tracing_policy()
-    store = PersistentStore(args.db)
     try:
+        store = PersistentStore(args.db)
+    except ValueError as exc:
+        parser.error(str(exc))
+    try:
+        if args.command == "audit-verify":
+            return _audit_verify(store, args.expect_head)
         return _run(parser, args, store)
     finally:
         store.close()
+
+
+def _audit_verify(store: PersistentStore, expected_head: str | None) -> int:
+    result = store.verify_audit(expected_head)
+    if not result.keyed:
+        print("warning: NETPULSE_AUDIT_KEY is not set; an unkeyed chain cannot stop someone who can rewrite the file")
+    status = "OK" if result.ok else f"FAILED: {result.error}"
+    print(f"audit chain {status} ({result.rows} rows, {result.legacy_rows} legacy unchained)")
+    print(f"head: {result.head or 'none'}")
+    return 0 if result.ok else 1
 
 
 def _run(parser: argparse.ArgumentParser, args: argparse.Namespace, store: PersistentStore) -> int:

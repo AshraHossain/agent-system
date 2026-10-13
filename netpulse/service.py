@@ -169,5 +169,14 @@ class InvestigationService:
         self._audit(incident_id, "resumed", "system", {"next": current.next_nodes})
         return self._drive(incident_id, None)
 
+    @property
+    def audit_keyed(self) -> bool:
+        return bool(self.store and self.store.keyed)
+
+    def audit_verify(self, expected_head: str | None = None):
+        if self.store is None:
+            raise ToolInputError("the audit log is only kept with a persistent store")
+        return self.store.verify_audit(expected_head)
+
     def audit_log(self, incident_id: str) -> list[dict[str, Any]]:
         return self.store.audit_log(incident_id) if self.store else []

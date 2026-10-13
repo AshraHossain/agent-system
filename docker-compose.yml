@@ -9,6 +9,7 @@ x-netpulse: &netpulse
   build: .
   environment: &netpulse-env
     NETPULSE_API_TOKENS: ${NETPULSE_API_TOKENS:?set NETPULSE_API_TOKENS in .env (token:role:name,...)}
+    NETPULSE_AUDIT_KEY: ${NETPULSE_AUDIT_KEY:?set NETPULSE_AUDIT_KEY in .env (32+ random characters)}
     NETPULSE_LLM_PROVIDER: ${NETPULSE_LLM_PROVIDER:-heuristic}
     NETPULSE_OLLAMA_URL: ${NETPULSE_OLLAMA_URL:-http://ollama:11434}
     NETPULSE_LOG_LEVEL: ${NETPULSE_LOG_LEVEL:-INFO}

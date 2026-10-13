@@ -59,7 +59,8 @@ uv run netpulse review --incident case-04 --reviewer alice --role operator --cho
 uv run python -m synthgen.generate --check            # verify committed synthetic data
 uv run python -m eval.detection_benchmark             # detector precision/recall
 uv run python -m eval.report --provider heuristic --check   # full evaluation + regression gate
-uv run uvicorn netpulse.api.main:app --port 8000      # needs NETPULSE_API_TOKENS
+uv run uvicorn netpulse.api.main:app --port 8000      # needs NETPULSE_API_TOKENS and NETPULSE_AUDIT_KEY
+uv run netpulse audit-verify                          # verify the audit hash chain
 uv run streamlit run netpulse/ui/app.py               # talks to the API only
 NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ollama server
 ```

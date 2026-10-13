@@ -11,6 +11,7 @@ Endpoints:
 | `GET /incidents/{id}/evidence` | viewer | the evidence registry and telemetry/topology references |
 | `POST /incidents/{id}/approval` | operator | approve / reject / request more investigation |
 | `POST /incidents/{id}/resume` | operator | continue a run that stalled outside an approval pause |
+| `GET /audit/verify` | senior_operator | verify the audit hash chain (`?expected_head=seq:hash` detects truncation) |
 | `GET /eval/reports` | viewer | list evaluation reports (written by `python -m eval.report`) |
 | `GET /eval/reports/{name}` | viewer | one report as JSON |
 
@@ -33,6 +34,7 @@ from netpulse.api.auth import API_ROLE_RANK, Principal, TokenStore, principal_de
 from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry
 from netpulse.api.schemas import (
     ApprovalRequest,
+    AuditVerifyResponse,
     EvidenceResponse,
     HealthResponse,
     IncidentCreateRequest,
@@ -63,12 +65,16 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
     get_principal = principal_dependency(tokens)
     viewer = require_role("viewer")
     operator = require_role("operator")
+    senior = require_role("senior_operator")
 
     def principal_viewer(p: Principal = Depends(get_principal)) -> Principal:
         return viewer(p)
 
     def principal_operator(p: Principal = Depends(get_principal)) -> Principal:
         return operator(p)
+
+    def principal_senior(p: Principal = Depends(get_principal)) -> Principal:
+        return senior(p)
 
     for exc_type, status_code in [
         (ToolInputError, 400),
@@ -88,7 +94,9 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        return HealthResponse(status="ok", durable=service.durable, data_notice=SYNTHETIC_DATA_NOTICE)
+        return HealthResponse(
+            status="ok", durable=service.durable, audit_keyed=service.audit_keyed, data_notice=SYNTHETIC_DATA_NOTICE
+        )
 
     # ------------------------------------------------------------- incidents
 
@@ -209,6 +217,17 @@ def create_app(service: InvestigationService, tokens: TokenStore, max_workers: i
         except JobInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return JobAccepted(incident_id=incident_id, job_state=registry.state(incident_id) or "queued")
+
+    # ----------------------------------------------------------------- audit
+
+    @app.get("/audit/verify", response_model=AuditVerifyResponse)
+    def audit_verify(expected_head: str | None = None, _: Principal = Depends(principal_senior)):
+        """Re-verify the audit hash chain. ``expected_head`` (``seq:hash``) also detects truncated tails."""
+        result = service.audit_verify(expected_head)
+        return AuditVerifyResponse(
+            ok=result.ok, rows=result.rows, legacy_rows=result.legacy_rows, keyed=result.keyed,
+            head=result.head, error=result.error, first_bad_seq=result.first_bad_seq,
+        )  # fmt: skip
 
     # ------------------------------------------------------------------ eval
 

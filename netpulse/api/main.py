@@ -6,6 +6,7 @@
 |---|---|---|
 | ``NETPULSE_DB`` | ``.netpulse/netpulse.db`` | SQLite checkpoints + audit log |
 | ``NETPULSE_API_TOKENS`` | *(none — refuses to start)* | ``token:role:name,...``; see docs/human_approval.md |
+| ``NETPULSE_AUDIT_KEY`` | *(none — refuses to start)* | HMAC key (32+ chars) for the audit hash chain |
 | ``NETPULSE_API_WORKERS`` | ``4`` | background job threads |
 | ``NETPULSE_API_DOCS`` | ``false`` | serve ``/docs`` and ``/openapi.json`` (unauthenticated) |
 | ``NETPULSE_DATA_DIR``, ``NETPULSE_LLM_PROVIDER``, … | see ``netpulse/config.py`` | dataset and LLM provider |
@@ -45,8 +46,14 @@ def build_app():
             f"NETPULSE_API_TOKENS has weak or placeholder tokens for: {', '.join(weak)}. "
             "Use at least 16 random characters each (python -c 'import secrets; print(secrets.token_urlsafe(24))')."
         )
+    audit_key = os.environ.get("NETPULSE_AUDIT_KEY")
+    if not audit_key:
+        raise RuntimeError(
+            "NETPULSE_AUDIT_KEY is not set. It keys the audit hash chain and must stay outside the database: "
+            "python -c 'import secrets; print(secrets.token_urlsafe(48))'"
+        )
     db = Path(os.environ.get("NETPULSE_DB", DEFAULT_DB))
-    store = PersistentStore(db)
+    store = PersistentStore(db, audit_key=audit_key)
     service = InvestigationService(Deps.default(), store)
     workers = int(os.environ.get("NETPULSE_API_WORKERS", "4"))
     docs = os.environ.get("NETPULSE_API_DOCS", "false").strip().lower() in {"1", "true", "yes", "on"}

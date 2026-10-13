@@ -38,6 +38,7 @@ uv run python -m eval.report --provider heuristic --check   # evaluation report 
 API and UI (set tokens first; see [docs/operations.md](docs/operations.md)), or `docker compose up --build`:
 
 ```bash
+export NETPULSE_AUDIT_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export NETPULSE_API_TOKENS='dev-operator-token-0001:operator:olga,dev-senior-token-00002:senior_operator:sam,dev-viewer-token-00003:viewer:vic'
 uv run uvicorn netpulse.api.main:app --port 8000
 NETPULSE_UI_TOKEN=dev-operator-token-0001 uv run streamlit run netpulse/ui/app.py

@@ -23,20 +23,28 @@ code, unless marked "not verified".
 
 Each has a test in `tests/test_security.py`.
 
+## Fixed after the review: audit log integrity
+
+The append-only triggers stopped accidents, not an attacker with file access (dropping the trigger and rewriting `actor`
+took one statement). The audit log is now an HMAC-SHA256 hash chain keyed by `NETPULSE_AUDIT_KEY`, which lives outside
+the database (`docs/security.md`). Rewriting, deleting, inserting or reordering a row is detected by
+`GET /audit/verify` (senior operators) or `netpulse audit-verify`, including by an attacker who recomputes every later
+hash without the key. **Residual risk:** deleting the newest rows leaves a valid shorter chain, so it is detected only
+against a head (`seq:hash`) you recorded elsewhere; and anyone holding the key can forge a chain. Nothing yet records
+the head automatically or verifies on a schedule; that is an operational task.
+
 ## Open: blocking for real use
 
-1. **Audit log is not tamper-evident.** The append-only triggers stop accidents, not an attacker with file access:
-   dropping the trigger and rewriting `actor` took one statement. Needs a keyed hash chain or an external append-only sink.
-2. **Static bearer tokens.** No expiry, rotation, revocation, per-user identity provider, or lockout. Tokens live in an
+1. **Static bearer tokens.** No expiry, rotation, revocation, per-user identity provider, or lockout. Tokens live in an
    environment variable. Use OIDC or a gateway that injects identity.
-3. **No transport security or rate limiting.** The API and UI speak plain HTTP and Compose binds to 127.0.0.1 only for that
+2. **No transport security or rate limiting.** The API and UI speak plain HTTP and Compose binds to 127.0.0.1 only for that
    reason. Put TLS, request-size limits (a 5 MB body is parsed before validation) and rate limits in a reverse proxy.
-4. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller. The API derives the role
+3. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller. The API derives the role
    from the token; the CLI should not be reachable by anyone who must not approve.
-5. **No separation of duties.** The submitter can approve their own incident (`submitted_by` is never compared with the
+4. **No separation of duties.** The submitter can approve their own incident (`submitted_by` is never compared with the
    reviewer). Whether to require a second person is a policy decision for you.
-6. **No tenancy.** Any viewer can read every incident. Single-team only.
-7. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
+5. **No tenancy.** Any viewer can read every incident. Single-team only.
+6. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
    deletion, no backup procedure. Running `uvicorn --workers N` would split job state across processes. Upgrading
    LangGraph may invalidate stored checkpoints.
 

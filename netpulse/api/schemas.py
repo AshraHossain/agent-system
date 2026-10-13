@@ -72,4 +72,15 @@ class EvidenceResponse(_Model):
 class HealthResponse(_Model):
     status: str
     durable: bool
+    audit_keyed: bool
     data_notice: str
+
+
+class AuditVerifyResponse(_Model):
+    ok: bool
+    rows: int
+    legacy_rows: int
+    keyed: bool
+    head: str | None
+    error: str | None = None
+    first_bad_seq: int | None = None
