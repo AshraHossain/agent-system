@@ -16,7 +16,7 @@ Endpoints:
 | `GET /eval/reports` | viewer | list evaluation reports (written by `python -m eval.report`) |
 | `GET /eval/reports/{name}` | viewer | one report as JSON |
 
-Every mutating endpoint (`POST`) enqueues work on a background job registry
+Every mutating endpoint (`POST`) enqueues work on a durable, database-backed job queue
 and returns 202 immediately; the caller polls `GET /incidents/{id}`. A
 request's claimed reviewer identity and role are **never** read from the
 body — they come only from the authenticated bearer token (`auth.py`).
@@ -25,6 +25,8 @@ body — they come only from the authenticated bearer token (`auth.py`).
 from __future__ import annotations
 
 import json
+import sqlite3
+import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,9 +35,9 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from netpulse.api.auth import Principal, TokenStore, principal_dependency, require_role
+from netpulse.api.jobs import JobInFlightError, JobQueue, JobQueueFullError
 from netpulse.api.oidc import OidcVerifier
 from netpulse.api.protection import EdgeProtectionMiddleware, Limits, Protection
-from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry
 from netpulse.api.schemas import (
     ApprovalRequest,
     AuditVerifyResponse,
@@ -50,6 +52,7 @@ from netpulse.api.schemas import (
 from netpulse.api.tenancy import PLATFORM_TENANT, DatasetPolicy, scope_incident_id
 from netpulse.errors import DataCorruptError, DataNotFoundError, ToolInputError
 from netpulse.models import SYNTHETIC_DATA_NOTICE, ReviewInput
+from netpulse.persistence.migrations import migrate
 from netpulse.service import AuthorizationError, InvestigationService
 
 
@@ -62,6 +65,44 @@ class IncidentRef:
 EVAL_REPORTS_DIR = Path(__file__).resolve().parents[2] / "eval" / "reports"
 
 
+def _build_queue(service: InvestigationService, workers: int, lease_seconds: float) -> JobQueue:
+    """The job queue lives in the same database as the checkpoints, so every process on the host shares it."""
+    if service.store is not None:
+        conn, lock = service.store.conn, service.store.lock
+    else:  # in-memory service (tests, demos): a private queue database, not shared with anything
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
+        migrate(conn)
+        lock = threading.Lock()
+
+    def start(key: str, payload: dict, attempt: int) -> None:
+        if attempt > 1:  # an earlier attempt's worker was lost; continue from whatever it checkpointed
+            try:
+                service.status(key)
+            except DataNotFoundError:
+                pass
+            else:
+                service.resume(key)
+                return
+        service.start(
+            payload["submission"],
+            submitted_at=payload["submitted_at"],
+            incident_id=key,
+            submitted_by=payload["submitted_by"],
+        )
+
+    def decide(key: str, payload: dict, attempt: int) -> None:
+        if attempt > 1 and service.status(key).pending_review is None:
+            service.resume(key)  # the earlier attempt got the decision in; carry on from the checkpoint
+            return
+        service.decide(key, ReviewInput.model_validate(payload["review"]))
+
+    def resume(key: str, payload: dict, attempt: int) -> None:
+        service.resume(key)
+
+    handlers = {"start": start, "decide": decide, "resume": resume}
+    return JobQueue(conn, lock, handlers, workers=workers, lease_seconds=lease_seconds)
+
+
 def create_app(
     service: InvestigationService,
     tokens: TokenStore | OidcVerifier,
@@ -69,6 +110,7 @@ def create_app(
     docs: bool = True,
     protection: Protection | None = None,
     datasets: DatasetPolicy | None = None,
+    lease_seconds: float = 60.0,
 ) -> FastAPI:
     app = FastAPI(
         title="NetPulse AI API",
@@ -78,9 +120,9 @@ def create_app(
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,
     )
-    registry = JobRegistry(max_workers=max_workers)
+    queue = _build_queue(service, max_workers, lease_seconds)
     app.state.service = service
-    app.state.registry = registry
+    app.state.queue = queue
     limits = Limits(protection or Protection())
     app.state.limits = limits
     app.add_middleware(EdgeProtectionMiddleware, limits=limits)
@@ -164,17 +206,16 @@ def create_app(
             pass
         else:  # never let a resubmission overwrite another run's job record
             raise HTTPException(status_code=409, detail=f"incident {ref.external!r} already exists")
-        submission = body.submission.model_dump(mode="json")
-        submitted_at = service.deps.clock().isoformat()
-
-        def job() -> None:
-            service.start(submission, submitted_at=submitted_at, incident_id=ref.key, submitted_by=principal.name)
-
+        payload = {
+            "submission": body.submission.model_dump(mode="json"),
+            "submitted_at": service.deps.clock().isoformat(),
+            "submitted_by": principal.name,
+        }
         try:
-            registry.submit(ref.key, job, group=principal.tenant)
+            queue.submit(ref.key, "start", payload, tenant=principal.tenant)
         except JobInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return JobAccepted(incident_id=ref.external, job_state=registry.state(ref.key) or "queued")
+        return JobAccepted(incident_id=ref.external, job_state=queue.state(ref.key) or "queued")
 
     @app.get("/me", response_model=MeResponse)
     def me(principal: Principal = Depends(principal_viewer)) -> MeResponse:
@@ -185,7 +226,7 @@ def create_app(
     def incident_status(
         ref: IncidentRef = Depends(incident_ref), _: Principal = Depends(principal_viewer)
     ) -> IncidentStatusResponse:
-        job_state = registry.state(ref.key)
+        job_state = queue.state(ref.key)
         try:
             status = service.status(ref.key)
         except DataNotFoundError:
@@ -199,7 +240,7 @@ def create_app(
                 pending_review=None,
                 next_nodes=[],
                 durable=service.durable,
-                error=registry.error(ref.key),
+                error=queue.error(ref.key),
             )
         return IncidentStatusResponse(
             incident_id=ref.external,
@@ -209,7 +250,7 @@ def create_app(
             pending_review=outward(status.pending_review, ref),
             next_nodes=status.next_nodes,
             durable=status.durable,
-            error=registry.error(ref.key),
+            error=queue.error(ref.key),
         )
 
     @app.get("/incidents/{incident_id}/results", response_model=ResultsResponse)
@@ -262,14 +303,11 @@ def create_app(
         )
         service.authorize_review(ref.key, review)  # role and four-eyes: refuse now (403), not in the background
 
-        def job() -> None:
-            service.decide(ref.key, review)
-
         try:
-            registry.submit(ref.key, job, group=principal.tenant)
+            queue.submit(ref.key, "decide", {"review": review.model_dump(mode="json")}, tenant=principal.tenant)
         except JobInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return JobAccepted(incident_id=ref.external, job_state=registry.state(ref.key) or "queued")
+        return JobAccepted(incident_id=ref.external, job_state=queue.state(ref.key) or "queued")
 
     @app.post("/incidents/{incident_id}/resume", response_model=JobAccepted, status_code=202)
     def resume_incident(ref: IncidentRef = Depends(incident_ref), principal: Principal = Depends(principal_operator)):
@@ -277,14 +315,11 @@ def create_app(
         if status.pending_review is not None:
             raise HTTPException(status_code=409, detail="incident is awaiting a reviewer decision; use /approval")
 
-        def job() -> None:
-            service.resume(ref.key)
-
         try:
-            registry.submit(ref.key, job, group=principal.tenant)
+            queue.submit(ref.key, "resume", {}, tenant=principal.tenant)
         except JobInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return JobAccepted(incident_id=ref.external, job_state=registry.state(ref.key) or "queued")
+        return JobAccepted(incident_id=ref.external, job_state=queue.state(ref.key) or "queued")
 
     # ----------------------------------------------------------------- audit
 
@@ -319,8 +354,12 @@ def create_app(
             raise HTTPException(status_code=404, detail="no such evaluation report")
         return json.loads(known[name].read_text())
 
+    @app.on_event("startup")
+    def _startup() -> None:
+        queue.start()  # also recovers jobs left queued, or abandoned by a crashed process
+
     @app.on_event("shutdown")
     def _shutdown() -> None:
-        registry.shutdown()
+        queue.stop()
 
     return app

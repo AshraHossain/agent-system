@@ -19,6 +19,7 @@ x-netpulse: &netpulse
     NETPULSE_TENANT_DATASETS: ${NETPULSE_TENANT_DATASETS:-}
     NETPULSE_AUDIT_KEY: ${NETPULSE_AUDIT_KEY:?set NETPULSE_AUDIT_KEY in .env (32+ random characters)}
     NETPULSE_FOUR_EYES: ${NETPULSE_FOUR_EYES:-on}
+    NETPULSE_JOB_LEASE_SECONDS: ${NETPULSE_JOB_LEASE_SECONDS:-60}
     NETPULSE_LLM_PROVIDER: ${NETPULSE_LLM_PROVIDER:-heuristic}
     NETPULSE_OLLAMA_URL: ${NETPULSE_OLLAMA_URL:-http://ollama:11434}
     NETPULSE_LOG_LEVEL: ${NETPULSE_LOG_LEVEL:-INFO}
@@ -28,7 +29,7 @@ services:
   api:
     <<: *netpulse
     # uvicorn trusts X-Forwarded-For / -Proto only from FORWARDED_ALLOW_IPS (the proxy's fixed address below).
-    command: ["uvicorn", "netpulse.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    command: ["uvicorn", "netpulse.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--workers", "${NETPULSE_PROCESSES:-1}"]
     environment:
       <<: *netpulse-env
       FORWARDED_ALLOW_IPS: 172.28.0.10

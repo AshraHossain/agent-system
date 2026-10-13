@@ -73,20 +73,43 @@ the SQLite file, logs and the audit chain hold every tenant's data, so the platf
 no per-tenant encryption or backup; no per-tenant quotas beyond the queue cap; tenant membership is only as trustworthy as
 the IdP claim; the CLI is a platform tool and can address any raw key; the eval reports are shared.
 
+## Fixed after the review: running more than one process
+
+The in-memory job registry was the reason `uvicorn --workers N` broke. Measured with 3 workers before the fix: the same
+incident reported `job_state` as `None`, `running` or `done` depending on which worker answered, and 8 simultaneous
+identical submissions were accepted **three times** (once per worker), two of which then failed inside a worker.
+Jobs now live in the database: every process reports the same state, the database enforces one active job per incident
+atomically, work queued when a process exits is picked up by the next one, and a job whose worker was killed is
+re-claimed after a lease expires and continued from its checkpoint. After the fix, with the same 3 workers: consistent state,
+exactly one acceptance per round, no worker failures; and with 25 jobs in flight, `kill -9` of the whole server tree
+(6 running, 13 queued) was followed by a restart that completed all 25 with no errors and an intact audit chain.
+Also added: versioned schema migrations (safe when many processes start at once), an online verified backup
+(`netpulse backup`), and retention (`netpulse prune`, which never touches the audit log). Details in `docs/operations.md`.
+**Residual risk:** one host only (below); rate limits and the failed-auth lockout are still per process, so with N
+processes the effective limits are about N times higher; the migrations cover NetPulse's own tables, but a LangGraph
+upgrade that changes its checkpoint format is not handled; a crash between the audit write and the first checkpoint can
+repeat a `submitted` audit row; a worker that hangs without dying keeps its lease (heartbeats continue), so a stuck job
+is not recovered; backups hold every tenant's data.
+
 ## Open: blocking for real use
 
 1. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller, and the audit records
    whatever `--reviewer` says. Anyone with the CLI and the database already holds the keys to the data, so treat it as an
    administrator tool and keep it off machines whose users must not approve. The API derives role and identity from the
    validated token.
-2. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
-   deletion, no backup procedure. Running `uvicorn --workers N` would split job state across processes. Upgrading
-   LangGraph may invalidate stored checkpoints.
+
+Everything else that was blocking is fixed or has a stated residual risk above; this CLI item remains.
+
+## Open: only if you need more than one host
+
+**One host is the limit.** SQLite's locking is safe between processes on the same machine and local disk, not across
+machines or on a network filesystem, and its WAL cannot span hosts. Running replicas on several hosts, or high
+availability if the database host dies, needs a different database (for example Postgres with LangGraph's Postgres
+checkpointer and a `FOR UPDATE SKIP LOCKED` queue). That is **not implemented**; the queue and migration code are the
+seams where it would plug in.
 
 ## Open: should fix
 
-- **Queued work is lost on restart.** A job that never reached its first checkpoint disappears (404 afterwards). A run
-  interrupted mid-flight is not resumed automatically; an operator must call `/resume`.
 - **Timed-out nodes keep running.** Python threads cannot be killed (documented in `graph/wrapper.py`), so a hung Ollama call
   leaks a thread per timeout.
 - **Supply chain.** Actions are pinned by tag, not commit SHA; Docker base images are not pinned by digest;

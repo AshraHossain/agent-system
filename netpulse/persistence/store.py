@@ -1,9 +1,11 @@
-"""SQLite persistence for checkpoints (LangGraph ``SqliteSaver``) and an append-only audit log.
+"""SQLite persistence: LangGraph checkpoints, a hash-chained audit log, and the durable job queue.
 
-One database file holds both. SQLite allows a single writer at a time, so one
-process should own the file (see docs/human_approval.md and ADR-0004). The
-database contains incident data and reviewer identities, so treat it as
-sensitive.
+One database file holds all three. Several processes on **one host** may open it at once: WAL mode lets readers
+proceed during a write, writers queue on SQLite's file lock (``busy_timeout``), every multi-statement change runs in
+``BEGIN IMMEDIATE``, and the job queue lives in the database rather than in any process's memory. The file must be on
+local disk: SQLite's locking is not safe on network filesystems, and WAL cannot span hosts. Running on more than one
+host needs a different database (see docs/operations.md). The file contains incident data and reviewer identities, so
+treat it as sensitive.
 """
 
 from __future__ import annotations
@@ -18,24 +20,13 @@ from typing import Any
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from netpulse.persistence.audit_chain import GENESIS, MIN_KEY_LENGTH, AuditVerification, row_hash, verify_rows
+from netpulse.persistence.migrations import migrate
 
-AUDIT_SCHEMA = """
-CREATE TABLE IF NOT EXISTS netpulse_audit (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    incident_id TEXT NOT NULL,
-    event TEXT NOT NULL,
-    actor TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    at TEXT NOT NULL,
-    prev_hash TEXT,
-    row_hash TEXT
-);
-CREATE INDEX IF NOT EXISTS netpulse_audit_incident ON netpulse_audit (incident_id, seq);
-CREATE TRIGGER IF NOT EXISTS netpulse_audit_no_update BEFORE UPDATE ON netpulse_audit
-BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS netpulse_audit_no_delete BEFORE DELETE ON netpulse_audit
-BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
-"""
+_LANGGRAPH_DELETES = {
+    "checkpoints": "DELETE FROM checkpoints WHERE thread_id = ?",
+    "writes": "DELETE FROM writes WHERE thread_id = ?",
+}
+BUSY_TIMEOUT_SECONDS = 30.0  # how long a writer waits for another process's write lock
 
 
 def _resolve_key(audit_key: bytes | str | None) -> bytes | None:
@@ -60,19 +51,20 @@ class PersistentStore:
         self._audit_key = _resolve_key(audit_key)
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
+        self.conn = sqlite3.connect(str(self.path), check_same_thread=False, timeout=BUSY_TIMEOUT_SECONDS)
         os.chmod(self.path, 0o600)  # incident data and reviewer identities; WAL/SHM files inherit this mode
+        self.conn.execute(f"PRAGMA busy_timeout = {int(BUSY_TIMEOUT_SECONDS * 1000)}")
         self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.executescript(AUDIT_SCHEMA)
-        columns = {r[1] for r in self.conn.execute("PRAGMA table_info(netpulse_audit)")}
-        for column in ("prev_hash", "row_hash"):  # databases created before the chain existed
-            if column not in columns:
-                self.conn.execute(f"ALTER TABLE netpulse_audit ADD COLUMN {column} TEXT")
-        self.conn.commit()
+        migrate(self.conn)
         self.checkpointer = SqliteSaver(self.conn)
         # One connection is shared by the saver and the audit log. Both must take the saver's lock, otherwise one
         # thread's commit lands inside another's transaction ("cannot commit - no transaction is active").
         self._lock = self.checkpointer.lock
+
+    @property
+    def lock(self):
+        """Serializes every use of ``conn`` within this process (the job queue shares it)."""
+        return self._lock
 
     @property
     def keyed(self) -> bool:
@@ -104,11 +96,67 @@ class PersistentStore:
     def verify_audit(self, expected_head: str | None = None) -> AuditVerification:
         """Verify the whole chain. Pass a previously recorded head (``seq:hash``) to also detect tail truncation."""
         with self._lock:
-            rows = self.conn.execute(
-                "SELECT seq, incident_id, event, actor, payload, at, prev_hash, row_hash "
-                "FROM netpulse_audit ORDER BY seq"
-            ).fetchall()
+            rows = _audit_rows(self.conn)
         return verify_rows(rows, self._audit_key, expected_head)
+
+    def backup(self, destination: Path | str) -> AuditVerification:
+        """Write a consistent online snapshot to ``destination`` and verify the audit chain *in the copy*.
+
+        Safe while the service is running and other processes are writing (SQLite's backup API reads a snapshot).
+        Refuses to overwrite. The copy is written beside the target and renamed into place, so a crash never leaves
+        a half-written file under the final name. The caller must treat a failed verification as a failed backup.
+        """
+        dest = Path(destination)
+        if dest.exists():
+            raise FileExistsError(f"{dest} already exists; refusing to overwrite a backup")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        partial = dest.with_name(dest.name + ".partial")
+        partial.unlink(missing_ok=True)
+        target = sqlite3.connect(str(partial))
+        try:
+            with self._lock:
+                self.conn.backup(target)
+            os.chmod(partial, 0o600)
+            result = verify_rows(_audit_rows(target), self._audit_key)
+        finally:
+            target.close()
+        os.replace(partial, dest)
+        return result
+
+    def prune(self, before: datetime, *, dry_run: bool = False) -> list[str]:
+        """Delete checkpoints and job records of incidents that *finished* before ``before``.
+
+        Never touches the audit log: its hash chain must stay contiguous, and the audit is the long-term record.
+        An incident counts as finished only if its most recent audit event is ``run_finished``, so paused,
+        running and stalled incidents are never removed. Returns the pruned incident keys.
+        """
+        cutoff = before.isoformat()
+        with self._lock:
+            finished = [
+                row[0]
+                for row in self.conn.execute(
+                    "SELECT incident_id FROM netpulse_audit a WHERE event = 'run_finished' AND at < ? "
+                    "AND seq = (SELECT MAX(seq) FROM netpulse_audit WHERE incident_id = a.incident_id)",
+                    (cutoff,),
+                )
+            ]
+            if dry_run or not finished:
+                return sorted(finished)
+            tables = {r[0] for r in self.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                for table, statement in _LANGGRAPH_DELETES.items():  # LangGraph's tables, created on first use
+                    if table in tables:
+                        self.conn.executemany(statement, [(k,) for k in finished])
+                self.conn.executemany(
+                    "DELETE FROM netpulse_jobs WHERE incident_key = ? AND state IN ('done', 'error')",
+                    [(k,) for k in finished],
+                )
+                self.conn.commit()
+            except BaseException:
+                self.conn.rollback()
+                raise
+        return sorted(finished)
 
     def audit_log(self, incident_id: str) -> list[dict[str, Any]]:
         with self._lock:
@@ -120,3 +168,9 @@ class PersistentStore:
 
     def close(self) -> None:
         self.conn.close()
+
+
+def _audit_rows(conn: sqlite3.Connection) -> list[tuple]:
+    return conn.execute(
+        "SELECT seq, incident_id, event, actor, payload, at, prev_hash, row_hash FROM netpulse_audit ORDER BY seq"
+    ).fetchall()

@@ -123,6 +123,8 @@ to one person.
 - **Crash recovery.** If a process dies mid-run, `resume()` continues from
   the last completed super-step without redoing earlier work. The test
   simulates this with a `BaseException` raised inside the generator.
+- **API-level recovery.** Under the API, each operation is a durable job with a lease (see `docs/operations.md`). If the
+  process dies mid-run, another process re-claims the job and continues from the last checkpoint.
 - **In-memory mode.** Without a store, `InMemorySaver` is used and
   `RunStatus.durable` is `False`. That mode is for tests and demos and **is
   not durable approval**.

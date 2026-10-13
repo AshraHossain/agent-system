@@ -1,6 +1,5 @@
 """Tenant isolation: incidents are namespaced per tenant, so one tenant cannot see or touch another's."""
 
-import threading
 import time
 
 import pytest
@@ -9,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from netpulse.api.app import create_app
 from netpulse.api.auth import TokenStore
-from netpulse.api.registry import JobQueueFullError, JobRegistry
 from netpulse.api.tenancy import DatasetPolicy, scope_incident_id, valid_tenant
 from netpulse.persistence.store import PersistentStore
 from netpulse.service import InvestigationService
@@ -74,18 +72,6 @@ def test_static_tokens_carry_an_optional_tenant():
     assert not single.multi_tenant and single.resolve("tok-0123456789abcdef").tenant == "default"
     with pytest.raises(ValueError, match="tenant"):
         TokenStore.parse("tok-0123456789abcdef:operator:x:Bad~Tenant")
-
-
-def test_registry_caps_each_tenants_share_of_the_queue():
-    gate = threading.Event()
-    reg = JobRegistry(max_workers=1, max_pending=10, max_pending_per_group=2)
-    reg.submit("acme~a", gate.wait, group="acme")
-    reg.submit("acme~b", gate.wait, group="acme")
-    with pytest.raises(JobQueueFullError, match="organization"):
-        reg.submit("acme~c", gate.wait, group="acme")
-    reg.submit("globex~a", gate.wait, group="globex")  # another tenant is unaffected
-    gate.set()
-    reg._pool.shutdown(wait=True)
 
 
 # ---------------------------------------------------------------- API

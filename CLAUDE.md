@@ -46,6 +46,8 @@ Development runs in approved phases. Read these before changing code:
   service, the API and the `human_approval` node.
 - **Tenants:** a client-supplied incident ID becomes a storage key only through `ref_for` / `scope_incident_id`
   (`netpulse/api/tenancy.py`). Never pass a raw path ID to the service.
+- **Jobs and schema:** background work goes through `JobQueue` (never an in-memory registry), and any table change is a new
+  entry in `persistence/migrations.py`, never an edit to a shipped one.
 - **Every output is labelled synthetic.** Never imply the system observed a
   real network.
 - **Code before `interrupt()` in `human_approval` must be side-effect free.**
@@ -65,6 +67,8 @@ uv run python -m eval.detection_benchmark             # detector precision/recal
 uv run python -m eval.report --provider heuristic --check   # full evaluation + regression gate
 uv run uvicorn netpulse.api.main:app --port 8000      # needs NETPULSE_API_TOKENS and NETPULSE_AUDIT_KEY
 uv run netpulse audit-verify                          # verify the audit hash chain
+uv run netpulse backup --to snap.db                   # online backup, verified in the copy
+uv run netpulse prune --older-than-days 90 --dry-run  # retention for finished incidents (never the audit log)
 uv run streamlit run netpulse/ui/app.py               # talks to the API only
 NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ollama server
 ```
@@ -81,7 +85,8 @@ NETPULSE_OLLAMA_TESTS=1 uv run pytest -m ollama       # opt-in: needs a local Ol
 | `netpulse/llm/` | Generator protocol; Ollama, heuristic, scripted and fallback generators; prompts; strict parsing |
 | `netpulse/graph/` | Nodes, verification, ranking, routing, wrapper (trace, timeouts, errors), builder, runner |
 | `netpulse/policy/` | `catalog.json` (static action allowlist) and `engine.py` (deterministic policy rules) |
-| `netpulse/persistence/`, `netpulse/service.py` | SQLite checkpoints and append-only audit; start/status/decide/resume service |
+| `netpulse/persistence/`, `netpulse/service.py` | SQLite checkpoints, hash-chained audit, versioned migrations; start/status/decide/resume service |
+| `netpulse/api/jobs.py` | Durable job queue in the database (leases, one active job per incident); shared by all processes |
 | `netpulse/api/`, `netpulse/ui/` | FastAPI service (token roles, background jobs); Streamlit UI that only calls the API |
 | `netpulse/observability.py` | JSON logging, secret redaction, tracing policy |
 | `synthgen/` | Dataset generator. **Ground truth, never imported by netpulse.** |

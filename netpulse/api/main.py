@@ -12,7 +12,8 @@
 | ``NETPULSE_OIDC_TENANT_CLAIM`` | *(none)* | claim naming the tenant; setting it enables multi-tenancy |
 | ``NETPULSE_TENANT_DATASETS`` | *(none)* | ``tenant=ds1,ds2;tenant2=*``: datasets each tenant may investigate |
 | ``NETPULSE_AUDIT_KEY`` | *(none — refuses to start)* | HMAC key (32+ chars) for the audit hash chain |
-| ``NETPULSE_API_WORKERS`` | ``4`` | background job threads |
+| ``NETPULSE_API_WORKERS`` | ``4`` | job worker threads **per process** |
+| ``NETPULSE_JOB_LEASE_SECONDS`` | ``60`` | how long a lost worker's job waits before another process takes it over |
 | ``NETPULSE_API_DOCS`` | ``false`` | serve ``/docs`` and ``/openapi.json`` (unauthenticated) |
 | ``NETPULSE_REQUIRE_HTTPS`` | ``true`` in oidc mode | refuse requests whose scheme is not https (``/health`` exempt) |
 | ``NETPULSE_ALLOWED_HOSTS`` | *(any)* | comma-separated Host header allowlist |

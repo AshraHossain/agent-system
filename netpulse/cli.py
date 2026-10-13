@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from netpulse.errors import ToolError
@@ -106,6 +107,13 @@ def main(argv: list[str] | None = None) -> int:
     av = sub.add_parser("audit-verify", help="verify the audit log hash chain (exit 1 if it was tampered with)")
     av.add_argument("--expect-head", help="recorded head <seq>:<hash>; also detects truncation of the newest rows")
 
+    bk = sub.add_parser("backup", help="write a consistent online snapshot of the database and verify its audit chain")
+    bk.add_argument("--to", type=Path, required=True, help="destination file (must not exist)")
+
+    pr = sub.add_parser("prune", help="delete checkpoints and job records of incidents finished before a cutoff")
+    pr.add_argument("--older-than-days", type=float, required=True)
+    pr.add_argument("--dry-run", action="store_true", help="list what would be removed without removing it")
+
     args = parser.parse_args(argv)
     configure_logging(level=os.environ.get("NETPULSE_LOG_LEVEL", "WARNING"))
     apply_tracing_policy()
@@ -116,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "audit-verify":
             return _audit_verify(store, args.expect_head)
+        if args.command == "backup":
+            return _backup(store, args.to)
+        if args.command == "prune":
+            return _prune(store, args.older_than_days, args.dry_run)
         return _run(parser, args, store)
     finally:
         store.close()
@@ -129,6 +141,28 @@ def _audit_verify(store: PersistentStore, expected_head: str | None) -> int:
     print(f"audit chain {status} ({result.rows} rows, {result.legacy_rows} legacy unchained)")
     print(f"head: {result.head or 'none'}")
     return 0 if result.ok else 1
+
+
+def _backup(store: PersistentStore, destination: Path) -> int:
+    try:
+        result = store.backup(destination)
+    except FileExistsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    status = "audit chain verified in the copy" if result.ok else f"AUDIT CHAIN FAILED in the copy: {result.error}"
+    print(f"backup written to {destination} ({result.rows} audit rows); {status}")
+    return 0 if result.ok else 1
+
+
+def _prune(store: PersistentStore, days: float, dry_run: bool) -> int:
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    pruned = store.prune(cutoff, dry_run=dry_run)
+    verb = "would remove" if dry_run else "removed"
+    print(f"{verb} checkpoints and job records for {len(pruned)} incident(s) finished before {cutoff:%Y-%m-%d %H:%M}Z")
+    for key in pruned:
+        print(f"  {key}")
+    print("the audit log is never pruned (its hash chain must stay contiguous)")
+    return 0
 
 
 def _run(parser: argparse.ArgumentParser, args: argparse.Namespace, store: PersistentStore) -> int:

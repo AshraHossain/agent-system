@@ -64,7 +64,7 @@ def test_tracked_keys_are_bounded_so_an_attacker_cannot_exhaust_memory():
 
 def drain(client: TestClient) -> None:
     """Let accepted background investigations finish before the app and its database are torn down."""
-    client.app.state.registry._pool.shutdown(wait=True)
+    assert client.app.state.queue.wait_idle(120)
 
 
 def make_client(tmp_path, clock=None, base_url="http://testserver", **config):

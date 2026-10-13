@@ -41,7 +41,8 @@ validates.
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | uvicorn: the only proxies whose `X-Forwarded-*` headers are believed |
 | `NETPULSE_UI_TOKEN_HEADER` | empty | UI: read the bearer token from this proxy-set header instead of a text box |
 | `NETPULSE_AUDIT_KEY` | none (API refuses to start) | HMAC key, 32+ characters, for the audit hash chain |
-| `NETPULSE_API_WORKERS` | 4 | background job threads |
+| `NETPULSE_API_WORKERS` | 4 | job worker threads **per process** |
+| `NETPULSE_JOB_LEASE_SECONDS` | 60 | how long a lost worker's job waits before another process takes it over |
 | `NETPULSE_API_DOCS` | `false` | serve unauthenticated `/docs` and `/openapi.json` |
 | `NETPULSE_DB` | `.netpulse/netpulse.db` | SQLite checkpoints + audit |
 | `NETPULSE_LLM_PROVIDER` | `ollama` | `ollama` or `heuristic` |
@@ -64,6 +65,47 @@ regression gate (`docs/evaluation.md`). Ollama tests are opt-in and not run in C
 
 SQLite suits a single host with a small worker pool. The in-flight job registry is per process, so run one API process
 per database.
+
+## Processes, durability and recovery
+
+Run as many API processes as you need **on one host** (`uvicorn ... --workers N`, or several containers sharing one
+volume on local disk). They share one SQLite file:
+
+- **Job queue in the database.** Each submit, approval and resume is a row in `netpulse_jobs`; worker threads in every
+  process claim rows. All processes report the same `job_state`, and the database refuses a second active job for an
+  incident (409) even when two requests reach different processes at the same instant.
+- **Queued work survives restarts.** Jobs are picked up by whichever process is running.
+- **A killed worker's job is recovered.** A running job holds a lease that its process renews every third of
+  `NETPULSE_JOB_LEASE_SECONDS`. If the process dies, another claims the job when the lease expires and continues from the
+  last checkpoint (the audit log shows a `resumed` event). After 3 lost workers the job is marked failed
+  ("abandoned"). A job that merely raises is failed, not retried. A worker that hangs without dying keeps renewing its
+  lease, so a hung job is not recovered.
+- **Capacity:** 100 queued or running jobs overall and 25 per tenant, counted across all processes.
+- **Per-process limits.** The request rate limits and the failed-authentication lockout are held in each process's memory,
+  so with N processes the effective limits are about N times those configured. Set them lower, or also limit at the proxy.
+- **Local disk only.** Never put the database on NFS or another network filesystem; do not run replicas on several hosts
+  against it. That needs a different database (see `docs/production_readiness.md`).
+- **Schema versions.** NetPulse's tables are migrated automatically at startup under the write lock, so a rolling restart
+  or `--workers N` cannot apply a migration twice. A database written by a *newer* NetPulse is refused. Roll back by
+  restoring a backup taken before the upgrade, not by running old code on a migrated file.
+
+### Backup, restore and retention
+
+```bash
+netpulse backup --to /backups/netpulse-$(date +%F).db     # online, consistent, owner-only, refuses to overwrite
+netpulse audit-verify --expect-head <seq:hash>             # run against a restored copy to prove the history is intact
+netpulse prune --older-than-days 90 --dry-run              # list, then run without --dry-run to delete
+```
+
+- `backup` is safe while the service runs and other processes write. It verifies the audit chain **in the copy** and exits
+  1 if it fails, so a failure is a failed backup. Copy it off the host; it contains every tenant's data and reviewer
+  identities. Keep `NETPULSE_AUDIT_KEY` separately: without it the chain cannot be verified.
+- **Restore:** stop the service, move the live `.db`, `.db-wal` and `.db-shm` files aside, copy the backup into place
+  (mode 600), start the service. Queued jobs in the backup run again; running ones are re-claimed after the lease.
+- **Retention:** `prune` deletes the checkpoints and job records of incidents whose last audit event is `run_finished` and
+  older than the cutoff. Paused, running and stalled incidents are never pruned. The audit log is never pruned (its hash
+  chain must stay contiguous), and it keeps the incident title and reviewer identities, so apply your own retention policy
+  to the audit and to backups.
 
 ## Multi-tenancy
 

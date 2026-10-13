@@ -121,7 +121,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from netpulse.api.app import create_app  # noqa: E402
 from netpulse.api.auth import Principal, TokenStore  # noqa: E402
-from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry  # noqa: E402
 from netpulse.persistence.store import PersistentStore  # noqa: E402
 from netpulse.service import InvestigationService  # noqa: E402
 
@@ -184,33 +183,6 @@ def test_resubmitting_an_existing_incident_is_refused_without_touching_its_job_r
         assert again.status_code == 409
         after = c.get("/incidents/inc-a", headers=auth).json()
         assert after["job_state"] == "done" and after["error"] is None
-
-
-def test_registry_bounds_queue_and_history_and_hides_internal_errors():
-    import threading
-
-    gate = threading.Event()
-    reg = JobRegistry(max_workers=1, max_pending=2, max_finished=3)
-    reg.submit("a", gate.wait)
-    reg.submit("b", gate.wait)
-    with pytest.raises(JobQueueFullError):
-        reg.submit("c", gate.wait)
-    with pytest.raises(JobInFlightError):
-        reg.submit("a", gate.wait)
-    gate.set()
-    reg._pool.shutdown(wait=True)
-    reg = JobRegistry(max_workers=1, max_pending=50, max_finished=3)
-    for i in range(10):
-        reg.submit(f"j{i}", lambda: None)
-        reg._pool.submit(lambda: None).result()
-    assert len(reg._jobs) <= 4
-
-    def boom() -> None:
-        raise RuntimeError("sqlite3 path /var/lib/secret.db is locked")
-
-    reg.submit("bad", boom)
-    reg._pool.submit(lambda: None).result()
-    assert reg.state("bad") == "error" and "secret.db" not in (reg.error("bad") or "")
 
 
 def test_database_file_is_owner_only(tmp_path):
