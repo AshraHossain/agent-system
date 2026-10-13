@@ -137,6 +137,9 @@ def print_outcome(out, *, case: dict | None = None, show_labels: bool = False) -
             f"tokens={m.total_tokens if m.total_tokens is not None else 'n/a (mock)'}, "
             f"est. cost={_cost(m)}"
         )
+        if m.cost_by_agent:
+            ranked = sorted(m.cost_by_agent.items(), key=lambda kv: -kv[1])
+            print(_wrap("cost by agent: " + ", ".join(f"{a} {c:.4f}" for a, c in ranked)))
         if m.investigation_rounds > 1:
             print(f"  rounds: {m.investigation_rounds} (retried: {', '.join(m.retried_stages)})")
     print(f"  session: {out.session_id} (resume with `opspilot resume {out.session_id}`)")

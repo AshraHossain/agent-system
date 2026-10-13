@@ -16,7 +16,7 @@
 ## Medium priority
 - [x] Optional bounded re-investigation loop (`LoopAgent`, max 2) — retries failed stages; off by default (`OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`)
 - [ ] Semantic embedder option (Gemini embeddings) with an offline cache
-- [x] Cost estimation from recorded tokens with configurable price table (`OPSPILOT_PRICE_TABLE`; per-agent cost still open)
+- [x] Cost estimation from recorded tokens with configurable price table (`OPSPILOT_PRICE_TABLE`), per run and per agent
 
 ## Low priority
 - [ ] OpenTelemetry exporter configuration example

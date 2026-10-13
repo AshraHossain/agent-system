@@ -17,6 +17,7 @@ from opspilot.adk import models as M
 from opspilot.adk.deterministic import metrics_from_counters
 from opspilot.adk.models import ScriptedLlm
 from opspilot.adk.plugins import BudgetPlugin, RunCounters
+from opspilot.adk.runtime import RunFaults
 from opspilot.config import Limits, Settings
 from opspilot.contracts.report import InvestigationStatus as S
 from opspilot.core.cost import (
@@ -160,15 +161,26 @@ def test_settings_load_the_table_named_by_the_environment(monkeypatch, tmp_path)
 # --- token accounting to metrics ---------------------------------------------------
 
 
-async def test_plugin_accumulates_usage_across_calls():
+async def test_plugin_accumulates_usage_across_calls_and_per_agent():
     plugin = BudgetPlugin(Limits(), {})
-    ctx = SimpleNamespace(invocation_id="inv", agent_name="telemetry_analyst")
-    for usage in (_usage(1000, 100, 1100), _usage(2000, 50, 2250)):
+    calls = [
+        ("telemetry_analyst", _usage(1000, 100, 1100)),
+        ("incident_analyst", _usage(2000, 50, 2250)),
+        ("telemetry_analyst", _usage(500, 25, 525)),
+    ]
+    for agent, usage in calls:
+        ctx = SimpleNamespace(invocation_id="inv", agent_name=agent)
         await plugin.after_model_callback(
             callback_context=ctx, llm_response=LlmResponse(usage_metadata=usage)
         )
     c = plugin.counters("inv")
-    assert (c.prompt_tokens, c.completion_tokens, c.total_tokens) == (3000, 150, 3350)
+    assert (c.prompt_tokens, c.completion_tokens, c.total_tokens) == (3500, 175, 3875)
+    assert c.usage_by_agent["telemetry_analyst"] == {
+        "prompt_tokens": 1500,
+        "completion_tokens": 125,
+        "total_tokens": 1625,
+    }
+    assert c.usage_by_agent["incident_analyst"]["total_tokens"] == 2250
 
 
 def test_metrics_carry_the_estimate(settings):
@@ -230,6 +242,90 @@ async def test_aborted_run_still_reports_the_tokens_it_spent(
     assert m.total_tokens and m.estimated_cost and m.estimated_cost > 0
 
 
+def _counters_for_two_agents():
+    c = RunCounters(prompt_tokens=3000, completion_tokens=150, total_tokens=3350)
+    c.usage_by_agent["telemetry_analyst"] = {
+        "prompt_tokens": 1000,
+        "completion_tokens": 50,
+        "total_tokens": 1250,  # 200 thinking tokens
+    }
+    c.usage_by_agent["incident_analyst"] = {
+        "prompt_tokens": 2000,
+        "completion_tokens": 100,
+        "total_tokens": 2100,
+    }
+    return c
+
+
+def test_metrics_split_tokens_and_cost_by_agent(settings):
+    live = replace(settings, provider="gemini", model="gemini-2.5-flash", prices=TABLE)
+    m = metrics_from_counters(_counters_for_two_agents(), live, {})
+    assert m.tokens_by_agent["telemetry_analyst"].total_tokens == 1250
+    assert m.tokens_by_agent["incident_analyst"].prompt_tokens == 2000
+    # Thinking tokens are billed as output per agent, exactly as for the run.
+    assert m.cost_by_agent["telemetry_analyst"] == pytest.approx((1000 * 0.30 + 250 * 2.50) / 1e6)
+    assert m.cost_by_agent["incident_analyst"] == pytest.approx((2000 * 0.30 + 100 * 2.50) / 1e6)
+    assert sum(m.cost_by_agent.values()) == pytest.approx(m.estimated_cost, abs=1e-6)
+
+
+def test_tokens_by_agent_are_reported_without_a_price_table(settings):
+    live = replace(settings, provider="gemini", prices=None)
+    m = metrics_from_counters(_counters_for_two_agents(), live, {})
+    assert set(m.tokens_by_agent) == {"telemetry_analyst", "incident_analyst"}
+    assert m.cost_by_agent == {} and m.estimated_cost is None
+
+
+def test_agents_without_usage_are_absent(settings):
+    c = RunCounters(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+    c.llm_by_agent["telemetry_analyst"] = 1
+    m = metrics_from_counters(c, replace(settings, prices=TABLE), {})
+    assert m.tokens_by_agent == {} and m.cost_by_agent == {}
+
+
+async def test_run_attributes_cost_to_the_agents_that_called_the_model(
+    run_case, settings, with_usage
+):
+    m = (await run_case("C02", settings_override=_priced(settings))).report.run_metrics
+    assert set(m.cost_by_agent) == set(m.llm_calls_by_agent)
+    for agent, calls in m.llm_calls_by_agent.items():
+        assert m.tokens_by_agent[agent].prompt_tokens == 1000 * calls
+        assert m.cost_by_agent[agent] == pytest.approx(calls * (1000 * 1.0 + 100 * 4.0) / 1e6)
+    assert sum(m.cost_by_agent.values()) == pytest.approx(m.estimated_cost, abs=1e-5)
+
+
+async def test_retried_stage_cost_accumulates_on_its_agent(run_case, settings, with_usage):
+    two_rounds = replace(
+        _priced(settings), limits=replace(settings.limits, max_investigation_rounds=2)
+    )
+    out = await run_case(
+        "C11",
+        settings_override=two_rounds,
+        faults=RunFaults(model_timeout=frozenset({"incident_analyst"}), transient=True),
+    )
+    m = out.report.run_metrics
+    assert m.retried_stages == ["incident_analyst"]
+    # The failed first attempt made no billable call; only the retry did.
+    assert m.tokens_by_agent["incident_analyst"].prompt_tokens == 1000 * (
+        m.llm_calls_by_agent["incident_analyst"] - 1
+    )
+
+
+async def test_aborted_run_keeps_per_agent_usage(run_case, settings, with_usage, monkeypatch):
+    original = ScriptedLlm.generate_content_async
+
+    async def slow(self, llm_request, stream=False):
+        await asyncio.sleep(0.4)
+        async for r in original(self, llm_request, stream):
+            yield r
+
+    monkeypatch.setattr(ScriptedLlm, "generate_content_async", slow)
+    priced = replace(_priced(settings), limits=replace(settings.limits, max_duration_s=1.0))
+    m = (await run_case("C02", settings_override=priced)).report.run_metrics
+    assert m.cost_by_agent and sum(m.cost_by_agent.values()) == pytest.approx(
+        m.estimated_cost, abs=1e-5
+    )
+
+
 # --- presentation -------------------------------------------------------------------
 
 
@@ -251,3 +347,43 @@ async def test_eval_aggregates_cost(settings, with_usage):
     assert agg["cost_currency"] == "USD" and agg["cost_total"] > 0
     assert agg["cost_total"] == pytest.approx(sum(c["estimated_cost"] for c in results["cases"]))
     assert agg["cost_per_case_mean"] == pytest.approx(agg["cost_total"] / 2)
+
+
+async def test_cli_summary_ranks_agents_by_cost(run_case, settings, with_usage, capsys):
+    out = await run_case("C02", settings_override=_priced(settings))
+    cli.print_outcome(out)
+    text = " ".join(capsys.readouterr().out.split())
+    assert "cost by agent:" in text
+    ranked = sorted(out.report.run_metrics.cost_by_agent.items(), key=lambda kv: -kv[1])
+    line = text.split("cost by agent:")[1].split("session:")[0]
+    positions = [line.index(agent) for agent, _ in ranked]
+    assert positions == sorted(positions)
+
+
+async def test_cli_summary_has_no_agent_line_without_cost(run_case, capsys):
+    cli.print_outcome(await run_case("C02"))
+    assert "cost by agent" not in capsys.readouterr().out
+
+
+async def test_eval_sums_cost_by_agent_and_renders_a_table(settings, with_usage):
+    from opspilot.eval.harness import run_eval, to_markdown
+
+    results = await run_eval(_priced(settings), ["C01", "C02"])
+    by_agent = results["aggregate"]["cost_by_agent"]
+    for agent, total in by_agent.items():
+        assert total == pytest.approx(
+            sum(c["cost_by_agent"].get(agent, 0) for c in results["cases"])
+        )
+    assert sum(by_agent.values()) == pytest.approx(results["aggregate"]["cost_total"], abs=1e-5)
+    assert list(by_agent.values()) == sorted(by_agent.values(), reverse=True)
+    md = to_markdown(results)
+    assert "| Agent | Cost (USD) |" in md and "| cost_by_agent |" not in md
+    assert all(f"| {agent} |" in md for agent in by_agent)
+
+
+async def test_eval_without_usage_has_no_agent_cost(settings):
+    from opspilot.eval.harness import run_eval, to_markdown
+
+    results = await run_eval(_priced(settings), ["C01"])
+    assert results["aggregate"]["cost_by_agent"] is None
+    assert "| Agent | Cost" not in to_markdown(results)
