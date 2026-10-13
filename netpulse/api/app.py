@@ -94,7 +94,7 @@ def _build_queue(service: InvestigationService, workers: int, lease_seconds: flo
         if attempt > 1 and service.status(key).pending_review is None:
             service.resume(key)  # the earlier attempt got the decision in; carry on from the checkpoint
             return
-        service.decide(key, ReviewInput.model_validate(payload["review"]))
+        service.decide(key, ReviewInput.model_validate(payload["review"]), channel="api")
 
     def resume(key: str, payload: dict, attempt: int) -> None:
         service.resume(key)
@@ -301,7 +301,9 @@ def create_app(
             comment=body.comment,
             approved_action_ids=body.approved_action_ids,
         )
-        service.authorize_review(ref.key, review)  # role and four-eyes: refuse now (403), not in the background
+        service.authorize_review(
+            ref.key, review, channel="api"
+        )  # role and four-eyes: refuse now (403), not in the background
 
         try:
             queue.submit(ref.key, "decide", {"review": review.model_dump(mode="json")}, tenant=principal.tenant)

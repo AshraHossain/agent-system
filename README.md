@@ -30,7 +30,7 @@ uv sync
 uv run netpulse investigate --case case-04     # investigate one synthetic case
 uv run netpulse --provider heuristic investigate --case case-04   # no Ollama needed; pauses for approval
 uv run netpulse status --incident case-04
-uv run netpulse review --incident case-04 --reviewer alice --role operator --choice approve
+NETPULSE_ALLOW_LOCAL_REVIEW=true uv run netpulse review --local --incident case-04 --reviewer alice --role operator --choice approve   # dev only; real reviews use the API (docs/operations.md)
 uv run pytest
 uv run python -m eval.report --provider heuristic --check   # evaluation report + regression gate
 ```

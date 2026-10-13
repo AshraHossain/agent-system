@@ -48,6 +48,9 @@ Development runs in approved phases. Read these before changing code:
   (`netpulse/api/tenancy.py`). Never pass a raw path ID to the service.
 - **Jobs and schema:** background work goes through `JobQueue` (never an in-memory registry), and any table change is a new
   entry in `persistence/migrations.py`, never an edit to a shipped one.
+- **Reviews enter through the API,** where identity and role come from a validated token. The CLI's `review --local` is a
+  development path that must stay off by default, refuse to run without `NETPULSE_ALLOW_LOCAL_REVIEW`, and stamp
+  `channel=local-cli` in the audit. Never add a way to claim an identity on a command line without that stamp.
 - **Every output is labelled synthetic.** Never imply the system observed a
   real network.
 - **Code before `interrupt()` in `human_approval` must be side-effect free.**
@@ -61,7 +64,8 @@ uv sync                                   # setup
 uv run pytest                             # full suite (~50 s)
 uv run ruff check . && uv run ruff format --check netpulse synthgen tests eval
 uv run netpulse --provider heuristic investigate --case case-04   # demo; may pause for approval
-uv run netpulse review --incident case-04 --reviewer alice --role operator --choice approve
+NETPULSE_API_URL=... NETPULSE_API_TOKEN=... uv run netpulse review --incident case-04 --choice approve --wait   # identity = your token
+NETPULSE_ALLOW_LOCAL_REVIEW=true uv run netpulse review --local --incident case-04 --reviewer alice --role operator --choice approve  # dev only
 uv run python -m synthgen.generate --check            # verify committed synthetic data
 uv run python -m eval.detection_benchmark             # detector precision/recall
 uv run python -m eval.report --provider heuristic --check   # full evaluation + regression gate

@@ -66,6 +66,29 @@ regression gate (`docs/evaluation.md`). Ollama tests are opt-in and not run in C
 SQLite suits a single host with a small worker pool. The in-flight job registry is per process, so run one API process
 per database.
 
+## The command line
+
+Two kinds of command, with different trust:
+
+| Commands | How they work | Who may use them |
+|---|---|---|
+| `review` | Calls the **API** with your token. The server decides your name and role from the validated token and enforces the role rule and four-eyes | any reviewer; needs only `NETPULSE_API_URL` and `NETPULSE_API_TOKEN` |
+| `investigate`, `status`, `audit-verify`, `backup`, `prune` | Open the database file directly | administrators: whoever can run them already holds the file and `NETPULSE_AUDIT_KEY` |
+
+```bash
+export NETPULSE_API_URL=https://api.example.com     # https required (plain http only for localhost)
+export NETPULSE_API_TOKEN=...                       # your OIDC access token; read from the environment, never an argument
+netpulse review --incident inc-42 --choice approve --wait
+```
+
+There is no `--reviewer` or `--role` on a normal review: there is nothing to claim. The command refuses to send a token
+over plain http to a remote host, never prints it, and does not need the database file at all.
+
+**Development only:** `NETPULSE_ALLOW_LOCAL_REVIEW=true netpulse review --local --reviewer alice --role operator ...` writes the
+decision straight into the database with an identity you typed. It is off unless that variable is set, still enforces the
+role rule and four-eyes, and stamps `channel=local-cli` in the audit so self-asserted reviews can be found afterwards:
+`channel=api` rows were identified by a token, `local-cli` rows were not. Do not enable it where reviewers must be accountable.
+
 ## Processes, durability and recovery
 
 Run as many API processes as you need **on one host** (`uvicorn ... --workers N`, or several containers sharing one

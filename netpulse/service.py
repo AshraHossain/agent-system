@@ -147,7 +147,7 @@ class InvestigationService:
             durable=self.durable,
         )
 
-    def authorize_review(self, incident_id: str, review: ReviewInput) -> RunStatus:
+    def authorize_review(self, incident_id: str, review: ReviewInput, channel: str = "service") -> RunStatus:
         """Check role and the four-eyes rule for a decision; audit and raise ``AuthorizationError`` if refused.
 
         The caller must have authenticated ``review.reviewer_id``. Also used by the API to refuse a decision
@@ -157,7 +157,7 @@ class InvestigationService:
         if not current.pending_review:
             raise ToolInputError(f"incident {incident_id!r} is not awaiting approval")
         required = current.pending_review["required_role"]
-        payload = review.model_dump(mode="json")
+        payload = {**review.model_dump(mode="json"), "channel": channel}
         if ROLE_RANK[review.reviewer_role] < ROLE_RANK[required]:
             self._audit(incident_id, "review_denied", review.reviewer_id, {**payload, "required_role": required})
             raise AuthorizationError(f"{required} role required; reviewer has {review.reviewer_role}")
@@ -170,10 +170,16 @@ class InvestigationService:
             raise AuthorizationError(reason)
         return current
 
-    def decide(self, incident_id: str, review: ReviewInput) -> RunStatus:
-        """Submit a reviewer decision. The caller must have authenticated ``review.reviewer_id``."""
-        self.authorize_review(incident_id, review)
-        self._audit(incident_id, "review_submitted", review.reviewer_id, review.model_dump(mode="json"))
+    def decide(self, incident_id: str, review: ReviewInput, channel: str = "service") -> RunStatus:
+        """Submit a reviewer decision. The caller must have authenticated ``review.reviewer_id``.
+
+        ``channel`` is recorded in the audit trail: ``api`` means the identity was validated from a bearer token;
+        ``local-cli`` means it was typed on a command line and is self-asserted.
+        """
+        self.authorize_review(incident_id, review, channel)
+        self._audit(
+            incident_id, "review_submitted", review.reviewer_id, {**review.model_dump(mode="json"), "channel": channel}
+        )
         return self._drive(incident_id, Command(resume=review.model_dump(mode="json")))
 
     def resume(self, incident_id: str) -> RunStatus:

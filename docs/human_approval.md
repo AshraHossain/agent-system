@@ -131,6 +131,10 @@ to one person.
 
 ## Audit trail
 
+Every `review_submitted` and `review_denied` row carries a `channel` in its payload: `api` (the identity was validated
+from a bearer token), `local-cli` (typed on a command line under the development switch, so self-asserted) or `service`
+(a caller embedding the library). Filter on it to tell authenticated decisions from unauthenticated ones.
+
 The trail is built from three sources:
 
 1. **The `netpulse_audit` table:**

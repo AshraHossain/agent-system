@@ -91,14 +91,23 @@ upgrade that changes its checkpoint format is not handled; a crash between the a
 repeat a `submitted` audit row; a worker that hangs without dying keeps its lease (heartbeats continue), so a stuck job
 is not recovered; backups hold every tenant's data.
 
+## Fixed after the review: the CLI's self-asserted identity
+
+`netpulse review --reviewer X --role senior_operator` let anyone who could run it approve as anyone. Reviews through the
+CLI now go to the API with the caller's token, so identity and role are the token's, and role and four-eyes are enforced by
+the server; the identity flags no longer exist on that path. A development-only `--local` mode remains, disabled unless
+`NETPULSE_ALLOW_LOCAL_REVIEW=true`, and every audit row records its `channel` (`api` or `local-cli`) so self-asserted
+decisions are identifiable. **Residual risk:** the other CLI commands (`investigate`, `status`, `backup`, `prune`,
+`audit-verify`) still open the database directly and are administrator tools, and anyone with the database file and the
+audit key can still forge anything by other means; the CLI submits incidents as the fixed name `local`; `--local`
+exists if someone sets the environment variable.
+
 ## Open: blocking for real use
 
-1. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller, and the audit records
-   whatever `--reviewer` says. Anyone with the CLI and the database already holds the keys to the data, so treat it as an
-   administrator tool and keep it off machines whose users must not approve. The API derives role and identity from the
-   validated token.
+None known.
 
-Everything else that was blocking is fixed or has a stated residual risk above; this CLI item remains.
+No blocking item is known to remain on a single host, but every "fixed" section above carries residual risks that
+you should read before relying on it.
 
 ## Open: only if you need more than one host
 
