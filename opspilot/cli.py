@@ -11,9 +11,11 @@ from dataclasses import replace
 from pathlib import Path
 
 from opspilot.config import REPO_ROOT, Settings
-from opspilot.observability import configure_logging
+from opspilot.observability import TracingUnavailable, configure_logging, configure_tracing
 
 W = 100
+# Commands that run investigations in this process; ADK exports traces itself under `serve`.
+TRACED_COMMANDS = frozenset({"demo", "investigate", "resume", "eval"})
 
 
 def _h(title: str) -> None:
@@ -276,6 +278,12 @@ def main(argv: list[str] | None = None) -> int:
     settings = Settings.from_env()
     if args.live or getattr(args, "live", False):
         settings = replace(settings, provider="gemini")
+    if args.cmd in TRACED_COMMANDS or args.cmd == "serve":
+        try:
+            configure_tracing(install_providers=args.cmd != "serve")
+        except TracingUnavailable as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
     if args.cmd == "build-data":
         from opspilot.datasets import generate
 

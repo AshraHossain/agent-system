@@ -67,4 +67,5 @@ tested here. A shared deployment would additionally need: authentication in
 front of the API, a managed session database (`DatabaseSessionService` on
 PostgreSQL/Cloud SQL or `VertexAiSessionService`), secret management (Secret
 Manager), real telemetry/topology integrations with read-only credentials,
-OpenTelemetry export, and a re-run of the evaluation against live models.
+OpenTelemetry export to a managed backend (local export is covered in
+[observability](observability.md)), and a re-run of the evaluation against live models.
