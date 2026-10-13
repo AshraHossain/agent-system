@@ -11,8 +11,8 @@ opspilot/
   adk/         Framework layer: tool wrappers, agents, callbacks, plugin,
                model factory (Gemini or mock), runner, sessions
   eval/        Evaluation harness and metrics
-  api.py       `GET /runs/{run_id}` (read-only) + `create_app`: ADK's REST API with that route
-  cli.py       `opspilot` command: build-data, investigate, demo, eval, list, show, resume, serve
+  api.py       `GET /runs/{run_id}` (read-only), bearer-token middleware, `create_app`: ADK's REST API with those
+  cli.py       `opspilot` command: build-data, investigate, demo, eval, list, show, resume, serve, token
 adk_apps/opspilot_ai/agent.py   exposes `root_agent` for `adk web` / `adk api_server`
 ```
 

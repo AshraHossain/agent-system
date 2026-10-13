@@ -28,6 +28,7 @@ ADK development interfaces:
 uv run adk web adk_apps                  # dev UI at http://127.0.0.1:8000 (choose opspilot_ai)
 uv run adk api_server adk_apps           # REST API
 uv run opspilot serve                    # same API + GET /runs/{run_id} (read-only), 127.0.0.1:8000
+uv run opspilot token                    # for non-loopback use: create a bearer token (docs/deployment.md)
 ```
 
 Persisted investigations (SQLite at `var/sessions.db`):
