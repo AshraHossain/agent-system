@@ -76,6 +76,7 @@ async def run_eval(
             "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
             "provider": settings.provider,
             "model": settings.model if settings.provider == "gemini" else "scripted-mock",
+            "embedder": settings.embedding.label,
             "google_adk": version("google-adk"),
             "dataset_generator_version": generate.GENERATOR_VERSION,
             "split": split,

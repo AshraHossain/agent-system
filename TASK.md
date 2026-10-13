@@ -15,7 +15,7 @@
 
 ## Medium priority
 - [x] Optional bounded re-investigation loop (`LoopAgent`, max 2) — retries failed stages; off by default (`OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`)
-- [ ] Semantic embedder option (Gemini embeddings) with an offline cache
+- [x] Semantic embedder option (Gemini embeddings) with an offline cache (`OPSPILOT_EMBEDDER=gemini`, ADR-0011); live validation and cutoff tuning still open
 - [x] Read-only `GET /runs/{run_id}` served next to ADK's API (`opspilot serve`, ADR-0010)
 - [x] Cost estimation from recorded tokens with configurable price table (`OPSPILOT_PRICE_TABLE`), per run and per agent
 

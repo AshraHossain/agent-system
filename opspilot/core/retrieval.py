@@ -2,12 +2,14 @@
 
 The hashing embedder is deterministic and offline. It captures lexical and
 morphological overlap (unigrams, bigrams, character trigrams), NOT semantics.
-A live semantic embedder can be supplied through the `Embedder` protocol.
+A semantic embedder can be supplied through the `Embedder` protocol; if it raises
+`EmbeddingUnavailable` the vector signal is dropped and keyword scoring carries on.
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import re
 from collections import Counter
@@ -26,6 +28,11 @@ STOPWORDS = frozenset(
     ).split()
 )
 RRF_K = 60
+log = logging.getLogger("opspilot.retrieval")
+
+
+class EmbeddingUnavailable(Exception):
+    """An embedder could not produce vectors (no credentials, network, bad response)."""
 
 
 def tokenize(text: str) -> list[str]:
@@ -71,6 +78,9 @@ class BM25:
 
 
 class Embedder(Protocol):
+    """Documents go through `embed`. An asymmetric embedder may also define
+    `embed_queries`; it is used for search queries when present."""
+
     def embed(self, texts: Sequence[str]) -> np.ndarray: ...
 
 
@@ -79,6 +89,7 @@ class HashingEmbedder:
 
     def __init__(self, dims: int = 512):
         self.dims = dims
+        self.name = f"hashing-{dims}"
 
     def _features(self, text: str) -> list[str]:
         toks = tokenize(text)
@@ -104,12 +115,22 @@ class HashingEmbedder:
 class VectorIndex:
     def __init__(self, embedder: Embedder, texts: Sequence[str]):
         self.embedder = embedder
-        self.matrix = embedder.embed(list(texts)) if texts else np.zeros((0, 1))
+        self.matrix = np.zeros((0, 1))
+        if texts:
+            try:
+                self.matrix = embedder.embed(list(texts))
+            except EmbeddingUnavailable as e:
+                log.warning("vector search disabled, using keyword scoring only: %s", e)
 
     def scores(self, query: str) -> list[float]:
         if not len(self.matrix):
             return []
-        q = self.embedder.embed([query])[0]
+        embed_query = getattr(self.embedder, "embed_queries", self.embedder.embed)
+        try:
+            q = embed_query([query])[0]
+        except EmbeddingUnavailable as e:
+            log.warning("query not embedded, keyword scoring only for it: %s", e)
+            return []
         return [float(x) for x in self.matrix @ q]
 
 
@@ -135,8 +156,10 @@ class HybridRetriever:
         vec = self.vectors.scores(query)
         cand = [i for i in range(len(self.texts)) if allowed is None or i in allowed]
         kw_rank = sorted((i for i in cand if kw[i] > 0), key=lambda i: (-kw[i], i))
-        vec_rank = sorted(
-            (i for i in cand if vec[i] >= self.min_cosine), key=lambda i: (-vec[i], i)
+        vec_rank = (
+            sorted((i for i in cand if vec[i] >= self.min_cosine), key=lambda i: (-vec[i], i))
+            if vec
+            else []
         )
         fused: dict[int, float] = {}
         by: dict[int, list[str]] = {}

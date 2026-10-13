@@ -12,3 +12,4 @@
 | [0008](0008-no-custom-fastapi.md) | Use ADK serving (`adk web`/`api_server`) instead of a custom FastAPI app | Accepted |
 | [0009](0009-deterministic-mock-model.md) | Scripted `BaseLlm` mock for offline tests and evaluation | Accepted |
 | [0010](0010-read-only-run-lookup.md) | One read-only `GET /runs/{run_id}` route served next to ADK's API | Accepted |
+| [0011](0011-optional-gemini-embeddings.md) | Optional Gemini embeddings behind a persistent cache | Accepted |

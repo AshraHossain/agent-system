@@ -69,6 +69,42 @@ class Limits:
 
 
 @dataclass(frozen=True)
+class EmbeddingConfig:
+    """Vector side of knowledge retrieval. `hashing` is the offline default; `gemini`
+    uses Gemini embeddings behind a persistent cache (ADR-0011)."""
+
+    provider: Literal["hashing", "gemini"] = "hashing"
+    model: str = "gemini-embedding-001"
+    dims: int = 768
+    cache_path: Path = REPO_ROOT / "var" / "embeddings.db"
+    # None = the provider's default cutoff. Cosine scales differ per embedder.
+    min_cosine: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.provider not in ("hashing", "gemini"):
+            raise ValueError(f"embedder must be 'hashing' or 'gemini', got {self.provider!r}")
+        if not 1 <= self.dims <= 3072:
+            raise ValueError(f"embedding dims must be between 1 and 3072, got {self.dims!r}")
+        if self.min_cosine is not None and not -1.0 <= self.min_cosine <= 1.0:
+            raise ValueError(f"embedding min_cosine must be in [-1, 1], got {self.min_cosine!r}")
+
+    @property
+    def label(self) -> str:
+        return "hashing" if self.provider == "hashing" else f"{self.model}@{self.dims}"
+
+    @classmethod
+    def from_env(cls) -> EmbeddingConfig:
+        raw_cosine = os.getenv("OPSPILOT_EMBEDDING_MIN_COSINE")
+        return cls(
+            provider=os.getenv("OPSPILOT_EMBEDDER", "hashing").lower(),  # type: ignore[arg-type]
+            model=os.getenv("OPSPILOT_EMBEDDING_MODEL", cls.model),
+            dims=_int("OPSPILOT_EMBEDDING_DIMS", cls.dims),
+            cache_path=Path(os.getenv("OPSPILOT_EMBEDDING_CACHE", str(cls.cache_path))),
+            min_cosine=float(raw_cosine) if raw_cosine else None,
+        )
+
+
+@dataclass(frozen=True)
 class Settings:
     provider: Literal["mock", "gemini"] = "mock"
     model: str = "gemini-2.5-flash"
@@ -77,6 +113,7 @@ class Settings:
     default_dataset: str = "C02"
     limits: Limits = field(default_factory=Limits)
     prices: PriceTable | None = None
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -92,6 +129,7 @@ class Settings:
             session_db_url=os.getenv("OPSPILOT_SESSION_DB", cls.session_db_url),
             default_dataset=os.getenv("OPSPILOT_DEFAULT_DATASET", cls.default_dataset),
             limits=Limits.from_env(),
+            embedding=EmbeddingConfig.from_env(),
             prices=load_price_table(Path(table))
             if (table := os.getenv("OPSPILOT_PRICE_TABLE"))
             else None,

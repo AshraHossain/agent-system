@@ -10,7 +10,7 @@ from opspilot.contracts.evidence import Evidence, EvidenceKind
 from opspilot.contracts.knowledge import DocumentHit, SearchResult
 from opspilot.core.dataset import Dataset, Document
 from opspilot.core.errors import InvalidArgument, NotFound
-from opspilot.core.retrieval import HybridRetriever
+from opspilot.core.retrieval import Embedder, HybridRetriever
 from opspilot.core.security import detect_injection, isolate_untrusted, normalize
 
 DOC_TYPES = ("runbook", "tech_doc", "incident_report")
@@ -18,16 +18,27 @@ MAX_QUERY = 300
 MAX_TOP_K = 8
 
 
-_INDEX: dict[str, tuple[list[Document], HybridRetriever]] = {}
+_DOCS: dict[str, list[Document]] = {}
+_RETRIEVERS: dict[tuple[str, str, float | None], HybridRetriever] = {}
 
 
-def _index(ds: Dataset) -> tuple[list[Document], HybridRetriever]:
+def _docs(ds: Dataset) -> list[Document]:
     key = str(ds.path)
-    if key not in _INDEX:
-        docs = ds.documents
-        texts = [f"{d.title}\n{' '.join(d.tags)}\n{' '.join(d.components)}\n{d.body}" for d in docs]
-        _INDEX[key] = (docs, HybridRetriever(texts))
-    return _INDEX[key]
+    if key not in _DOCS:
+        _DOCS[key] = ds.documents
+    return _DOCS[key]
+
+
+def _retriever(ds: Dataset, embedder: Embedder | None, min_cosine: float | None) -> HybridRetriever:
+    """Built on first search only, so reading a document never triggers embedding."""
+    key = (str(ds.path), getattr(embedder, "name", "default"), min_cosine)
+    if key not in _RETRIEVERS:
+        texts = [
+            f"{d.title}\n{' '.join(d.tags)}\n{' '.join(d.components)}\n{d.body}" for d in _docs(ds)
+        ]
+        options = {} if min_cosine is None else {"min_cosine": min_cosine}
+        _RETRIEVERS[key] = HybridRetriever(texts, embedder, **options)
+    return _RETRIEVERS[key]
 
 
 def _flags(doc: Document, iso_flags: list[str]) -> list[str]:
@@ -62,7 +73,15 @@ def _evidence(doc: Document, flags: list[str]) -> Evidence:
     )
 
 
-def search(ds: Dataset, query: str, doc_type: str, top_k: int = 5) -> SearchResult:
+def search(
+    ds: Dataset,
+    query: str,
+    doc_type: str,
+    top_k: int = 5,
+    *,
+    embedder: Embedder | None = None,
+    min_cosine: float | None = None,
+) -> SearchResult:
     query = normalize(query or "")
     if not query:
         raise InvalidArgument("query must not be empty")
@@ -71,7 +90,8 @@ def search(ds: Dataset, query: str, doc_type: str, top_k: int = 5) -> SearchResu
     if doc_type not in DOC_TYPES:
         raise InvalidArgument(f"doc_type must be one of {DOC_TYPES}")
     top_k = max(1, min(int(top_k), MAX_TOP_K))
-    docs, retriever = _index(ds)
+    docs = _docs(ds)
+    retriever = _retriever(ds, embedder, min_cosine)
     allowed = {i for i, d in enumerate(docs) if d.doc_type == doc_type}
     hits, evidence, flagged = [], [], []
     for h in retriever.search(query, top_k=top_k, allowed=allowed):
@@ -105,7 +125,7 @@ def search(ds: Dataset, query: str, doc_type: str, top_k: int = 5) -> SearchResu
 
 
 def get_document(ds: Dataset, doc_id: str) -> DocumentHit:
-    docs, _ = _index(ds)
+    docs = _docs(ds)
     for doc in docs:
         if doc.doc_id == doc_id:
             body, iso = isolate_untrusted(doc.doc_id, doc.body, max_chars=1500)
@@ -130,7 +150,7 @@ def get_document(ds: Dataset, doc_id: str) -> DocumentHit:
 
 
 def document_evidence(ds: Dataset, doc_id: str) -> Evidence:
-    docs, _ = _index(ds)
+    docs = _docs(ds)
     for doc in docs:
         if doc.doc_id == doc_id:
             _, iso = isolate_untrusted(doc.doc_id, doc.body)
@@ -139,5 +159,5 @@ def document_evidence(ds: Dataset, doc_id: str) -> Evidence:
 
 
 def suspicious_documents(ds: Dataset) -> list[str]:
-    docs, _ = _index(ds)
+    docs = _docs(ds)
     return [d.doc_id for d in docs if detect_injection(d.body)]

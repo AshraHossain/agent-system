@@ -20,6 +20,7 @@ from typing import Annotated, Any
 from google.adk.tools import ToolContext
 from pydantic import BaseModel, Field, StringConstraints, ValidationError
 
+from opspilot.adk.embeddings import retrieval_for
 from opspilot.adk.runtime import Runtime, resolve
 from opspilot.contracts.evidence import STATE_PREFIX, Evidence, is_evidence_id
 from opspilot.contracts.request import InvestigationScope
@@ -307,7 +308,12 @@ class _Doc(BaseModel):
 def _search(tool_context, query, top_k, doc_type):
     def run(rt, scope):
         a = _v(_Query, query=query, top_k=top_k)
-        return knowledge.search(rt.dataset, a.query, doc_type, a.top_k)
+        embedder, min_cosine = retrieval_for(
+            rt.settings.embedding, rt.settings.limits.model_timeout_s
+        )
+        return knowledge.search(
+            rt.dataset, a.query, doc_type, a.top_k, embedder=embedder, min_cosine=min_cosine
+        )
 
     return _call(tool_context, run)
 
