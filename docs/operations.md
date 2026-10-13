@@ -31,6 +31,11 @@ validates.
 | `NETPULSE_API_TOKENS` | none | `tokens` mode: `token:role:name,...` |
 | `NETPULSE_OIDC_ISSUER` / `_AUDIENCE` / `_ROLE_MAP` | none | `oidc` mode, all required |
 | `NETPULSE_OIDC_JWKS_URL` / `_ROLE_CLAIM` / `_NAME_CLAIM` | discovery / `groups` / `sub` | `oidc` mode, optional |
+| `NETPULSE_REQUIRE_HTTPS` | `true` in oidc mode | refuse requests whose scheme is not https (`/health` exempt) |
+| `NETPULSE_ALLOWED_HOSTS` | any | comma-separated Host header allowlist |
+| `NETPULSE_MAX_BODY_BYTES` | 262144 | request body cap (413) |
+| `NETPULSE_RATE_LIMIT_{IP,READ,WRITE,AUTH_FAIL}_PER_MIN` | 1200 / 600 / 30 / 10 | per-process limits; 0 disables |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | uvicorn: the only proxies whose `X-Forwarded-*` headers are believed |
 | `NETPULSE_UI_TOKEN_HEADER` | empty | UI: read the bearer token from this proxy-set header instead of a text box |
 | `NETPULSE_AUDIT_KEY` | none (API refuses to start) | HMAC key, 32+ characters, for the audit hash chain |
 | `NETPULSE_API_WORKERS` | 4 | background job threads |
@@ -56,6 +61,46 @@ regression gate (`docs/evaluation.md`). Ollama tests are opt-in and not run in C
 
 SQLite suits a single host with a small worker pool. The in-flight job registry is per process, so run one API process
 per database.
+
+## Transport security and rate limiting
+
+**TLS is terminated at a reverse proxy** (or by uvicorn: `--ssl-keyfile/--ssl-certfile`). `deploy/Caddyfile` and the
+`proxy` Compose profile run Caddy, which obtains certificates automatically for public names:
+
+```bash
+export NETPULSE_UI_DOMAIN=netpulse.example.com NETPULSE_API_DOMAIN=api.netpulse.example.com
+export NETPULSE_UI_API_URL=https://api.netpulse.example.com   # oidc mode refuses plain http, even from the UI
+docker compose --profile proxy up --build
+```
+
+What the API enforces itself (`netpulse/api/protection.py`):
+
+| Control | Behavior |
+|---|---|
+| HTTPS | `NETPULSE_REQUIRE_HTTPS` (default true in oidc mode): plain http gets 400 *before* credentials are examined. `/health` is exempt for orchestrator probes |
+| HSTS and headers | `Strict-Transport-Security` over https; `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, a restrictive CSP (not on `/docs`) |
+| Host header | `NETPULSE_ALLOWED_HOSTS` allowlist (400 otherwise) |
+| Body size | 256 KiB cap: refused by `Content-Length` and also while streaming chunked bodies (413) |
+| Per-address limit | 1200 requests/min, burst 200, including unauthenticated requests (429 + `Retry-After`) |
+| Failed-auth lockout | 10 failures/min per address; while locked, **every** request from it gets 429, valid tokens included. Role denials (403) do not count |
+| Per-identity limits | reads 600/min (burst 100); writes (POST: submit, approve, resume) 30/min (burst 10), per authenticated user |
+
+**Trusted proxies are the part to get right.** Client address and scheme come from `X-Forwarded-For` and
+`X-Forwarded-Proto`, which uvicorn believes only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`; Compose pins the proxy at
+`172.28.0.10`). Do **not** set it to `*` while clients can reach the API directly: they could claim any address, escaping
+the limits, or claim `https` to defeat the HTTPS requirement. Verified live: a header forged by an untrusted source is
+ignored (400 for the scheme, and a rotating `X-Forwarded-For` does not evade the limit).
+
+Limits to know about:
+
+- Rate limits live in process memory: per worker process, reset on restart. With several processes or replicas, also limit
+  at the proxy. Memory is bounded (20k tracked keys, least-recently-used eviction).
+- Users behind one NAT share an address, so one abusive client can lock the others out for about a minute.
+- The Streamlit UI has no limits of its own; limit it at the proxy.
+- No CORS headers are sent. Browsers on other origins cannot call the API, and the UI calls it server-side.
+- Direct TLS via uvicorn works (verified with a throwaway CA) but has no certificate renewal; prefer the proxy.
+- **Not run:** `deploy/Caddyfile` and the `proxy` profile (no Caddy or Docker daemon here; the Compose file validates
+  with `docker compose config`). Validate with `caddy validate` before use, and check certificate issuance for your domain.
 
 ## Identity (OIDC)
 

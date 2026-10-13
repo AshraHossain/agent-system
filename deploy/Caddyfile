@@ -1,0 +1,21 @@
+# TLS termination for NetPulse. NOT RUN in the authoring environment (no Caddy or Docker daemon): validate with
+#   docker compose --profile proxy run --rm proxy caddy validate --config /etc/caddy/Caddyfile
+# before relying on it.
+#
+# Caddy obtains and renews certificates automatically for public domain names. For private names use `tls internal`
+# (Caddy's own CA) or `tls /certs/fullchain.pem /certs/privkey.pem` with certificates you mount. Caddy replaces any
+# X-Forwarded-For / X-Forwarded-Proto sent by clients, which is what lets the API trust them from this proxy only.
+
+{$NETPULSE_UI_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy ui:8501
+}
+
+{$NETPULSE_API_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 256KB
+	}
+	reverse_proxy api:8000
+}

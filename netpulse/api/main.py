@@ -12,6 +12,10 @@
 | ``NETPULSE_AUDIT_KEY`` | *(none — refuses to start)* | HMAC key (32+ chars) for the audit hash chain |
 | ``NETPULSE_API_WORKERS`` | ``4`` | background job threads |
 | ``NETPULSE_API_DOCS`` | ``false`` | serve ``/docs`` and ``/openapi.json`` (unauthenticated) |
+| ``NETPULSE_REQUIRE_HTTPS`` | ``true`` in oidc mode | refuse requests whose scheme is not https (``/health`` exempt) |
+| ``NETPULSE_ALLOWED_HOSTS`` | *(any)* | comma-separated Host header allowlist |
+| ``NETPULSE_MAX_BODY_BYTES`` | ``262144`` | request body cap (413) |
+| ``NETPULSE_RATE_LIMIT_{IP,READ,WRITE,AUTH_FAIL}_PER_MIN`` | 1200 / 600 / 30 / 10 | per-process limits, 0 disables |
 | ``NETPULSE_DATA_DIR``, ``NETPULSE_LLM_PROVIDER``, … | see ``netpulse/config.py`` | dataset and LLM provider |
 
 The API has no anonymous mode: with no configured identities (tokens or OIDC) it refuses to start rather than run
@@ -26,6 +30,7 @@ from pathlib import Path
 from netpulse.api.app import create_app
 from netpulse.api.auth import TokenStore
 from netpulse.api.oidc import OidcConfig, OidcVerifier, parse_role_map
+from netpulse.api.protection import Protection
 from netpulse.graph.deps import Deps
 from netpulse.observability import apply_tracing_policy, configure_logging, get_logger
 from netpulse.persistence.store import PersistentStore
@@ -95,7 +100,11 @@ def build_app():
     service = InvestigationService(Deps.default(), store)
     workers = int(os.environ.get("NETPULSE_API_WORKERS", "4"))
     docs = os.environ.get("NETPULSE_API_DOCS", "false").strip().lower() in {"1", "true", "yes", "on"}
-    return create_app(service, authenticator, max_workers=workers, docs=docs)
+    # Production (oidc) refuses plain http by default; static-token development mode does not.
+    protection = Protection.from_env(require_https_default=authenticator.mode == "oidc")
+    if not protection.require_https:
+        log.warning("plain http is allowed; set NETPULSE_REQUIRE_HTTPS=true behind TLS in production")
+    return create_app(service, authenticator, max_workers=workers, docs=docs, protection=protection)
 
 
 def __getattr__(name: str):

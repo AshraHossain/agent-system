@@ -1,6 +1,6 @@
 # NetPulse AI: SYNTHETIC DATA ONLY. Nothing here connects to or modifies a real network.
 #
-#   cp .env.example .env            # then set real tokens
+#   cp .env.example .env            # then set real tokens / OIDC settings and the audit key
 #   docker compose up --build       # api on :8000, ui on :8501 (heuristic provider)
 #   docker compose --profile ollama up --build   # adds a local Ollama server
 #   docker compose exec ollama ollama pull qwen2.5:7b-instruct
@@ -24,9 +24,14 @@ x-netpulse: &netpulse
 services:
   api:
     <<: *netpulse
-    command: ["uvicorn", "netpulse.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # uvicorn trusts X-Forwarded-For / -Proto only from FORWARDED_ALLOW_IPS (the proxy's fixed address below).
+    command: ["uvicorn", "netpulse.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    environment:
+      <<: *netpulse-env
+      FORWARDED_ALLOW_IPS: 172.28.0.10
     ports:
       - "127.0.0.1:8000:8000"
+    networks: [netpulse]
     volumes:
       - netpulse-db:/app/.netpulse
     healthcheck:
@@ -39,14 +44,36 @@ services:
     build: .
     command: ["streamlit", "run", "netpulse/ui/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
     environment:
-      NETPULSE_API_URL: http://api:8000
+      # In oidc mode the API refuses plain http, so set NETPULSE_UI_API_URL to the https API address (via the proxy).
+      NETPULSE_API_URL: ${NETPULSE_UI_API_URL:-http://api:8000}
       NETPULSE_UI_TOKEN: ${NETPULSE_UI_TOKEN:-}
       NETPULSE_UI_TOKEN_HEADER: ${NETPULSE_UI_TOKEN_HEADER:-}
     ports:
       - "127.0.0.1:8501:8501"
+    networks: [netpulse]
     depends_on:
       api:
         condition: service_healthy
+
+  # TLS termination and public exposure. Start with: docker compose --profile proxy up --build
+  # Set NETPULSE_UI_DOMAIN and NETPULSE_API_DOMAIN to your public names; the *.localhost defaults only make Caddy
+  # issue certificates from its own CA for local testing.
+  proxy:
+    image: caddy:2
+    profiles: ["proxy"]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NETPULSE_UI_DOMAIN: ${NETPULSE_UI_DOMAIN:-ui.localhost}
+      NETPULSE_API_DOMAIN: ${NETPULSE_API_DOMAIN:-api.localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks:
+      netpulse:
+        ipv4_address: 172.28.0.10
+    depends_on: [api, ui]
 
   ollama:
     image: ollama/ollama:latest
@@ -56,6 +83,13 @@ services:
     ports:
       - "127.0.0.1:11434:11434"
 
+networks:
+  netpulse:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
 volumes:
+  caddy-data:
   netpulse-db:
   ollama-models:

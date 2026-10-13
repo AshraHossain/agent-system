@@ -42,18 +42,25 @@ development and the API logs a warning when they are used (`docs/operations.md`)
 (access lasts until the token expires, so keep lifetimes short); never tested against a real IdP; the UI needs an
 authenticating proxy in front of it for sign-in.
 
+## Fixed after the review: transport security and rate limiting
+
+The API refuses plain http (default in OIDC mode), sends HSTS and security headers, caps request bodies at 256 KiB
+(including chunked uploads), checks the Host header, and rate-limits per address, per identity and on repeated failed
+authentication. Client address and scheme are believed only from configured proxies. TLS termination is a Caddy
+reverse proxy (`deploy/`, Compose `proxy` profile). Verified live against real TLS and against trusted and untrusted
+proxies (`docs/operations.md`). **Residual risk:** the Caddy config and `proxy` profile have never been run; limits are
+per process and reset on restart; shared-NAT lockout; the UI has no limits of its own; no WAF or DDoS protection.
+
 ## Open: blocking for real use
 
-1. **No transport security or rate limiting.** The API and UI speak plain HTTP and Compose binds to 127.0.0.1 only for that
-   reason. Put TLS, request-size limits (a 5 MB body is parsed before validation) and rate limits in a reverse proxy.
-2. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller, and the audit records
+1. **Self-asserted role in the CLI.** `netpulse review --role senior_operator` trusts the caller, and the audit records
    whatever `--reviewer` says. Anyone with the CLI and the database already holds the keys to the data, so treat it as an
    administrator tool and keep it off machines whose users must not approve. The API derives role and identity from the
    validated token.
-3. **No separation of duties.** The submitter can approve their own incident (`submitted_by` is never compared with the
+2. **No separation of duties.** The submitter can approve their own incident (`submitted_by` is never compared with the
    reviewer). Whether to require a second person is a policy decision for you.
-4. **No tenancy.** Any viewer can read every incident. Single-team only.
-5. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
+3. **No tenancy.** Any viewer can read every incident. Single-team only.
+4. **SQLite, single process.** One writer, an in-memory job registry per process, no schema migrations, no retention or
    deletion, no backup procedure. Running `uvicorn --workers N` would split job state across processes. Upgrading
    LangGraph may invalidate stored checkpoints.
 

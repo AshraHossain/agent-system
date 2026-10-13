@@ -27,11 +27,12 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from netpulse.api.auth import API_ROLE_RANK, Principal, TokenStore, principal_dependency, require_role
 from netpulse.api.oidc import OidcVerifier
+from netpulse.api.protection import EdgeProtectionMiddleware, Limits, Protection
 from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry
 from netpulse.api.schemas import (
     ApprovalRequest,
@@ -51,7 +52,11 @@ EVAL_REPORTS_DIR = Path(__file__).resolve().parents[2] / "eval" / "reports"
 
 
 def create_app(
-    service: InvestigationService, tokens: TokenStore | OidcVerifier, max_workers: int = 4, docs: bool = True
+    service: InvestigationService,
+    tokens: TokenStore | OidcVerifier,
+    max_workers: int = 4,
+    docs: bool = True,
+    protection: Protection | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="NetPulse AI API",
@@ -64,19 +69,25 @@ def create_app(
     registry = JobRegistry(max_workers=max_workers)
     app.state.service = service
     app.state.registry = registry
+    limits = Limits(protection or Protection())
+    app.state.limits = limits
+    app.add_middleware(EdgeProtectionMiddleware, limits=limits)
 
     get_principal = principal_dependency(tokens)
     viewer = require_role("viewer")
     operator = require_role("operator")
     senior = require_role("senior_operator")
 
-    def principal_viewer(p: Principal = Depends(get_principal)) -> Principal:
+    def principal_viewer(request: Request, p: Principal = Depends(get_principal)) -> Principal:
+        limits.check_principal(p.name, request.method)
         return viewer(p)
 
-    def principal_operator(p: Principal = Depends(get_principal)) -> Principal:
+    def principal_operator(request: Request, p: Principal = Depends(get_principal)) -> Principal:
+        limits.check_principal(p.name, request.method)
         return operator(p)
 
-    def principal_senior(p: Principal = Depends(get_principal)) -> Principal:
+    def principal_senior(request: Request, p: Principal = Depends(get_principal)) -> Principal:
+        limits.check_principal(p.name, request.method)
         return senior(p)
 
     for exc_type, status_code in [
