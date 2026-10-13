@@ -74,6 +74,7 @@ class HealthResponse(_Model):
     durable: bool
     audit_keyed: bool
     auth_mode: str
+    four_eyes: bool
     data_notice: str
 
 
@@ -85,3 +86,8 @@ class AuditVerifyResponse(_Model):
     head: str | None
     error: str | None = None
     first_bad_seq: int | None = None
+
+
+class MeResponse(_Model):
+    name: str
+    role: str

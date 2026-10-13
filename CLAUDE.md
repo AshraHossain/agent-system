@@ -42,6 +42,8 @@ Development runs in approved phases. Read these before changing code:
   (docs/state_model.md), and evidence is immutable once recorded.
 - **Logs carry identifiers, never incident text or credentials.** Use `netpulse.observability`;
   tracing to LangSmith stays opt-in.
+- **Four-eyes:** the submitter of an incident never approves it. Keep the rule in `policy/engine.py`, enforced in the
+  service, the API and the `human_approval` node.
 - **Every output is labelled synthetic.** Never imply the system observed a
   real network.
 - **Code before `interrupt()` in `human_approval` must be side-effect free.**

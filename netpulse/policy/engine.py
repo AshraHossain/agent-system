@@ -18,6 +18,11 @@ Per action:
 | cited by runbooks that declare a conflict | REQUIRE_APPROVAL by senior_operator |
 | operator-reported severity is critical | REQUIRE_APPROVAL by senior_operator |
 
+Separation of duties (four-eyes), enforced when the incident is decided rather than per action: the identity that
+submitted an incident may not **approve** it. Rejecting it or requesting more investigation stay allowed, because
+neither authorizes anything. Identities are compared case-insensitively and ignoring surrounding whitespace; two
+different accounts held by one person are not detected.
+
 Incident level (``action_id=None``): ESCALATE when the assessment is not
 conclusive but real signal exists, when severity is critical, or when several
 complementary root causes were found (multiple simultaneous faults).
@@ -129,3 +134,14 @@ def review_incident(decisions: list[PolicyDecision], ctx: PolicyContext) -> Poli
             action_id=None, outcome=PolicyOutcome.ESCALATE, reasons=escalate, required_role="senior_operator"
         )
     return PolicyDecision(action_id=None, outcome=PolicyOutcome.ALLOW, reasons=["only read-only diagnostics proposed"])
+
+
+def same_person(a: str, b: str) -> bool:
+    return bool(a.strip()) and a.strip().casefold() == b.strip().casefold()
+
+
+def four_eyes_violation(submitted_by: str, reviewer_id: str, choice: str) -> str | None:
+    """Reason the decision is refused under the four-eyes rule, or None. Only ``approve`` is restricted."""
+    if choice == "approve" and same_person(submitted_by, reviewer_id):
+        return "four-eyes rule: the person who submitted an incident cannot approve it; another reviewer must"
+    return None

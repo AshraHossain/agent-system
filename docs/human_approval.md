@@ -93,6 +93,22 @@ The role is checked **twice**:
 command-line flags and is a **local demo only**. The Phase 9 API adds token
 authentication.
 
+## Separation of duties (four-eyes)
+
+The identity that submitted an incident (`request_metadata.submitted_by`) cannot **approve** it. Rejecting it or requesting
+more investigation is allowed, because neither authorizes an action. The rule is deterministic
+(`policy/engine.py: four_eyes_violation`) and enforced in three places, so no single entry point can skip it:
+
+1. `InvestigationService.authorize_review`, used by `decide`: audits `review_denied` (reason `four_eyes`) and raises
+   `AuthorizationError`;
+2. the API, which calls the same function before queueing the job, so a self-approval is a 403 now rather than a failure
+   inside a background job;
+3. the `human_approval` node, which re-asks (`review_error`) if a decision reaches the graph some other way.
+
+The review request carries `submitted_by` so a UI can tell the submitter up front. `NETPULSE_FOUR_EYES=off` disables the
+rule (single-person labs only). Identities are compared case-insensitively; the rule cannot tell that two accounts belong
+to one person.
+
 ## Durability
 
 - **Store.** `PersistentStore` opens one SQLite file holding LangGraph's

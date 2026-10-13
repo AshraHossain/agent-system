@@ -6,10 +6,11 @@ Endpoints:
 |---|---|---|
 | `GET /health` | none | liveness and whether checkpoints are durable |
 | `POST /incidents` | operator | submit an incident (runs in the background) |
+| `GET /me` | viewer | the caller's identity and role |
 | `GET /incidents/{id}` | viewer | status: job/workflow state, pending review, durability |
 | `GET /incidents/{id}/results` | viewer | hypotheses, ranking, recommended actions, final report |
 | `GET /incidents/{id}/evidence` | viewer | the evidence registry and telemetry/topology references |
-| `POST /incidents/{id}/approval` | operator | approve / reject / request more investigation |
+| `POST /incidents/{id}/approval` | operator | approve / reject / request more (submitter cannot approve) |
 | `POST /incidents/{id}/resume` | operator | continue a run that stalled outside an approval pause |
 | `GET /audit/verify` | senior_operator | verify the audit hash chain (`?expected_head=seq:hash` detects truncation) |
 | `GET /eval/reports` | viewer | list evaluation reports (written by `python -m eval.report`) |
@@ -30,7 +31,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from netpulse.api.auth import API_ROLE_RANK, Principal, TokenStore, principal_dependency, require_role
+from netpulse.api.auth import Principal, TokenStore, principal_dependency, require_role
 from netpulse.api.oidc import OidcVerifier
 from netpulse.api.protection import EdgeProtectionMiddleware, Limits, Protection
 from netpulse.api.registry import JobInFlightError, JobQueueFullError, JobRegistry
@@ -42,6 +43,7 @@ from netpulse.api.schemas import (
     IncidentCreateRequest,
     IncidentStatusResponse,
     JobAccepted,
+    MeResponse,
     ResultsResponse,
 )
 from netpulse.errors import DataCorruptError, DataNotFoundError, ToolInputError
@@ -113,6 +115,7 @@ def create_app(
             durable=service.durable,
             audit_keyed=service.audit_keyed,
             auth_mode=tokens.mode,
+            four_eyes=service.four_eyes,
             data_notice=SYNTHETIC_DATA_NOTICE,
         )
 
@@ -138,6 +141,11 @@ def create_app(
         except JobInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return JobAccepted(incident_id=incident_id, job_state=registry.state(incident_id) or "queued")
+
+    @app.get("/me", response_model=MeResponse)
+    def me(principal: Principal = Depends(principal_viewer)) -> MeResponse:
+        """Who the API believes the caller is, so a UI can explain what they may do."""
+        return MeResponse(name=principal.name, role=principal.role)
 
     @app.get("/incidents/{incident_id}", response_model=IncidentStatusResponse)
     def incident_status(incident_id: str, _: Principal = Depends(principal_viewer)) -> IncidentStatusResponse:
@@ -201,9 +209,6 @@ def create_app(
         status = service.status(incident_id)  # 404 if unknown
         if status.pending_review is None:
             raise HTTPException(status_code=409, detail="incident is not awaiting approval")
-        required_role = status.pending_review["required_role"]
-        if API_ROLE_RANK[principal.role] < API_ROLE_RANK[required_role]:
-            raise HTTPException(status_code=403, detail=f"{required_role} role or higher required for this decision")
         review = ReviewInput(
             reviewer_id=principal.name,
             reviewer_role=principal.role,
@@ -211,6 +216,7 @@ def create_app(
             comment=body.comment,
             approved_action_ids=body.approved_action_ids,
         )
+        service.authorize_review(incident_id, review)  # role and four-eyes: refuse now (403), not in the background
 
         def job() -> None:
             service.decide(incident_id, review)

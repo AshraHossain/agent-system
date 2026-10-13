@@ -31,6 +31,7 @@ validates.
 | `NETPULSE_API_TOKENS` | none | `tokens` mode: `token:role:name,...` |
 | `NETPULSE_OIDC_ISSUER` / `_AUDIENCE` / `_ROLE_MAP` | none | `oidc` mode, all required |
 | `NETPULSE_OIDC_JWKS_URL` / `_ROLE_CLAIM` / `_NAME_CLAIM` | discovery / `groups` / `sub` | `oidc` mode, optional |
+| `NETPULSE_FOUR_EYES` | `on` | `off` lets a submitter approve their own incident (labs only) |
 | `NETPULSE_REQUIRE_HTTPS` | `true` in oidc mode | refuse requests whose scheme is not https (`/health` exempt) |
 | `NETPULSE_ALLOWED_HOSTS` | any | comma-separated Host header allowlist |
 | `NETPULSE_MAX_BODY_BYTES` | 262144 | request body cap (413) |

@@ -454,6 +454,7 @@ class ReviewRequest(_Model):
     """What the workflow shows a reviewer while paused. Built deterministically from state."""
 
     incident_id: str
+    submitted_by: str = ""  # shown so a reviewer sees who cannot approve (four-eyes rule)
     required_role: Literal["operator", "senior_operator"]
     summary: str
     hypotheses: list[RankedHypothesis]

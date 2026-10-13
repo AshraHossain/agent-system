@@ -25,6 +25,7 @@ from netpulse.graph.runner import initial_state
 from netpulse.graph.wrapper import error_record
 from netpulse.models import ROLE_RANK, Budget, ErrorKind, ReviewInput
 from netpulse.persistence.store import PersistentStore
+from netpulse.policy.engine import four_eyes_violation
 
 
 class AuthorizationError(ToolError):
@@ -146,8 +147,12 @@ class InvestigationService:
             durable=self.durable,
         )
 
-    def decide(self, incident_id: str, review: ReviewInput) -> RunStatus:
-        """Submit a reviewer decision. The caller must have authenticated ``review.reviewer_id``."""
+    def authorize_review(self, incident_id: str, review: ReviewInput) -> RunStatus:
+        """Check role and the four-eyes rule for a decision; audit and raise ``AuthorizationError`` if refused.
+
+        The caller must have authenticated ``review.reviewer_id``. Also used by the API to refuse a decision
+        synchronously instead of failing later inside a background job.
+        """
         current = self.status(incident_id)
         if not current.pending_review:
             raise ToolInputError(f"incident {incident_id!r} is not awaiting approval")
@@ -156,8 +161,20 @@ class InvestigationService:
         if ROLE_RANK[review.reviewer_role] < ROLE_RANK[required]:
             self._audit(incident_id, "review_denied", review.reviewer_id, {**payload, "required_role": required})
             raise AuthorizationError(f"{required} role required; reviewer has {review.reviewer_role}")
-        self._audit(incident_id, "review_submitted", review.reviewer_id, payload)
-        return self._drive(incident_id, Command(resume=payload))
+        if self.four_eyes and (
+            reason := four_eyes_violation(
+                current.pending_review.get("submitted_by", ""), review.reviewer_id, review.choice.value
+            )
+        ):
+            self._audit(incident_id, "review_denied", review.reviewer_id, {**payload, "reason": "four_eyes"})
+            raise AuthorizationError(reason)
+        return current
+
+    def decide(self, incident_id: str, review: ReviewInput) -> RunStatus:
+        """Submit a reviewer decision. The caller must have authenticated ``review.reviewer_id``."""
+        self.authorize_review(incident_id, review)
+        self._audit(incident_id, "review_submitted", review.reviewer_id, review.model_dump(mode="json"))
+        return self._drive(incident_id, Command(resume=review.model_dump(mode="json")))
 
     def resume(self, incident_id: str) -> RunStatus:
         """Continue a run that stopped mid-graph (e.g. the process died). Paused reviews need ``decide``."""
@@ -168,6 +185,10 @@ class InvestigationService:
             return current
         self._audit(incident_id, "resumed", "system", {"next": current.next_nodes})
         return self._drive(incident_id, None)
+
+    @property
+    def four_eyes(self) -> bool:
+        return self.deps.four_eyes
 
     @property
     def audit_keyed(self) -> bool:

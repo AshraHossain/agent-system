@@ -57,7 +57,13 @@ from netpulse.models import (
     WorkflowStatus,
 )
 from netpulse.policy.catalog import load_catalog
-from netpulse.policy.engine import PolicyContext, escalation_reasons, review_action, review_incident
+from netpulse.policy.engine import (
+    PolicyContext,
+    escalation_reasons,
+    four_eyes_violation,
+    review_action,
+    review_incident,
+)
 from netpulse.retrieval.retriever import RetrievalQuery, document_evidence
 from netpulse.retrieval.sanitize import sanitize
 from netpulse.topology.analysis import (
@@ -736,6 +742,7 @@ def build_review_request(state: dict) -> ReviewRequest:
         choices.append(ReviewerChoice.REQUEST_MORE_INVESTIGATION)
     return ReviewRequest(
         incident_id=state["incident_id"],
+        submitted_by=(state.get("request_metadata") or {}).get("submitted_by", ""),
         required_role=incident.required_role if incident.required_role != "none" else "operator",
         summary=assessment.rationale,
         hypotheses=assessment.ranking[:3],
@@ -757,6 +764,10 @@ def human_approval(state: dict, deps: Deps) -> dict:
         return {"review_error": f"invalid review input: {str(exc)[:300]}"}
     if ROLE_RANK[review.reviewer_role] < ROLE_RANK[request.required_role]:
         return {"review_error": f"role {review.reviewer_role} cannot decide; {request.required_role} required"}
+    if deps.four_eyes and (
+        reason := four_eyes_violation(request.submitted_by, review.reviewer_id, review.choice.value)
+    ):
+        return {"review_error": reason}
     if review.choice not in request.allowed_choices:
         return {"review_error": f"choice {review.choice.value} is not allowed (no review cycles left)"}
     pending_ids = [item.action.action_id for item in request.pending_actions]

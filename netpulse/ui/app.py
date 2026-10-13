@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 
 import streamlit as st
 
-from netpulse.ui.client import ApiClient, ApiError, forwarded_token, is_settled
+from netpulse.ui.client import ApiClient, ApiError, cannot_approve_reason, forwarded_token, is_settled
 
 SYNTHETIC_BANNER = (
     "SYNTHETIC DATA: every result below comes from a simulated network. "
@@ -201,8 +201,13 @@ def _review_tab(client: ApiClient, incident_id: str) -> None:
         item_ids.append(action["action_id"])
         st.markdown(f"**{action['action_id']}** `{action['catalog_id']}` · policy `{decision['outcome']}`")
         st.text(action["description"])
+    choices = list(pending["allowed_choices"])
+    me, health = _call(client.whoami), _call(client.health)
+    if me and health and (reason := cannot_approve_reason(pending, me["name"], health["four_eyes"])):
+        st.info(reason)
+        choices = [c for c in choices if c != "approve"]
     with st.form("review"):
-        choice = st.radio("Decision", pending["allowed_choices"])
+        choice = st.radio("Decision", choices)
         selected = st.multiselect("Approve only these actions (empty = all)", item_ids)
         comment = st.text_area("Comment", max_chars=2000)
         if st.form_submit_button("Submit decision"):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -42,6 +43,7 @@ class Deps:
     generator: HypothesisGenerator
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     clock: Callable[[], datetime] = utc_now
+    four_eyes: bool = True  # NETPULSE_FOUR_EYES=off disables it (single-person labs only)
 
     @classmethod
     def default(
@@ -50,6 +52,7 @@ class Deps:
         generator: HypothesisGenerator | None = None,
         provider: Literal["ollama", "heuristic"] | None = None,
         settings: Settings | None = None,
+        four_eyes: bool | None = None,
     ) -> Deps:
         settings = settings or Settings.from_env()
         store = DatasetStore(data_dir) if data_dir else default_store()
@@ -59,4 +62,9 @@ class Deps:
             retriever=CorpusRetriever(store.corpus_dir),
             topology=topology,
             generator=generator or make_generator(provider or settings.llm_provider, topology, settings),
+            four_eyes=_four_eyes_from_env() if four_eyes is None else four_eyes,
         )
+
+
+def _four_eyes_from_env() -> bool:
+    return os.environ.get("NETPULSE_FOUR_EYES", "on").strip().lower() not in {"0", "off", "false", "no"}

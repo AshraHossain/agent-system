@@ -38,6 +38,9 @@ class ApiClient:
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
 
+    def whoami(self) -> dict[str, Any]:
+        return self._request("GET", "/me")
+
     def submit_incident(self, submission: dict[str, Any], incident_id: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {"submission": submission}
         if incident_id:
@@ -93,3 +96,11 @@ def forwarded_token(headers: Mapping[str, str] | None, header_name: str) -> str:
             value = value.strip()
             return value[7:].strip() if value.lower().startswith("bearer ") else value
     return ""
+
+
+def cannot_approve_reason(pending_review: dict[str, Any], me: str, four_eyes: bool) -> str | None:
+    """Why the signed-in user cannot approve this incident (four-eyes rule), for display. The API still enforces it."""
+    submitted_by = (pending_review.get("submitted_by") or "").strip().casefold()
+    if four_eyes and submitted_by and submitted_by == me.strip().casefold():
+        return "You submitted this incident, so another reviewer must approve it. You can still reject it."
+    return None

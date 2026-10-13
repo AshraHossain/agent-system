@@ -23,6 +23,8 @@ with `change-me`, duplicate tokens, and empty tokens or names. The `dev-*` token
 - Mutating endpoints return 202 and run on a background job; clients poll `GET /incidents/{id}`.
   One operation per incident at a time (409 otherwise).
 - Untrusted text (descriptions, evidence summaries) is rendered with `st.text`, not markdown.
+- The person who submitted an incident cannot approve it (403, four-eyes); `GET /me` returns the caller's identity and `/health`
+  reports `four_eyes`.
 - `GET /audit/verify` (senior operators) re-verifies the audit hash chain; `/health` reports `audit_keyed`.
 - Submitting an `incident_id` that already exists returns 409. More than 100 queued or running jobs returns 429.
 - `/docs` and `/openapi.json` are off unless `NETPULSE_API_DOCS=true`.
