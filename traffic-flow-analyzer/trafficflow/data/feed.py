@@ -10,7 +10,7 @@ from typing import Protocol
 import pandas as pd
 
 from trafficflow.contracts import SegmentInfo
-from trafficflow.core.simulate import STEP_MINUTES, SEGMENTS, simulate
+from trafficflow.core.simulate import SEGMENTS, STEP_MINUTES, simulate
 
 
 class Feed(Protocol):
