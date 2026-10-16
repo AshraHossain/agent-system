@@ -12,6 +12,9 @@
 - [x] Citation relevance check (entity alignment); sufficiency still unchecked
 - [x] Held-out split with recorded pre-fix baseline (now a regression set)
 - [ ] Independently authored evaluation set (different author)
+- [x] Verifier detection matrix: planted defects x all cases vs a clean baseline (`opspilot eval --verifier-matrix`, docs/eval_results_verifier.md)
+- [ ] Close the matrix's deterministic blind spots: summary/findings agreement, confidence vs rule confidence, ranking vs rule ranking, category/component-type mismatch
+- [ ] Replay the matrix's `paraphrased_certainty` (and other blind spots) against the live LLM reviewer
 
 ## Medium priority
 - [x] Optional bounded re-investigation loop (`LoopAgent`, max 2) — retries failed stages; off by default (`OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`)
