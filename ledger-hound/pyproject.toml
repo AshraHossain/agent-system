@@ -1,0 +1,42 @@
+[project]
+name = "ledger-hound"
+version = "0.1.0"
+description = "Agentic QA for a Purchase-to-Pay API: explorer, adversary and judge agents that hunt for financial-integrity bugs."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "pydantic>=2",
+    "openai-agents",
+    "python-dotenv",
+]
+
+[project.scripts]
+ledger-hound = "ledger_hound.cli:main"
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ledger_hound"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# prompt prose and the impact table read better unwrapped
+"src/ledger_hound/qa/brain.py" = ["E501"]
