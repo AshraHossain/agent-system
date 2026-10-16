@@ -1,4 +1,4 @@
-"""Command line: ``ledger-hound api | run | score | attacks``."""
+"""Command line: ``ledger-hound api | run | score | stress | attacks``."""
 
 from __future__ import annotations
 
@@ -45,6 +45,13 @@ def main(argv: list[str] | None = None) -> int:
     sc = sub.add_parser("score", help="detection rate against every planted bug")
     sc.add_argument("--out", default="var/score.json")
 
+    st = sub.add_parser("stress", help="N randomized POs vs an independent oracle; failure rate")
+    st.add_argument("--base-url", help="API under test; omit to use the in-process practice API")
+    st.add_argument("--local-bugs", default="", help="bugs for the in-process API (no --base-url)")
+    st.add_argument("-n", type=int, default=50, help="number of scenarios (default 50)")
+    st.add_argument("--seed", type=int, default=7, help="RNG seed; same seed = same scenarios")
+    st.add_argument("--out", default="var/stress", help="output directory")
+
     sub.add_parser("attacks", help="list attacks and plantable bugs")
 
     args = parser.parse_args(argv)
@@ -54,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run(args))
     if args.cmd == "score":
         return asyncio.run(_score(args))
+    if args.cmd == "stress":
+        return asyncio.run(_stress(args))
     return _attacks()
 
 
@@ -72,17 +81,9 @@ def _serve(args: argparse.Namespace) -> int:
 
 async def _run(args: argparse.Namespace) -> int:
     from .qa.brain import make_brain
-    from .qa.http import ApiClient
     from .qa.judge import investigate
 
-    if args.base_url:
-        client, target = ApiClient.for_url(args.base_url), args.base_url
-    else:
-        from .p2p_api.app import create_app
-
-        bugs = parse_bugs(args.local_bugs)
-        client = ApiClient.for_app(create_app(bugs))
-        target = f"in-process practice API (bugs: {', '.join(sorted(bugs)) or 'none'})"
+    client, target = _target(args)
     brain = make_brain(mock=args.mock)
     try:
         report = await investigate(
@@ -109,6 +110,19 @@ async def _run(args: argparse.Namespace) -> int:
         _print_report(report, path)
     breached = report["counts"]["BREACHED"] > 0 or report["happy_path"]["status"] != "PASS"
     return 1 if breached else 0  # non-zero exit lets CI / a scheduler alert on findings
+
+
+def _target(args: argparse.Namespace) -> tuple[Any, str]:
+    """Client for --base-url, or for the in-process practice API with --local-bugs."""
+    from .qa.http import ApiClient
+
+    if args.base_url:
+        return ApiClient.for_url(args.base_url), args.base_url
+    from .p2p_api.app import create_app
+
+    bugs = parse_bugs(args.local_bugs)
+    target = f"in-process practice API (bugs: {', '.join(sorted(bugs)) or 'none'})"
+    return ApiClient.for_app(create_app(bugs)), target
 
 
 def _print_report(report: dict[str, Any], path: Path) -> None:
@@ -149,6 +163,45 @@ async def _score(args: argparse.Namespace) -> int:
     print(f"\nscore: {args.out}")
     ok = result["detection_rate"].split("/")[0] == result["detection_rate"].split("/")[1]
     return 0 if ok and not result["false_positives_on_clean_api"] else 1
+
+
+async def _stress(args: argparse.Namespace) -> int:
+    from .qa.discovery import discover
+    from .qa.stress import stress
+
+    client, target = _target(args)
+    try:
+        result = await stress(client, await discover(client), n=args.n, seed=args.seed)
+    finally:
+        await client.aclose()
+    if "error" in result:
+        print(result["error"])
+        return 2
+    result["target"] = target
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"stress-{datetime.now():%Y%m%d-%H%M%S}.json"
+    path.write_text(json.dumps(result, indent=2, default=str))
+
+    print(f"\nStress  target: {target}  seed: {result['seed']}")
+    print(
+        f"{result['failed']}/{result['scenarios']} scenarios violated a control "
+        f"(failure rate {result['failure_rate']:.0%})\n"
+    )
+    print("  by variant:")
+    for variant, row in result["by_variant"].items():
+        print(f"    {variant:<20} {row['failed']:>3}/{row['scenarios']:<3} failed")
+    if result["by_rule"]:
+        print("  by rule (scenarios affected):")
+        for rule, count in result["by_rule"].items():
+            print(f"    {rule:<24} {count}")
+        print("  first failures:")
+        for r in [r for r in result["results"] if r["violations"]][:3]:
+            v = r["violations"][0]
+            print(f"    #{r['id']} {r['variant']}: [{v['rule']}] {v['detail'][:90]}")
+    print(f"\nstress report: {path}")
+    return 1 if result["failed"] else 0
 
 
 def _attacks() -> int:

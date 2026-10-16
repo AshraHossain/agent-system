@@ -14,10 +14,11 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 31 offline tests, no API key needed
+uv run pytest                                  # 43 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
+uv run ledger-hound stress --local-bugs silent_partial   # 50 randomized POs -> failure rate
 ```
 
 Against a real server, which is the interview setup:
@@ -64,6 +65,27 @@ openapi     LLM     scripted   16 lib     LLM        rules rollup
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
 | `qa/score.py` | Detection rate against the planted bugs |
+| `qa/stress.py` | Seeded random POs with an independent Decimal oracle; failure rate per rule and variant |
+
+## Stress test
+
+`ledger-hound stress [-n 50] [--seed 7] [--base-url URL | --local-bugs ...]`
+generates randomized POs: 1-3 lines, float-trap prices, and full, partial or
+zero receipts. Each gets an invoice variant: `exact`, `under`, `over_qty`,
+`over_cent` or `price_up_qty_down`. For every scenario, Python first computes
+what a correct AP system must do. The scenario is then pushed through
+create → match → approve, and every gap is a violation. The output is the
+failure rate overall, per rule and per variant, written to `var/stress/`. The
+same seed always gives the same scenarios.
+
+| Practice API | Failure rate (50 scenarios, seed 7) |
+| --- | --- |
+| clean | 0% |
+| `overpay_ordered` | 36% |
+| `float_money` | 30% |
+| `no_price_check` / `unmatched_approve` | 22% |
+| `silent_partial` | 18% |
+| `dup_case`, `race_approve`, ... | 0%: random volume can't find these; the targeted attacks do |
 
 **Design rule:** the LLM never decides pass/fail. Verdicts come from
 arithmetic on data re-read from the API. The model plans, explores, invents
