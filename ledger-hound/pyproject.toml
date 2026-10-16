@@ -16,6 +16,11 @@ dependencies = [
 [project.scripts]
 ledger-hound = "ledger_hound.cli:main"
 
+[project.optional-dependencies]
+dspy = [
+    "dspy>=3.4.1",
+]
+
 [dependency-groups]
 dev = ["pytest", "pytest-asyncio", "ruff"]
 
@@ -40,3 +45,4 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.ruff.lint.per-file-ignores]
 # prompt prose and the impact table read better unwrapped
 "src/ledger_hound/qa/brain.py" = ["E501"]
+"src/ledger_hound/qa/labels.py" = ["E501"]

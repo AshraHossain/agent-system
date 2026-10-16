@@ -25,6 +25,7 @@ from typing import Any
 
 from .discovery import Catalog
 from .http import ApiClient
+from .models import slim_all
 from .oracle import dec, gl_problems, gl_totals, match_is_clean, money, pick
 from .workflow import Line, SetupError, Workflow, entity_id
 
@@ -86,6 +87,7 @@ class ScenarioResult:
     observed: dict[str, Any]
     violations: list[dict[str, str]] = field(default_factory=list)
     scenario: dict[str, Any] = field(default_factory=dict)
+    exchanges: list[dict[str, Any]] = field(default_factory=list)
 
     def violate(self, rule: str, detail: str) -> None:
         self.violations.append({"rule": rule, "detail": detail})
@@ -158,6 +160,13 @@ def expect(s: Scenario) -> Expectation:
 
 
 async def run_scenario(wf: Workflow, s: Scenario) -> ScenarioResult:
+    start = len(wf.client.log)
+    res = await _run_scenario(wf, s)
+    res.exchanges = slim_all(wf.client.log[start:])
+    return res
+
+
+async def _run_scenario(wf: Workflow, s: Scenario) -> ScenarioResult:
     e = expect(s)
     res = ScenarioResult(
         id=s.id,
