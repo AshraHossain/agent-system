@@ -14,12 +14,13 @@ Verdicts come from the explorer/adversary oracles. The brain only adds words.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
 from .. import __version__
 from .adversary import ATTACKS, Adversary
-from .brain import Brain, LiveBrain
+from .brain import Brain, LiveBrain, LLMSettings
 from .discovery import discover
 from .explorer import Explorer
 from .http import ApiClient
@@ -36,6 +37,7 @@ async def investigate(
     agent_explore: bool = False,
     improvise: int = 0,
     only: list[str] | None = None,
+    classifier: str | None = None,
 ) -> dict[str, Any]:
     notes: list[str] = []
     catalog = await discover(client)
@@ -80,6 +82,10 @@ async def investigate(
     elif improvise:
         notes.append("--improvise needs a live model; skipped")
 
+    classifier_summary = None
+    if classifier:
+        classifier_summary = await _second_opinion(classifier, results, notes)
+
     breaches = [r for r in results if r.status == "BREACHED"]
     for r, text in zip(
         breaches, await brain.explain([r.to_dict() for r in breaches]), strict=False
@@ -110,6 +116,7 @@ async def investigate(
             "discovery": catalog.source,
             "roles": sorted(catalog.roles),
             "notes": notes + list(brain.notes),
+            "classifier": classifier_summary,
             "http_calls": len(client.log),
         },
         "plan": plan,
@@ -119,6 +126,30 @@ async def investigate(
         "counts": counts,
         "summary": summary,
     }
+
+
+async def _second_opinion(path: str, results: list[AttackResult], notes: list[str]):
+    """Score every probe with the DSPy-optimized classifier and compare with the oracle."""
+    settings = LLMSettings.from_env()
+    if settings is None:
+        notes.append("--classifier needs BYNARA_API_KEY; skipped")
+        return None
+    try:
+        import dspy
+
+        from .dspy_opt import configure_lm, load_program, second_opinion
+        from .labels import render_exchanges
+    except ImportError:
+        notes.append("--classifier needs DSPy: uv sync --extra dspy; skipped")
+        return None
+
+    def work() -> dict[str, Any]:
+        program = load_program(path)
+        with dspy.context(lm=configure_lm(settings)):
+            return second_opinion(program, results, render_exchanges)
+
+    summary = await asyncio.to_thread(work)
+    return {"program": path, **summary}
 
 
 def rollup(results: list[AttackResult]) -> dict[str, str]:

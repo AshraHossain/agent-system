@@ -149,4 +149,8 @@ def split(
         cut = round(len(group) * dev_fraction)
         dev += group[:cut]
         train += group[cut:]
+    # Interleave labels. Optimizers such as BootstrapFewShot take demos from the
+    # front of the train set; all-positive demos would bias the classifier.
+    rng.shuffle(train)
+    rng.shuffle(dev)
     return train, dev

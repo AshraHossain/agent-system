@@ -14,7 +14,7 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 43 offline tests, no API key needed
+uv run pytest                                  # 54 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
@@ -66,6 +66,8 @@ openapi     LLM     scripted   16 lib     LLM        rules rollup
 | `qa/judge.py` | Runs the whole investigation and builds the report |
 | `qa/score.py` | Detection rate against the planted bugs |
 | `qa/stress.py` | Seeded random POs with an independent Decimal oracle; failure rate per rule and variant |
+| `qa/labels.py` | Labelled dataset for the classifier, built from the planted bugs (no LLM) |
+| `qa/dspy_opt.py` | DSPy violation classifier: optimize, evaluate, second opinion (optional extra) |
 
 ## Stress test
 
@@ -86,6 +88,33 @@ same seed always gives the same scenarios.
 | `no_price_check` / `unmatched_approve` | 22% |
 | `silent_partial` | 18% |
 | `dup_case`, `race_approve`, ... | 0%: random volume can't find these; the targeted attacks do |
+
+## DSPy prompt optimization
+
+This is the third stretch goal: optimizing the prompt that decides whether
+an API response is a financial-integrity violation. It's an optional extra:
+
+```bash
+uv sync --extra dspy
+uv run ledger-hound dspy dataset                          # 72 labelled rows, no LLM needed
+uv run ledger-hound dspy optimize --optimizer bootstrap   # needs BYNARA_API_KEY
+uv run ledger-hound run --classifier var/dspy/classifier.json   # second opinion in the report
+```
+
+How it works:
+
+* **Labels.** The labels come free from the planted bugs: every probe on the
+  clean API and on each bugged API becomes an example (rule, attempt, HTTP
+  transcript). It is labelled with the oracle's verified verdict, and the
+  oracle's own conclusions never appear in the model's inputs.
+* **Optimizers.** `labeled` (k demos, no compile calls), `bootstrap`
+  (BootstrapFewShot keeps the model's own correct reasoning as demos) or
+  `mipro` (MIPROv2, which also rewrites the instructions). Each prints
+  baseline vs optimized accuracy, precision and recall on a held-out dev
+  set, then saves `classifier.json` and a readable `prompt.md`.
+* **Second opinion.** `run --classifier` adds the classifier's verdict to
+  every probe, plus an agreement score against the oracle. The classifier
+  is meant for probes with no oracle, such as `--improvise` findings.
 
 **Design rule:** the LLM never decides pass/fail. Verdicts come from
 arithmetic on data re-read from the API. The model plans, explores, invents

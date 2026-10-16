@@ -64,6 +64,7 @@ class AttackResult:
     severity: str = ""
     explanation: str = ""
     source: str = "library"  # "library" (deterministic) or "llm" (improvised, unverified)
+    classifier: dict[str, Any] = field(default_factory=dict)  # DSPy second opinion, if run
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

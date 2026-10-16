@@ -1,4 +1,4 @@
-"""Command line: ``ledger-hound api | run | score | stress | attacks``."""
+"""Command line: ``ledger-hound api | run | score | stress | dspy | attacks``."""
 
 from __future__ import annotations
 
@@ -41,6 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--only", default="", help="comma list of attack ids")
     run.add_argument("--out", default="var/reports", help="report directory")
     run.add_argument("--quiet", action="store_true", help="print only the report path")
+    run.add_argument(
+        "--classifier", help="DSPy program (from `dspy optimize`) for a second opinion"
+    )
 
     sc = sub.add_parser("score", help="detection rate against every planted bug")
     sc.add_argument("--out", default="var/score.json")
@@ -51,6 +54,15 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("-n", type=int, default=50, help="number of scenarios (default 50)")
     st.add_argument("--seed", type=int, default=7, help="RNG seed; same seed = same scenarios")
     st.add_argument("--out", default="var/stress", help="output directory")
+
+    dp = sub.add_parser("dspy", help="optimize the violation-classifier prompt with DSPy")
+    dsub = dp.add_subparsers(dest="dspy_cmd", required=True)
+    ds = dsub.add_parser("dataset", help="build the labelled dataset from planted bugs (no LLM)")
+    ds.add_argument("--out", default="var/dspy")
+    op = dsub.add_parser("optimize", help="baseline vs optimized classifier on held-out dev set")
+    op.add_argument("--optimizer", choices=["labeled", "bootstrap", "mipro"], default="bootstrap")
+    op.add_argument("--threads", type=int, default=4)
+    op.add_argument("--out", default="var/dspy")
 
     sub.add_parser("attacks", help="list attacks and plantable bugs")
 
@@ -63,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_score(args))
     if args.cmd == "stress":
         return asyncio.run(_stress(args))
+    if args.cmd == "dspy":
+        return _dspy(args)
     return _attacks()
 
 
@@ -93,6 +107,7 @@ async def _run(args: argparse.Namespace) -> int:
             agent_explore=args.agent_explore,
             improvise=args.improvise,
             only=[s for s in args.only.split(",") if s] or None,
+            classifier=args.classifier,
         )
     finally:
         await client.aclose()
@@ -202,6 +217,54 @@ async def _stress(args: argparse.Namespace) -> int:
             print(f"    #{r['id']} {r['variant']}: [{v['rule']}] {v['detail'][:90]}")
     print(f"\nstress report: {path}")
     return 1 if result["failed"] else 0
+
+
+def _dspy(args: argparse.Namespace) -> int:
+    from .qa.labels import build_dataset, split
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = asyncio.run(build_dataset())
+    train, dev = split(rows)
+    with (out / "dataset.jsonl").open("w") as fh:
+        for row in rows:
+            fh.write(json.dumps({**row, "split": "dev" if row in dev else "train"}) + "\n")
+    positives = sum(r["violation"] for r in rows)
+    print(
+        f"dataset: {len(rows)} rows ({positives} violations, {len(rows) - positives} clean); "
+        f"train {len(train)}, dev {len(dev)} -> {out / 'dataset.jsonl'}"
+    )
+    if args.dspy_cmd == "dataset":
+        return 0
+
+    from .qa.brain import LLMSettings
+
+    settings = LLMSettings.from_env()
+    if settings is None:
+        print("optimize needs an LLM: set BYNARA_API_KEY (see .env.example)")
+        return 2
+    try:
+        import dspy
+
+        from .qa.dspy_opt import configure_lm, optimize
+    except ImportError:
+        print("DSPy is an optional extra: uv sync --extra dspy")
+        return 2
+
+    print(f"optimizing with {args.optimizer} on {settings.model} ...")
+    with dspy.context(lm=configure_lm(settings)):
+        report = optimize(train, dev, args.optimizer, out, threads=args.threads)
+    (out / "optimize.json").write_text(json.dumps(report, indent=2))
+    for label in ("baseline", "optimized"):
+        r = report[label]
+        print(
+            f"  {label:<9} accuracy {r['accuracy']:.0%}  precision {r['precision']:.0%}  "
+            f"recall {r['recall']:.0%}  (tp {r['tp']} fp {r['fp']} tn {r['tn']} fn {r['fn']})"
+        )
+    acc, rec = report["accuracy_delta"], report["recall_delta"]
+    print(f"  delta     accuracy {acc:+.0%}  recall {rec:+.0%}")
+    print(f"program: {report['program']}\nprompt:  {report['prompt']}")
+    return 0
 
 
 def _attacks() -> int:
