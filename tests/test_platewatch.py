@@ -99,3 +99,36 @@ def test_core_does_not_import_frameworks():
                 else []
             )
             assert not {n.split(".")[0] for n in names} & banned, p
+
+
+def test_cli_demo_and_search(tmp_path, capsys):
+    from platewatch import cli
+
+    assert cli.main(["demo"]) == 0
+    assert "XYZ908I" in capsys.readouterr().out
+    db = tmp_path / "p.db"
+    store = PlateStore(db)
+    store.add(_rec("1", "ABC1234"))
+    store.close()
+    assert cli.main(["--db", str(db), "search", "abc 1234"]) == 0
+    assert '"exact":true' in capsys.readouterr().out.replace(" ", "")
+
+
+def test_cli_ingest_and_ask_use_backend(tmp_path, monkeypatch, capsys):
+    from platewatch import cli
+
+    pipe, _ = _pipeline(tmp_path)
+    vision = pipe.detector
+    monkeypatch.setattr(cli, "_backend", lambda name: (vision, vision))
+    db = tmp_path / "p.db"
+    assert cli.main(["--db", str(db), "ingest", str(tmp_path)]) == 0
+    assert '"plates_stored": 3' in capsys.readouterr().out
+    assert cli.main(["--db", str(db), "ask", "find plate XYZ 9081", "--inbox", str(tmp_path)]) == 0
+    assert "XYZ908I" in capsys.readouterr().out
+
+
+def test_cli_rejects_unknown_backend():
+    from platewatch import cli
+
+    with pytest.raises(SystemExit):
+        cli._backend("scripted")

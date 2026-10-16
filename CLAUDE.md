@@ -52,3 +52,16 @@ uv run adk web adk_apps                   # ADK dev UI
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.
 - Keep the mock deterministic; never assert live-model outputs exactly.
 - Do not claim production readiness.
+
+## PlateWatch (`platewatch/`) — PydanticAI licence-plate module
+
+Separate package beside `opspilot/` (see [docs/platewatch.md](docs/platewatch.md)); it does not use ADK.
+
+- `platewatch/core/` must not import `pydantic_ai`, `torch`, `transformers` or `google`
+  (`tests/test_platewatch.py` enforces it). Normalisation, tag thresholds, embedding and the
+  store live there — never in prompts.
+- Agent tools take no paths, URLs or SQL from the model (the inbox is fixed in `PlateDeps`); every
+  plate id in agent output must have been returned by a tool (output validator).
+- Detector/reader are `Protocol`s in `vision/`; Hugging Face backends import torch lazily and are
+  covered only by `-m live` (`tests/test_platewatch_live.py`). Offline tests use `ScriptedVision`.
+- Commands: `uv run platewatch demo`; `uv run pytest tests/test_platewatch.py`.

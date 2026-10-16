@@ -135,3 +135,20 @@ Status rules (finalizer, deterministic):
 state; investigations can be listed, inspected and resumed (stages whose
 `output_key` already exists are skipped). Tests use `InMemorySessionService`.
 Details: [docs/session_management.md](docs/session_management.md).
+
+## PlateWatch (separate package)
+
+```
+platewatch/
+  contracts.py   BoundingBox, PlateRecord, SearchHit, ScanSummary, PlateReport   (no framework)
+  core/          text normalisation + tagging, HashingEmbedder, SQLite PlateStore  (no framework)
+  vision/        Detector/Reader protocols; HF (lazy torch), ScriptedVision (offline)
+  pipeline.py    image -> detect -> crop/read -> normalise -> tag -> store (idempotent by content hash)
+  agent.py       PydanticAI Agent: scan_new_images · search_plates · list_needs_review
+  cli.py         platewatch demo | ingest | search | ask
+```
+
+Flow: `scan_inbox` hashes each image (skips seen ones), the detector returns boxes, the reader returns
+text + confidence, `core.text` normalises and tags, and `PlateStore` persists record + embedding.
+`search` embeds the query (OCR-confusable characters folded) and ranks by cosine similarity, exact
+matches first. The agent's output validator rejects plate ids no tool returned.
