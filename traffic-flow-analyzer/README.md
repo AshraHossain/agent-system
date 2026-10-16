@@ -38,3 +38,7 @@ briefing tab, and an Ask tab.
   `TRAFFICFLOW_MODEL` (e.g. `google-gla:<model>`) plus that provider's API key; live output is
   untested here.
 - Read-only decision support; not production-ready.
+
+## Docs
+
+[PLAN.md](PLAN.md) (why) · [ARCHITECTURE.md](ARCHITECTURE.md) (how) · [TASK.md](TASK.md) (backlog) · [docs/adr/](docs/adr/README.md)

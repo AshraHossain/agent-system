@@ -4,6 +4,9 @@ Guidance for Claude Code in this sub-project. It follows the conventions of the 
 OpsPilot project (see `../CLAUDE.md`) but uses **PydanticAI** and **Gradio**, with its own
 `pyproject.toml` and lockfile so ADK's pinned dependencies are never touched.
 
+Read [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md) before changing code; open work is in
+[TASK.md](TASK.md).
+
 ## What this is
 
 Forecasts road congestion from a (simulated) real-time speed feed. PydanticAI agents call
