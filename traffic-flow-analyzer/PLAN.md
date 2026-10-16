@@ -48,19 +48,21 @@ briefing and Q&A are explicit button actions.
 | 1 | Contracts, simulator, forecaster, anomaly detection, status rules, backtest | done (PR #14) |
 | 2 | Read-only tools, agents, mock models, pipeline, verifier | done (PR #14) |
 | 3 | Gradio dashboard, CLI, CI | done (PR #14) |
-| 4 | This documentation | in progress |
-| 5 | Real-data replay feed and a non-circular backtest | next |
-| 6 | Stronger verification and multiple forecasters | planned |
+| 4 | Documentation | done (PR #17) |
+| 5 | Real-data replay feed and a non-circular evaluation | done (PR #17); see [eval](docs/eval_results_pems.md) |
+| 6 | Interval calibration, better short-horizon forecast, stronger verification, multiple forecasters | next |
 | 7 | Agent evaluation set; live-model validation | planned |
 
 ## 5. Non-goals and honest limits
 
 * **Not production-ready.**
-* **Data are simulated by default.** `CsvFeed` loads real exports, but nothing here has run
-  on real traffic data yet.
-* **The current backtest is partly circular.** The simulator and the forecaster both assume
-  a daily seasonal profile, so beating the persistence baseline is weak evidence about real
-  roads. Phase 5 addresses this. The 90% interval's coverage has never been measured.
+* **Data are simulated by default.** Real recorded data can be replayed (`ReplayFeed`, PeMSD7)
+  and loaded from CSV, but there is no live feed: both only advance a clock over a recording.
+* **Simulated results do not transfer.** The simulator and forecaster share a daily seasonal
+  assumption, so the simulated backtest is partly circular. On real PeMSD7 data the model
+  beats persistence only at 60 minutes, loses at 15 and ties at 30, and its "90%" interval
+  covers ~59-66% ([results](docs/eval_results_pems.md)). That evaluation is one dataset, a
+  weekday-only 2012 freeway recording, with reconstructed timestamps and assumed units.
 * **Offline runs use scripted mock models, not an LLM.** They test tools, orchestration,
   verification and the UI, not language-model reasoning quality. No live model has been run.
 * The verifier checks that citations exist, not that the numbers quoted match the evidence.

@@ -3,10 +3,12 @@ button actions, so the live-ticking view never makes model calls."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import gradio as gr
 
 from trafficflow.agents.pipeline import ask, run_report
-from trafficflow.data.feed import SyntheticFeed
+from trafficflow.data.feed import Feed, SyntheticFeed
 from trafficflow.ui.plots import heatmap_figure, speed_figure, status_table
 
 BADGE = {"normal": "🟢 NORMAL", "watch": "🟡 WATCH", "degraded": "🔴 DEGRADED"}
@@ -21,17 +23,22 @@ def _refresh(feed, segment, horizon):
     )
 
 
-def build_app(model: str | None = None) -> gr.Blocks:
-    seg_choices = [(f"{s.id} {s.name}", s.id) for s in SyntheticFeed().segments()]
+def build_app(
+    model: str | None = None, feed_factory: Callable[[], Feed] | None = None
+) -> gr.Blocks:
+    """`feed_factory` builds the (per-session) feed; defaults to the simulated network."""
+    make_feed = feed_factory or SyntheticFeed
+    first_feed = make_feed()
+    seg_choices = [(f"{s.id} {s.name}", s.id) for s in first_feed.segments()]
     with gr.Blocks(title="Traffic Flow Analyzer") as demo:
         gr.Markdown(
             "# Traffic Flow Analyzer\nCongestion forecasting with PydanticAI agents. "
-            "Data is a **simulated** feed; forecasts come from a deterministic model, "
-            "and agents only read tool results."
+            "Forecasts come from a deterministic model and agents only read tool results. "
+            "The data source is a simulated or replayed recording, not a live feed."
         )
-        feed = gr.State(SyntheticFeed())
+        feed = gr.State(first_feed)
         with gr.Row():
-            segment = gr.Dropdown(seg_choices, value="S2", label="Segment")
+            segment = gr.Dropdown(seg_choices, value=seg_choices[0][1], label="Segment")
             horizon = gr.Slider(15, 180, value=60, step=15, label="Forecast horizon (min)")
             step_btn = gr.Button("Advance 30 min")
             live = gr.Checkbox(label="Live (advance 5 min every 5 s)", value=False)

@@ -5,11 +5,12 @@
 ```
 trafficflow/
   contracts/   Pydantic models: segments, forecasts, anomalies, agent outputs, report  (no AI libs)
-  core/        simulate, forecast, congestion, anomaly, status, backtest              (no AI libs)
-  data/        Feed protocol; SyntheticFeed (deterministic, advancing clock); CsvFeed
+  core/        simulate, forecast, congestion, anomaly, status, evaluation, backtest  (no AI libs)
+  data/        Feed protocol; SyntheticFeed (deterministic, advancing clock); CsvFeed;
+               replay.py: ReplayFeed (recorded speeds, held-back truth) + PeMSD7 fetch/load
   agents/      deps, tools, prompts, agent factories, mock models, pipeline
   ui/          plots.py (pure Plotly builders), app.py (Gradio Blocks)
-  cli.py       trafficflow demo | backtest | serve
+  cli.py       trafficflow demo | backtest | fetch-data | evaluate | serve
 ```
 
 Rule: `contracts/` and `core/` never import `pydantic_ai` or `gradio`
@@ -50,6 +51,16 @@ For each segment, history is the last 7 days at 5-minute resolution:
 Congestion index = 1 − speed / free-flow; levels at 0.2 / 0.4 / 0.6 (`core/congestion.py`).
 Incidents: robust z ≤ −3.5 for ≥ 3 consecutive readings within the last 2 hours.
 
+## Evaluation
+
+`core/evaluation.py` runs a rolling-origin evaluation: at each origin it forecasts from history
+only, then compares with the held-back next values (`feed.next_values`, used nowhere else).
+It reports MAE / RMSE / MAPE at the step *h* minutes ahead for the model and three baselines
+(persistence, seasonal naive, historical average), split into peak and off-peak, plus the
+coverage and width of the 90% interval. `ReplayFeed` counts history in *recorded* points and
+skips weekend gaps; the forecaster falls back to the other day-type's profile when a horizon
+crosses a gap in weekday-only data. Results: [docs/eval_results_pems.md](docs/eval_results_pems.md).
+
 ## Evidence flow
 
 Each tool call records an `EV-nnn` entry in `TrafficDeps.evidence` and returns its id. Agents
@@ -63,7 +74,8 @@ reusing an id. The writer never touches tools; it sees only the analysts' output
 
 * Tools are read-only and take only a validated `segment_id` and a bounded horizon
   (5–180 min). No paths, SQL, URLs or commands.
-* `SyntheticFeed.truth` (future data) is used only by `core/backtest.py`, never by tools.
+* Held-back future data (`truth`, `next_values`) is used only by `core/evaluation.py` and
+  `core/backtest.py`, never by tools.
 * Status and escalation are computed in `core/`, not by an LLM.
 * Prompt injection via the Ask tab is limited by the tool surface (read-only), not solved.
 

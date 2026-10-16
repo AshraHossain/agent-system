@@ -25,15 +25,29 @@ Dashboard: speed history with forecast and 90% interval, a segment x time conges
 (observed + forecast), a status table, a "Live" mode that advances simulated time, an AI
 briefing tab, and an Ask tab.
 
+## Real data
+
+```bash
+uv run trafficflow fetch-data                      # PeMSD7 -> var/data (SHA-256 checked, not committed)
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv   # model vs baselines, interval coverage
+uv run trafficflow serve --replay var/data/PeMSD7_V_228.csv --sensors 8   # dashboard on real recordings
+```
+
+**Result on real data (honest summary):** the model beats persistence only at 60 minutes, is
+worse at 15 and ties at 30, and its "90%" interval covers only ~59-66%. Details and caveats:
+[docs/eval_results_pems.md](docs/eval_results_pems.md).
+
 ## Honest scope
 
-- **"Real-time" data is simulated** by default (`SyntheticFeed`, deterministic, advancing
-  clock). Real data: `CsvFeed` loads a wide CSV (`timestamp` + one speed column per segment
-  on a 5-minute grid); `trafficflow demo --csv file.csv`. A live API adapter would implement
-  the `Feed` protocol in `data/feed.py` (not included).
+- **There is no live feed.** The default is a simulated network (`SyntheticFeed`). Real
+  recordings can be replayed (`ReplayFeed`, PeMSD7) or loaded from CSV (`CsvFeed`:
+  `timestamp` + one speed column per segment, 5-minute grid); both only advance a clock over
+  a recording. A live API adapter would implement the `Feed` protocol (not included).
+- PeMSD7 timestamps and units are reconstructed (the file has neither); see the evaluation doc.
 - The forecaster is an interpretable seasonal-median + decaying-residual model. On the
-  simulated data it beats a persistence baseline (`trafficflow backtest`); that says nothing
-  about real roads.
+  simulated data it beats persistence (`trafficflow backtest`), but that is partly circular
+  (see the real-data result above, which is more modest).
+- The incident detector can flag small absolute drops on quiet real sensors as "incidents".
 - Offline runs use deterministic mock models, not an LLM. For a real model set
   `TRAFFICFLOW_MODEL` (e.g. `google-gla:<model>`) plus that provider's API key; live output is
   untested here.
