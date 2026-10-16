@@ -1,0 +1,19 @@
+name: ledger-hound
+on:
+  push:
+    paths: ["ledger-hound/**", ".github/workflows/ledger-hound.yml"]
+  pull_request:
+    paths: ["ledger-hound/**", ".github/workflows/ledger-hound.yml"]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ledger-hound
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --extra dspy
+      - run: uv run ruff check . && uv run ruff format --check .
+      - run: uv run pytest

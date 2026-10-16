@@ -86,7 +86,23 @@ risk/impact assessment, confidence rationale (categorical, rule-derived),
 escalation, verification results and status (`investigated`, `inconclusive`,
 `requires_human_review`, `failed`).
 
-## Repository map
+## Other projects in this repository
+
+OpsPilot is the root project. The repository also holds independent projects;
+each has its own README, and none imports another.
+
+| Path | Project | Stack | CI |
+|---|---|---|---|
+| `ledger-hound/` | Agentic QA for a Purchase-to-Pay API: explorer, adversary and judge agents, stress test, DSPy classifier | OpenAI Agents SDK, FastAPI, DSPy | `ledger-hound.yml` |
+| `traffic-flow-analyzer/` | Congestion forecasting with an interactive dashboard | PydanticAI, Gradio | `trafficflow.yml` |
+| `platewatch/` | Licence-plate detection, tagging and vector search ([docs](docs/platewatch.md)) | PydanticAI, Hugging Face | `ci.yml` (packaged with OpsPilot) |
+
+`ledger-hound/` and `traffic-flow-analyzer/` are self-contained (own
+`pyproject.toml`, `uv.lock`, tests); run their commands from inside the
+folder. `platewatch/` is a second package of the root project, with its
+dependencies in the `plates` extra.
+
+## Repository map (OpsPilot)
 
 | Path | Contents |
 |---|---|
