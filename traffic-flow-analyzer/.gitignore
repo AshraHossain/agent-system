@@ -1,0 +1,2 @@
+# the repo-wide `data/` rule must not hide the trafficflow.data package
+!trafficflow/data/
