@@ -80,7 +80,7 @@ async def detect_incidents(ctx: Ctx, segment_id: str) -> dict[str, Any]:
     """Find sustained abnormal slowdowns on one segment in the last two hours."""
     if _segment(ctx, segment_id) is None:
         return _unknown(ctx, segment_id)
-    found = detect(ctx.deps.feed.history(segment_id, days=7), segment_id)
+    found = detect(ctx.deps.feed.history(segment_id, days=7), segment_id, min_drop_kmh=5.0)
     data = {
         "segment_id": segment_id,
         "anomalies": [a.model_dump(mode="json") for a in found],
