@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 
+from trafficflow.contracts import CongestionLevel
 from trafficflow.core.congestion import congestion_index, level_for
 from trafficflow.core.forecast import forecast_segment
 from trafficflow.data.feed import Feed
@@ -12,6 +14,23 @@ from trafficflow.data.feed import Feed
 BAND = "rgba(37,99,235,0.18)"
 LINE = "#2563eb"
 FORECAST = "#d97706"
+
+# Fixed approximate lat/lon for synthetic segments near Los Angeles
+SEGMENT_COORDS: dict[str, tuple[float, float]] = {
+    "S1": (34.05, -118.25),
+    "S2": (34.06, -118.24),
+    "S3": (34.07, -118.23),
+    "S4": (34.05, -118.22),
+    "S5": (34.04, -118.24),
+    "S6": (34.06, -118.26),
+}
+
+_LEVEL_COLOR = {
+    CongestionLevel.normal: "green",
+    CongestionLevel.watch: "yellow",
+    CongestionLevel.degraded: "orange",
+    CongestionLevel.critical: "red",
+}
 
 
 def speed_figure(
@@ -97,6 +116,36 @@ def heatmap_figure(feed: Feed, horizon_minutes: int, hours_back: int = 3) -> go.
         margin={"l": 10, "r": 10, "t": 50, "b": 30},
         template="plotly_white",
         yaxis={"autorange": "reversed"},
+    )
+    return fig
+
+
+def map_figure(
+    points: list[tuple[str, float, float, CongestionLevel]],
+) -> go.Figure:
+    """Scatter map colored by congestion level.
+
+    `points` is a list of (segment_id, lat, lon, level).
+    """
+    df = pd.DataFrame(points, columns=["segment_id", "lat", "lon", "level"])
+    df["color"] = df["level"].map(_LEVEL_COLOR)
+    df["level_str"] = df["level"].map(lambda lv: lv.value)
+    fig = px.scatter_mapbox(
+        df,
+        lat="lat",
+        lon="lon",
+        color="level_str",
+        color_discrete_map={lv.value: c for lv, c in _LEVEL_COLOR.items()},
+        hover_name="segment_id",
+        hover_data={"lat": False, "lon": False, "level_str": True},
+        zoom=11,
+        height=400,
+    )
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        margin={"l": 0, "r": 0, "t": 30, "b": 0},
+        title="Segment congestion map",
+        legend_title="Level",
     )
     return fig
 
