@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--horizons", type=int, nargs="+", default=[15, 30, 60])
     e.add_argument("--from-hour", type=int, default=6)
     e.add_argument("--to-hour", type=int, default=20)
+    e.add_argument("--train-window", type=int, default=0, help="history points per origin (0=all)")
     s = sub.add_parser("serve", help="launch the Gradio dashboard")
     s.add_argument("--port", type=int, default=7860)
     s.add_argument("--host", default="127.0.0.1")
@@ -59,7 +60,8 @@ def main(argv: list[str] | None = None) -> int:
         feed = ReplayFeed(load_pemsd7(a.path, sensors=a.sensors))
         times = [f"{h:02d}:00" for h in range(a.from_hour, a.to_hour + 1)]
         origins = feed.origins(times, max_steps=max(a.horizons) // 5)
-        print(json.dumps(evaluate(feed, origins, a.horizons), indent=2))
+        tw = a.train_window or None
+        print(json.dumps(evaluate(feed, origins, a.horizons, train_window=tw), indent=2))
     else:
         from trafficflow.ui.app import build_app
 
