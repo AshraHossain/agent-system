@@ -22,13 +22,15 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     if [ -f /run/secrets/extra_ca ]; then \
       export PIP_CERT=/run/secrets/extra_ca SSL_CERT_FILE=/run/secrets/extra_ca; fi \
  && pip install --no-cache-dir "uv==${UV_VERSION}" \
- && uv sync --frozen --no-dev --no-install-project
+ && uv sync --frozen --no-dev --extra plates --no-install-project
 
 COPY opspilot/ ./opspilot/
+# platewatch is a second package of this project (pyproject `packages`), with deps in `plates`.
+COPY platewatch/ ./platewatch/
 COPY adk_apps/ ./adk_apps/
 RUN --mount=type=secret,id=extra_ca,required=false \
     if [ -f /run/secrets/extra_ca ]; then export SSL_CERT_FILE=/run/secrets/extra_ca; fi \
- && uv sync --frozen --no-dev \
+ && uv sync --frozen --no-dev --extra plates \
  && useradd --create-home --uid 10001 opspilot \
  && mkdir -p /app/var && chown -R opspilot /app/var \
  && su opspilot -c "/app/.venv/bin/opspilot build-data"

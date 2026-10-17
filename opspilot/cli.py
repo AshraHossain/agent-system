@@ -223,6 +223,8 @@ async def _eval(args, settings: Settings) -> int:
     from opspilot.eval.perturbations import run_guardrail_eval
 
     s = with_provider(settings, args.live)
+    if args.verifier_matrix:
+        return await _verifier_matrix(args, s)
     results = await run_eval(s, args.cases or None, split=args.split)
     if args.guardrails and not args.live:
         results["guardrails"] = await run_guardrail_eval(s)
@@ -231,6 +233,22 @@ async def _eval(args, settings: Settings) -> int:
     if "guardrails" in results:
         print(f"guardrail_detection_rate: {results['guardrails']['guardrail_detection_rate']}")
     print(f"results: {jpath}\n         {mpath}")
+    return 0
+
+
+async def _verifier_matrix(args, settings: Settings) -> int:
+    from opspilot.eval.verifier_matrix import run_verifier_matrix, to_markdown
+
+    if args.live:
+        print("--verifier-matrix patches mock policies; it runs offline only", file=sys.stderr)
+        return 2
+    result = await run_verifier_matrix(settings, args.cases or None)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "verifier_matrix.json").write_text(json.dumps(result, indent=2))
+    (out / "verifier_matrix.md").write_text(to_markdown(result))
+    print(to_markdown(result))
+    print(f"results: {out / 'verifier_matrix.json'}\n         {out / 'verifier_matrix.md'}")
     return 0
 
 
@@ -272,6 +290,11 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("eval", help="run the evaluation suite")
     e.add_argument("--cases", nargs="*")
     e.add_argument("--guardrails", action="store_true")
+    e.add_argument(
+        "--verifier-matrix",
+        action="store_true",
+        help="planted defects x all cases (main + held-out) vs a clean baseline; offline only",
+    )
     e.add_argument("--split", choices=["main", "heldout"], default="main")
     e.add_argument("--out", default=str(REPO_ROOT / "var" / "eval"))
     args = p.parse_args(argv)
