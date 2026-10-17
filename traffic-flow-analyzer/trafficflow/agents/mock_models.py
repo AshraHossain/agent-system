@@ -118,14 +118,36 @@ async def _writer_policy(messages: list[ModelMessage], info: AgentInfo) -> Model
                 "evidence_ids": o["evidence_ids"],
             }
         )
-    head = f"{len(data['incidents']['incidents'])} incident(s), {len(findings)} notable finding(s)"
+    # Deduplicate findings by claim text and recommendations by string
+    seen_claims: set[str] = set()
+    unique_findings = []
+    for f in findings:
+        if f["claim"] not in seen_claims:
+            seen_claims.add(f["claim"])
+            unique_findings.append(f)
+    seen_recs: set[str] = set()
+    unique_recs = []
+    for r in recs:
+        if r not in seen_recs:
+            seen_recs.add(r)
+            unique_recs.append(r)
+
+    summary_raw = "; ".join(f["claim"] for f in unique_findings)
+    # Deduplicate sentences in the summary
+    sentences = [s.strip() for s in summary_raw.split(". ") if s.strip()]
+    seen_s: set[str] = set()
+    unique_sentences = [s for s in sentences if not (s in seen_s or seen_s.add(s))]  # type: ignore[func-returns-value]
+    summary = ". ".join(unique_sentences)[:1100]
+
+    n_inc = len(data["incidents"]["incidents"])
+    head = f"{n_inc} incident(s), {len(unique_findings)} notable finding(s)"
     return _final(
         info,
         {
             "headline": head,
-            "summary": "; ".join(f["claim"] for f in findings)[:1100],
-            "findings": findings,
-            "recommendations": recs[:6],
+            "summary": summary,
+            "findings": unique_findings,
+            "recommendations": unique_recs[:6],
         },
     )
 

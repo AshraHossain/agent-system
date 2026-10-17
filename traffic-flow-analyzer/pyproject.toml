@@ -29,8 +29,11 @@ packages = ["trafficflow"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-markers = ["live: needs a real model API key; skipped by default"]
-addopts = "-m 'not live' -p no:cacheprovider"
+markers = [
+    "live: needs a real model API key; skipped by default",
+    "slow: headless browser or other slow tests; run with -m slow",
+]
+addopts = "-m 'not live and not slow' -p no:cacheprovider --cov=trafficflow --cov-fail-under=70 --cov-report=term-missing"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
 
 [tool.ruff]

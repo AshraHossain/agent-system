@@ -10,6 +10,8 @@ from pydantic_ai import RunContext
 from trafficflow.agents.deps import TrafficDeps
 from trafficflow.core.anomaly import detect
 from trafficflow.core.congestion import congestion_index, level_for
+from trafficflow.core.forecast import forecast_moving_average as _forecast_ma
+from trafficflow.core.forecast import forecast_persistence as _forecast_persistence
 from trafficflow.core.forecast import forecast_segment as _forecast
 
 Ctx = RunContext[TrafficDeps]
@@ -76,11 +78,40 @@ async def forecast_segment(
     return {"status": "ok", "evidence_id": ctx.deps.record("forecast", data), **data}
 
 
+async def compare_models(
+    ctx: Ctx,
+    segment_id: str,
+    horizon_minutes: Annotated[int, Field(ge=5, le=180)] = 60,
+) -> dict[str, Any]:
+    """Run three forecasters on one segment and return the first 3 points from each."""
+    seg = _segment(ctx, segment_id)
+    if seg is None:
+        return _unknown(ctx, segment_id)
+    hist = ctx.deps.feed.history(segment_id, days=7)
+    results: dict[str, Any] = {}
+    for name, fn in (
+        ("seasonal_residual", _forecast),
+        ("moving_average", _forecast_ma),
+        ("persistence", _forecast_persistence),
+    ):
+        try:
+            fc = fn(hist, seg, horizon_minutes)
+            results[name] = [p.model_dump(mode="json") for p in fc.points[:3]]
+        except ValueError as exc:
+            results[name] = {"error": str(exc)}
+    data = {
+        "segment_id": segment_id,
+        "horizon_minutes": horizon_minutes,
+        "models": results,
+    }
+    return {"status": "ok", "evidence_id": ctx.deps.record("compare_models", data), **data}
+
+
 async def detect_incidents(ctx: Ctx, segment_id: str) -> dict[str, Any]:
     """Find sustained abnormal slowdowns on one segment in the last two hours."""
     if _segment(ctx, segment_id) is None:
         return _unknown(ctx, segment_id)
-    found = detect(ctx.deps.feed.history(segment_id, days=7), segment_id)
+    found = detect(ctx.deps.feed.history(segment_id, days=7), segment_id, min_drop_kmh=5.0)
     data = {
         "segment_id": segment_id,
         "anomalies": [a.model_dump(mode="json") for a in found],
