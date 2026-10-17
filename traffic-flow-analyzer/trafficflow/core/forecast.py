@@ -2,7 +2,7 @@
 
 profile(slot, daytype) = median of the same slot on previous days of the same type
 forecast(h)            = profile(t+h) + phi**h * recent_residual
-interval               = forecast +/- z * robust residual sigma
+interval               = empirical 5th/95th percentile of per-step residuals (fallback: MAD)
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from trafficflow.core.simulate import STEP_MINUTES
 PHI = 0.92  # per-step persistence of the recent deviation
 Z90 = 1.645
 MIN_POINTS = 2 * 288
+MIN_SAMPLES_FOR_EMPIRICAL = 30
 
 
 def _daytype(index: pd.DatetimeIndex) -> np.ndarray:
@@ -44,6 +45,57 @@ def robust_sigma(values: pd.Series) -> float:
     return float(1.4826 * np.median(np.abs(v - np.median(v)))) if len(v) else 0.0
 
 
+def _empirical_quantiles(
+    history: pd.Series, profile: pd.Series, steps: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return per-step (q05, q95) empirical residual quantiles over the training window.
+
+    Uses a rolling-origin approach: for each index i in the second half of history,
+    predict h steps ahead using the profile baseline and collect the residual.
+    Falls back to the MAD-based half-width for any step with fewer than
+    MIN_SAMPLES_FOR_EMPIRICAL samples.
+    """
+    n = len(history)
+    cal_start = n // 2
+    vals = history.to_numpy()
+    idx = history.index
+
+    # Precompute residuals once; use a rolling window of 3 for recent_level at each origin.
+    all_res = residuals(history, profile)
+    res_vals = all_res.to_numpy()
+    sigma_global = max(robust_sigma(all_res), 0.01)
+
+    # Precompute profile lookup for every step in history by time-of-day key
+    all_base = profile.reindex(_key(idx)).to_numpy()  # shape (n,)
+
+    per_step_res: list[list[float]] = [[] for _ in range(steps)]
+    for i in range(cal_start, n - steps):
+        # recent_level: mean of up to 3 residuals ending at i
+        start3 = max(0, i - 2)
+        recent_level = float(np.nanmean(res_vals[start3 : i + 1]))
+        for h in range(1, steps + 1):
+            target_i = i + h
+            base_val = all_base[target_i]
+            if np.isnan(base_val):
+                continue
+            pred = base_val + (PHI**h) * recent_level
+            per_step_res[h - 1].append(vals[target_i] - pred)
+
+    q05 = np.empty(steps)
+    q95 = np.empty(steps)
+    for h in range(steps):
+        samples = per_step_res[h]
+        widen = np.sqrt(1 + 0.05 * (h + 1))
+        if len(samples) >= MIN_SAMPLES_FOR_EMPIRICAL:
+            q05[h] = float(np.percentile(samples, 5)) * widen
+            q95[h] = float(np.percentile(samples, 95)) * widen
+        else:
+            half = Z90 * sigma_global * widen
+            q05[h] = -half
+            q95[h] = half
+    return q05, q95
+
+
 def forecast_segment(
     history: pd.Series, segment: SegmentInfo, horizon_minutes: int = 60
 ) -> SegmentForecast:
@@ -51,7 +103,6 @@ def forecast_segment(
         raise ValueError(f"need at least {MIN_POINTS} readings, got {len(history)}")
     profile = seasonal_profile(history)
     res = residuals(history, profile)
-    sigma = max(robust_sigma(res), 0.01 * segment.free_flow_kmh)
     recent = float(res.iloc[-3:].mean())  # smooth the last 15 minutes
     steps = max(1, horizon_minutes // STEP_MINUTES)
     last = history.index[-1]
@@ -69,16 +120,18 @@ def forecast_segment(
             raise ValueError("history does not cover every time-of-day needed for the horizon")
     hh = np.arange(1, steps + 1)
     mean = np.clip(base + (PHI**hh) * recent, 3, segment.free_flow_kmh * 1.05)
-    width = Z90 * sigma * np.sqrt(1 + 0.05 * hh)
+    q05, q95 = _empirical_quantiles(history, profile, steps)
     points = []
-    for ts, m, w in zip(future, mean, width, strict=True):
+    for i, (ts, m) in enumerate(zip(future, mean, strict=True)):
+        lower = max(0.0, float(m) + q05[i])
+        upper = float(m) + q95[i]
         idx = congestion_index(float(m), segment.free_flow_kmh)
         points.append(
             ForecastPoint(
                 ts=ts.to_pydatetime(),
                 speed_kmh=round(float(m), 2),
-                lower_kmh=round(max(0.0, float(m - w)), 2),
-                upper_kmh=round(float(m + w), 2),
+                lower_kmh=round(lower, 2),
+                upper_kmh=round(upper, 2),
                 congestion_index=round(idx, 3),
                 level=level_for(idx),
             )
