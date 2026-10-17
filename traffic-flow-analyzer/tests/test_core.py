@@ -6,7 +6,11 @@ from trafficflow.core.anomaly import detect
 from trafficflow.core.backtest import backtest
 from trafficflow.core.congestion import congestion_index, level_for
 from trafficflow.core.evaluation import evaluate
-from trafficflow.core.forecast import forecast_segment
+from trafficflow.core.forecast import (
+    forecast_moving_average,
+    forecast_persistence,
+    forecast_segment,
+)
 from trafficflow.core.status import network_status
 from trafficflow.data.feed import SyntheticFeed
 
@@ -89,6 +93,24 @@ def test_evaluate_train_window_smoke(feed):
     full = evaluate(feed, origin, horizons=(15, 60))
     windowed = evaluate(feed, origin, horizons=(15, 60), train_window=576)
     assert set(full["results"].keys()) == set(windowed["results"].keys())
+
+
+def test_moving_average_forecast_shape(feed):
+    seg = feed.segments()[0]
+    fc = forecast_moving_average(feed.history(seg.id), seg, 60)
+    assert len(fc.points) == 12
+    assert fc.method == "moving-average"
+    assert all(p.lower_kmh <= p.speed_kmh <= p.upper_kmh for p in fc.points)
+
+
+def test_persistence_forecast_shape(feed):
+    seg = feed.segments()[0]
+    fc = forecast_persistence(feed.history(seg.id), seg, 30)
+    assert len(fc.points) == 6
+    assert fc.method == "persistence"
+    # all points have the same speed (last observed)
+    speeds = {p.speed_kmh for p in fc.points}
+    assert len(speeds) == 1
 
 
 def test_status_rules(feed):

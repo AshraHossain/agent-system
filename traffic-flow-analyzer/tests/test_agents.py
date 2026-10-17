@@ -80,6 +80,17 @@ def test_verifier_warns_on_unsupported_numeric_claim():
     assert len(numeric_issues) >= 1
 
 
+def test_compare_models_tool():
+    feed = SyntheticFeed()
+    c = ctx(feed)
+    result = asyncio.run(tools.compare_models(c, "S1", 60))
+    assert result["status"] == "ok"
+    assert set(result["models"].keys()) == {"seasonal_residual", "moving_average", "persistence"}
+    for model_points in result["models"].values():
+        assert isinstance(model_points, list)
+        assert len(model_points) == 3
+
+
 async def test_ask_mock():
     out = await ask(SyntheticFeed(), "How is Ring Road North?")
     assert out.startswith("S2")

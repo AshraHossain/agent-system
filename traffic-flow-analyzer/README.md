@@ -37,6 +37,37 @@ uv run trafficflow serve --replay var/data/PeMSD7_V_228.csv --sensors 8   # dash
 worse at 15 and ties at 30, and its "90%" interval covers only ~59-66%. Details and caveats:
 [docs/eval_results_pems.md](docs/eval_results_pems.md).
 
+## Live model validation
+
+To run the full agent pipeline with a real LLM instead of the offline mock:
+
+```bash
+# 1. Set the model string (pydantic-ai format) and the provider's API key.
+#    Supported providers: google-gla (Gemini), openai, anthropic
+export TRAFFICFLOW_MODEL=google-gla:gemini-2.0-flash
+export GOOGLE_API_KEY=<your-key>          # or OPENAI_API_KEY / ANTHROPIC_API_KEY
+
+# Other supported model strings:
+#   openai:gpt-4o
+#   anthropic:claude-3-5-sonnet-latest
+
+# 2. Run the validate command against the simulated feed.
+uv run trafficflow validate --segment S1 --horizon 60
+```
+
+The command prints the full `TrafficReport` as JSON to stdout. Any numeric-claim
+warnings (numbers in the brief that don't match the recorded evidence) are written to
+stderr. Exit code is 0 on success, 1 when the brief verifier finds >50% unsupported
+numeric claims or when no model is configured.
+
+`--model` overrides the env var for one run:
+```bash
+uv run trafficflow validate --model openai:gpt-4o --segment S2 --horizon 30
+```
+
+> **Note:** Live-model output is not asserted in the test suite (outputs vary).
+> The mock model (`TRAFFICFLOW_MODEL` unset or `"mock"`) is the default for CI.
+
 ## Honest scope
 
 - **There is no live feed.** The default is a simulated network (`SyntheticFeed`). Real

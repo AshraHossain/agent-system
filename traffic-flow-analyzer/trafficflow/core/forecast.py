@@ -150,3 +150,91 @@ def forecast_segment(
 
 def persistence_baseline(history: pd.Series, steps: int) -> np.ndarray:
     return np.full(steps, float(history.iloc[-1]))
+
+
+def forecast_moving_average(
+    history: pd.Series, segment: SegmentInfo, horizon_minutes: int = 60
+) -> SegmentForecast:
+    """Forecast using a 60-min trailing moving average of recent history."""
+    if len(history) < MIN_POINTS:
+        raise ValueError(f"need at least {MIN_POINTS} readings, got {len(history)}")
+    window = 12  # 60 min / 5 min per step
+    ma_pred = float(history.iloc[-window:].mean())
+    steps = max(1, horizon_minutes // STEP_MINUTES)
+    last = history.index[-1]
+    future = pd.DatetimeIndex(
+        [last + timedelta(minutes=STEP_MINUTES * (i + 1)) for i in range(steps)]
+    )
+    # Interval: MAD of residuals vs the moving average over the last MIN_POINTS readings
+    ma_series = history.rolling(window, min_periods=1).mean()
+    res = history - ma_series
+    sigma = max(robust_sigma(res), 0.01)
+    points = []
+    for i, ts in enumerate(future):
+        widen = np.sqrt(1 + 0.05 * (i + 1))
+        half = Z90 * sigma * widen
+        m = np.clip(ma_pred, 3, segment.free_flow_kmh * 1.05)
+        idx = congestion_index(float(m), segment.free_flow_kmh)
+        points.append(
+            ForecastPoint(
+                ts=ts.to_pydatetime(),
+                speed_kmh=round(float(m), 2),
+                lower_kmh=round(max(0.0, float(m) - half), 2),
+                upper_kmh=round(float(m) + half, 2),
+                congestion_index=round(idx, 3),
+                level=level_for(idx),
+            )
+        )
+    peak = max(points, key=lambda p: p.congestion_index)
+    return SegmentForecast(
+        segment_id=segment.id,
+        method="moving-average",
+        horizon_minutes=steps * STEP_MINUTES,
+        points=points,
+        peak_index=peak.congestion_index,
+        peak_ts=peak.ts,
+        peak_level=peak.level,
+    )
+
+
+def forecast_persistence(
+    history: pd.Series, segment: SegmentInfo, horizon_minutes: int = 60
+) -> SegmentForecast:
+    """Forecast by carrying the last observed speed forward (persistence baseline)."""
+    if len(history) < MIN_POINTS:
+        raise ValueError(f"need at least {MIN_POINTS} readings, got {len(history)}")
+    last_speed = float(history.iloc[-1])
+    steps = max(1, horizon_minutes // STEP_MINUTES)
+    last = history.index[-1]
+    future = pd.DatetimeIndex(
+        [last + timedelta(minutes=STEP_MINUTES * (i + 1)) for i in range(steps)]
+    )
+    # Interval: MAD of point-to-point speed changes
+    diffs = history.diff().dropna()
+    sigma = max(robust_sigma(diffs), 0.01)
+    points = []
+    for i, ts in enumerate(future):
+        widen = np.sqrt(1 + 0.05 * (i + 1))
+        half = Z90 * sigma * widen
+        m = np.clip(last_speed, 3, segment.free_flow_kmh * 1.05)
+        idx = congestion_index(float(m), segment.free_flow_kmh)
+        points.append(
+            ForecastPoint(
+                ts=ts.to_pydatetime(),
+                speed_kmh=round(float(m), 2),
+                lower_kmh=round(max(0.0, float(m) - half), 2),
+                upper_kmh=round(float(m) + half, 2),
+                congestion_index=round(idx, 3),
+                level=level_for(idx),
+            )
+        )
+    peak = max(points, key=lambda p: p.congestion_index)
+    return SegmentForecast(
+        segment_id=segment.id,
+        method="persistence",
+        horizon_minutes=steps * STEP_MINUTES,
+        points=points,
+        peak_index=peak.congestion_index,
+        peak_ts=peak.ts,
+        peak_level=peak.level,
+    )
