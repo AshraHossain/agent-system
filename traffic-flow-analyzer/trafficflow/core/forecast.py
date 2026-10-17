@@ -21,10 +21,12 @@ Z90 = 1.645
 MIN_POINTS = 2 * 288
 
 
+def _daytype(index: pd.DatetimeIndex) -> np.ndarray:
+    return (index.dayofweek >= 5).astype(int)
+
+
 def _key(index: pd.DatetimeIndex) -> pd.MultiIndex:
-    return pd.MultiIndex.from_arrays(
-        [index.hour * 60 + index.minute, (index.dayofweek >= 5).astype(int)]
-    )
+    return pd.MultiIndex.from_arrays([index.hour * 60 + index.minute, _daytype(index)])
 
 
 def seasonal_profile(history: pd.Series) -> pd.Series:
@@ -57,6 +59,14 @@ def forecast_segment(
         [last + timedelta(minutes=STEP_MINUTES * (i + 1)) for i in range(steps)]
     )
     base = profile.reindex(_key(future)).to_numpy()
+    if np.isnan(base).any():
+        # e.g. weekday-only recordings: fall back to the other day-type's profile
+        flipped = pd.MultiIndex.from_arrays(
+            [future.hour * 60 + future.minute, 1 - _daytype(future)]
+        )
+        base = np.where(np.isnan(base), profile.reindex(flipped).to_numpy(), base)
+        if np.isnan(base).any():
+            raise ValueError("history does not cover every time-of-day needed for the horizon")
     hh = np.arange(1, steps + 1)
     mean = np.clip(base + (PHI**hh) * recent, 3, segment.free_flow_kmh * 1.05)
     width = Z90 * sigma * np.sqrt(1 + 0.05 * hh)

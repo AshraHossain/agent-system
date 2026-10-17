@@ -47,6 +47,11 @@ class SyntheticFeed:
         s = self._col(segment_id)
         return s[(s.index > start) & (s.index <= end)]
 
+    def next_values(self, segment_id: str, steps: int):
+        """The next `steps` points after `now` (evaluation only)."""
+        s = self._col(segment_id)
+        return s[s.index > self.now].iloc[:steps].to_numpy()
+
     def advance(self, steps: int = 1) -> datetime:
         self.now = min(self.now + timedelta(minutes=STEP_MINUTES * steps), self.end)
         return self.now
