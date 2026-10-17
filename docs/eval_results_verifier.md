@@ -4,7 +4,34 @@ Generated with `uv run opspilot eval --verifier-matrix` (offline, mock provider,
 24 cases: C01–C14 and H01–H10). Method:
 [evaluation.md](evaluation.md#verifier-detection-matrix-opspilotevalverifier_matrixpy).
 
-## Headline
+## After the fixes (current)
+
+Four deterministic checks were added to `core/verification.py` for the gaps
+the first run found (`category_component_mismatch`, `confidence_above_rules`,
+`ranking_differs_from_rules`, `summary_contradicts_findings`, plus a
+`summary_incomplete` warning). Re-running the full matrix:
+
+| Measure | First run | Now |
+|---|---|---|
+| Designed-for defects caught | 162 / 162 | **162 / 162** |
+| False positives on harmless edits | 0 / 45 | **0 / 45** |
+| Semantic errors caught | 37 / 93 | **69 / 93** |
+
+| Blind spot | First run | Now | Caught by |
+|---|---|---|---|
+| `false_all_clear` | missed 21/21 | flagged 21/21 | `summary_contradicts_findings` (error) |
+| `inflated_confidence` | missed 6/6 | flagged 6/6 | `confidence_above_rules` (error) |
+| `swapped_ranking` | missed 2/2 | flagged 2/2 | `ranking_differs_from_rules` (warning: both cases swap two equally `strong` hypotheses, a tie the analyst may break) |
+| `blamed_neighbour` | missed 3/19 | flagged 19/19 | `category_component_mismatch` (error) |
+| `paraphrased_certainty` | missed 24/24 | missed 24/24 | still open: a language judgement for the live reviewer |
+| `dropped_service` | neutralized 21/21 | neutralized 21/21 | finalizer rebuilds the service list |
+
+None of the 24 unmodified cases raises any of the new codes. The remaining
+gap is the one the review always expected to need a real LLM reviewer.
+
+The rest of this page records the first run, which motivated the fixes.
+
+## First run: headline
 
 | Measure | Result |
 |---|---|
@@ -18,7 +45,7 @@ what they were built for, and they do not fire on harmless changes. The third
 line is the new information: **56 of 93 semantic errors reach the final report
 unflagged.**
 
-## Per mutation
+## First run: per mutation
 
 | Mutation | Kind | Agent | Applicable | Flagged | Neutralized | Missed | Clean |
 |---|---|---|---|---|---|---|---|
@@ -43,7 +70,7 @@ unflagged.**
 precondition does not hold, e.g. ranking swaps need two hypotheses on different
 components, which only C05 and H09 produce.
 
-## What the blind spots show
+## First run: what the blind spots showed
 
 | Blind spot | Result | Why | Candidate fix |
 |---|---|---|---|

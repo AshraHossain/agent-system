@@ -13,7 +13,7 @@
 - [x] Held-out split with recorded pre-fix baseline (now a regression set)
 - [ ] Independently authored evaluation set (different author)
 - [x] Verifier detection matrix: planted defects x all cases vs a clean baseline (`opspilot eval --verifier-matrix`, docs/eval_results_verifier.md)
-- [ ] Close the matrix's deterministic blind spots: summary/findings agreement, confidence vs rule confidence, ranking vs rule ranking, category/component-type mismatch
+- [x] Close the matrix's deterministic blind spots: summary/findings agreement, confidence vs rule confidence, ranking vs rule ranking, category/component-type mismatch (semantic errors caught 37/93 -> 69/93)
 - [ ] Replay the matrix's `paraphrased_certainty` (and other blind spots) against the live LLM reviewer
 
 ## Medium priority
