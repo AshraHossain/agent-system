@@ -32,23 +32,6 @@ BAND = "rgba(37,99,235,0.18)"
 LINE = "#2563eb"
 FORECAST = "#d97706"
 
-# Fixed approximate lat/lon for synthetic segments near Los Angeles
-SEGMENT_COORDS: dict[str, tuple[float, float]] = {
-    "S1": (34.05, -118.25),
-    "S2": (34.06, -118.24),
-    "S3": (34.07, -118.23),
-    "S4": (34.05, -118.22),
-    "S5": (34.04, -118.24),
-    "S6": (34.06, -118.26),
-}
-
-_LEVEL_COLOR = {
-    CongestionLevel.normal: "green",
-    CongestionLevel.watch: "yellow",
-    CongestionLevel.degraded: "orange",
-    CongestionLevel.critical: "red",
-}
-
 
 def speed_figure(
     feed: Feed, segment_id: str, horizon_minutes: int, hours_back: int = 12
