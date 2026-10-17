@@ -91,6 +91,17 @@ def test_compare_models_tool():
         assert len(model_points) == 3
 
 
+async def test_brief_writer_no_duplicate_findings():
+    feed = SyntheticFeed()
+    feed.advance(12)
+    r = await run_report(feed, 60)
+    claims = [f.claim for f in r.brief.findings]
+    assert len(claims) == len(set(claims)), f"Duplicate finding claims: {claims}"
+    assert len(r.brief.recommendations) == len(set(r.brief.recommendations)), (
+        f"Duplicate recommendations: {r.brief.recommendations}"
+    )
+
+
 async def test_ask_mock():
     out = await ask(SyntheticFeed(), "How is Ring Road North?")
     assert out.startswith("S2")
@@ -101,3 +112,9 @@ async def test_status_ignores_llm_text():
     feed = SyntheticFeed()  # 07:30, quiet before the incident
     r = await run_report(feed, 15)
     assert r.status.value in {"normal", "watch", "degraded"}
+
+
+async def test_ask_with_history():
+    history = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]
+    out = await ask(SyntheticFeed(), "What is S1 status?", history=history)
+    assert isinstance(out, str) and len(out) > 0

@@ -25,6 +25,19 @@ Dashboard: speed history with forecast and 90% interval, a segment x time conges
 (observed + forecast), a status table, a "Live" mode that advances simulated time, an AI
 briefing tab, and an Ask tab.
 
+## Docker / Deployment
+
+```bash
+# Build
+docker build -t trafficflow .
+
+# Run (synthetic feed by default; set TRAFFICFLOW_MODEL for a live LLM)
+docker run -p 7860:7860 -e TRAFFICFLOW_MODEL=gemini-2.0-flash trafficflow
+```
+
+The dashboard is served at `http://localhost:7860`. To use a real CSV feed, mount it and pass
+`--csv`: `docker run -p 7860:7860 -v /path/to/feed.csv:/data/feed.csv trafficflow uv run trafficflow serve --host 0.0.0.0 --csv /data/feed.csv`.
+
 ## Real data
 
 ```bash
@@ -36,6 +49,24 @@ uv run trafficflow serve --replay var/data/PeMSD7_V_228.csv --sensors 8   # dash
 **Result on real data (honest summary):** the model beats persistence only at 60 minutes, is
 worse at 15 and ties at 30, and its "90%" interval covers only ~59-66%. Details and caveats:
 [docs/eval_results_pems.md](docs/eval_results_pems.md).
+
+## Using a real CSV feed
+
+Point the dashboard at any CSV that has a `timestamp` column (ISO-8601 or
+parseable by pandas) and one `speed_kmh` column per segment (column names
+become segment IDs).  An optional `free_flow_kmh` column sets the free-flow
+speed; without it, the 95th-percentile of the first 7 days is used.
+
+```bash
+# One-shot: dashboard reads the file once at startup
+uv run trafficflow serve --csv data/my_feed.csv
+
+# Polling: re-read the file every 30 s so new rows appended by an upstream
+# process are picked up on the next dashboard refresh
+uv run trafficflow serve --csv data/my_feed.csv --poll-seconds 30
+```
+
+`--csv` and `--replay` are mutually exclusive; omit both for the simulated feed.
 
 ## Live model validation
 
@@ -68,12 +99,33 @@ uv run trafficflow validate --model openai:gpt-4o --segment S2 --horizon 30
 > **Note:** Live-model output is not asserted in the test suite (outputs vary).
 > The mock model (`TRAFFICFLOW_MODEL` unset or `"mock"`) is the default for CI.
 
+## Live traffic API adapter
+
+`trafficflow/data/live.py` provides a `LiveFeed` base class that satisfies the `Feed`
+protocol. Subclass it and override `history()` to connect a real provider:
+
+```python
+from trafficflow.data.live import LiveFeed
+from trafficflow.contracts import SegmentInfo
+
+class MyFeed(LiveFeed):
+    def history(self, segment_id: str, days: float = 7):
+        raw = my_client.get_speed_history(segment_id, days=days)
+        return pd.Series(raw["speed_kmh"], index=pd.to_datetime(raw["ts"]))
+
+feed = MyFeed(api_key="...", segments=[SegmentInfo(...)])
+```
+
+A `HereLiveFeed` stub is included as a starting point for the HERE Traffic API.
+Possible backends: **HERE Traffic**, **TomTom Traffic**, **Google Maps Traffic**.
+The `TRAFFICFLOW_MODEL` env var still controls which AI model the agents use.
+
 ## Honest scope
 
-- **There is no live feed.** The default is a simulated network (`SyntheticFeed`). Real
-  recordings can be replayed (`ReplayFeed`, PeMSD7) or loaded from CSV (`CsvFeed`:
-  `timestamp` + one speed column per segment, 5-minute grid); both only advance a clock over
-  a recording. A live API adapter would implement the `Feed` protocol (not included).
+- **There is no live feed wired by default.** The default is a simulated network
+  (`SyntheticFeed`). Real recordings can be replayed (`ReplayFeed`, PeMSD7) or loaded from
+  CSV (`CsvFeed`); both only advance a clock over a recording. Use `LiveFeed` subclasses
+  to connect a real API (see above).
 - PeMSD7 timestamps and units are reconstructed (the file has neither); see the evaluation doc.
 - The forecaster is an interpretable seasonal-median + decaying-residual model. On the
   simulated data it beats persistence (`trafficflow backtest`), but that is partly circular

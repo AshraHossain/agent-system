@@ -76,3 +76,30 @@ uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --sensors 38   # ~2.5 min
 * Next steps are in [TASK.md](../TASK.md): calibrate the interval from history, improve the
   short-horizon forecast **using a train/test split** (tune on early days, report on later
   days), and add more forecasters.
+
+## Scaling evaluation
+
+To evaluate on all 228 sensors instead of the default 38:
+
+```bash
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --all-sensors   # ~30s on a laptop
+```
+
+Results will vary substantially by sensor — high-variance urban sensors show larger MAE
+than smooth freeway segments. The 8- and 38-sensor subsets (evenly spaced by column index)
+give a representative sample; the full run reveals the spread.
+
+To evaluate on a different hour range:
+
+```bash
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --from-hour 6 --to-hour 9  # peak only
+```
+
+PeMSD7 contains weekday data only; `--period weekday` (default) and `--period all` produce
+identical results for this dataset. The `--period all` flag is wired in for future feeds
+that include weekend observations.
+
+Suggested workflow:
+1. Quick sanity check: `--sensors 8` (~5 s).
+2. Representative run: `--sensors 38` (~2.5 min, as used for the table above).
+3. Full picture: `--all-sensors` (~30 s per commit if parallelised, but single-threaded here).

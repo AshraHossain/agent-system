@@ -120,6 +120,21 @@ def run_report_sync(
     return asyncio.run(run_report(feed, horizon_minutes, model))
 
 
-async def ask(feed: Feed, question: str, model: str | None = None) -> str:
+async def ask(
+    feed: Feed,
+    question: str,
+    model: str | None = None,
+    history: list[dict[str, str]] | None = None,
+) -> str:
     deps = TrafficDeps(feed=feed)
-    return (await agents.ask_agent(model).run(question[:500], deps=deps)).output
+    if history:
+        pairs = history[-6:]  # last 3 exchanges (6 messages)
+        lines = ["Previous conversation:"]
+        for msg in pairs:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            lines.append(f"{role}: {msg['content']}")
+        lines += ["", f"New question: {question}"]
+        prompt = "\n".join(lines)
+    else:
+        prompt = question
+    return (await agents.ask_agent(model).run(prompt[:1000], deps=deps)).output

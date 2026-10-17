@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import pandas as pd
 import pytest
 
@@ -111,6 +113,18 @@ def test_persistence_forecast_shape(feed):
     # all points have the same speed (last observed)
     speeds = {p.speed_kmh for p in fc.points}
     assert len(speeds) == 1
+
+
+def test_synthetic_feed_tz_aware():
+
+    from trafficflow.data.feed import SyntheticFeed
+
+    f = SyntheticFeed(tz=UTC)
+    assert f.now.tzinfo is not None
+    assert f.now.tzinfo == UTC
+    # advance should preserve tz
+    f.advance(1)
+    assert f.now.tzinfo == UTC
 
 
 def test_status_rules(feed):
