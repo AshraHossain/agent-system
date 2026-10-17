@@ -1,0 +1,35 @@
+# Agent evaluation cases — labels (expected fields) are read only by the runner, never by agents.
+#
+# feed_seed:       random seed for SyntheticFeed
+# now_iso:         explicit "now" for the feed (overrides default); ISO-8601 local naive datetime
+# expected fields checked by runner.py:
+#   network_status:              exact match (normal | watch | degraded)
+#   min_segments_with_forecast:  at least this many segments have a non-empty forecast
+#   incident_count:              exact count of anomalies detected
+#   incident_count_gte:          anomaly count must be >= this value
+
+- id: TC01
+  description: "Normal morning traffic on a quiet weekday — no scheduled incidents"
+  feed_seed: 7
+  now_iso: "2026-09-03T08:30:00"
+  expected:
+    network_status: watch
+    min_segments_with_forecast: 3
+
+- id: TC02
+  description: "S2 incident active (2026-09-16 07:00 for 60 min)"
+  feed_seed: 7
+  now_iso: "2026-09-16T07:30:00"
+  expected:
+    network_status: degraded
+    min_segments_with_forecast: 3
+    incident_count_gte: 1
+
+- id: TC03
+  description: "Off-peak quiet afternoon — no incidents expected"
+  feed_seed: 7
+  now_iso: "2026-09-03T14:00:00"
+  expected:
+    network_status: normal
+    min_segments_with_forecast: 3
+    incident_count: 0

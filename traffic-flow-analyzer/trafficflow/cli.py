@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 
 from trafficflow.agents.pipeline import run_report_sync
 from trafficflow.core.backtest import backtest
@@ -29,6 +31,23 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--from-hour", type=int, default=6)
     e.add_argument("--to-hour", type=int, default=20)
     e.add_argument("--train-window", type=int, default=0, help="history points per origin (0=all)")
+    v = sub.add_parser(
+        "validate", help="run pipeline with a real model and print the report as JSON"
+    )
+    v.add_argument(
+        "--model", default=None, help="pydantic-ai model string (overrides TRAFFICFLOW_MODEL)"
+    )
+    v.add_argument("--segment", default="S1", help="segment to focus on (default: S1)")
+    v.add_argument(
+        "--horizon", type=int, default=60, help="forecast horizon in minutes (default: 60)"
+    )
+    re = sub.add_parser("run-eval", help="run the labels-hidden agent evaluation cases")
+    re.add_argument(
+        "--cases",
+        default=None,
+        help="path to cases.yaml (default: trafficflow/eval/cases.yaml)",
+    )
+    re.add_argument("--verbose", action="store_true")
     s = sub.add_parser("serve", help="launch the Gradio dashboard")
     s.add_argument("--port", type=int, default=7860)
     s.add_argument("--host", default="127.0.0.1")
@@ -56,6 +75,33 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(backtest(SyntheticFeed(), a.horizon), indent=2))
     elif a.cmd == "fetch-data":
         print(fetch_pemsd7(a.dest))
+    elif a.cmd == "validate":
+        model = a.model or os.environ.get("TRAFFICFLOW_MODEL")
+        if not model or model == "mock":
+            print(
+                "ERROR: set TRAFFICFLOW_MODEL or pass --model <provider:model-id>.\n"
+                "Example: TRAFFICFLOW_MODEL=google-gla:gemini-2.0-flash "
+                "uv run trafficflow validate",
+                file=sys.stderr,
+            )
+            return 1
+        feed = SyntheticFeed()
+        feed.advance(12)  # 08:30 — inside the morning incident window
+        r = run_report_sync(feed, a.horizon, model=model)
+        print(r.model_dump_json(indent=2))
+        hard_fail = any(i.startswith("HARD_FAIL") for i in r.issues)
+        if r.issues:
+            print("\n".join(r.issues), file=sys.stderr)
+        return 1 if hard_fail else 0
+    elif a.cmd == "run-eval":
+        from trafficflow.eval.runner import run_cases
+
+        path = a.cases or None
+        summary = (
+            run_cases(cases_path=path, verbose=a.verbose) if path else run_cases(verbose=a.verbose)
+        )
+        print(json.dumps(summary, indent=2))
+        return 0 if summary["failed"] == 0 else 1
     elif a.cmd == "evaluate":
         feed = ReplayFeed(load_pemsd7(a.path, sensors=a.sensors))
         times = [f"{h:02d}:00" for h in range(a.from_hour, a.to_hour + 1)]
