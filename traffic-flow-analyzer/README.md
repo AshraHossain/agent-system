@@ -108,10 +108,12 @@ protocol. Subclass it and override `history()` to connect a real provider:
 from trafficflow.data.live import LiveFeed
 from trafficflow.contracts import SegmentInfo
 
+
 class MyFeed(LiveFeed):
     def history(self, segment_id: str, days: float = 7):
         raw = my_client.get_speed_history(segment_id, days=days)
         return pd.Series(raw["speed_kmh"], index=pd.to_datetime(raw["ts"]))
+
 
 feed = MyFeed(api_key="...", segments=[SegmentInfo(...)])
 ```

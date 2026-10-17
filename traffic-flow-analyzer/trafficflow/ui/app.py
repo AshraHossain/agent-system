@@ -108,7 +108,7 @@ def build_app(
                 "label": f"{r.as_of:%Y-%m-%d %H:%M} — {r.status.value}",
                 "summary": "\n".join(lines),
             }
-            updated_rh = (rh + [entry])[-10:]
+            updated_rh = [*rh, entry][-10:]
             choices = [e["label"] for e in updated_rh]
             return (
                 f"## {BADGE[r.status.value]}  (rule-based status, as of {r.as_of:%H:%M})",
