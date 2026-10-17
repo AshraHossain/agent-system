@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 from trafficflow.agents import agents
 from trafficflow.agents.deps import TrafficDeps
@@ -14,12 +15,31 @@ from trafficflow.core.forecast import forecast_segment
 from trafficflow.core.status import network_status
 from trafficflow.data.feed import Feed
 
+_NUM_RE = re.compile(r"\d+\.?\d*")
+
+
+def _nums_in_text(text: str) -> set[str]:
+    return set(_NUM_RE.findall(text))
+
+
+def _nums_in_evidence(ev: dict) -> set[str]:
+    return _nums_in_text(json.dumps(ev))
+
 
 def verify_brief(
     brief: TrafficBrief, evidence: dict[str, dict], segment_ids: set[str]
 ) -> list[str]:
-    """Citation existence and segment validity. Returns issues (empty means clean)."""
+    """Citation existence, segment validity, and numeric-claim heuristic.
+
+    Returns issues (empty means clean).  Returns a non-empty list (but the
+    caller still publishes) when numeric claims are unsupported unless >50%
+    are unsupported, in which case the list is treated as a hard failure
+    by the caller.
+    """
     issues = []
+    total_claims = 0
+    unsupported_claims = 0
+
     for i, f in enumerate(brief.findings, 1):
         for eid in f.evidence_ids:
             if eid not in evidence:
@@ -27,6 +47,38 @@ def verify_brief(
         for sid in f.segment_ids:
             if sid not in segment_ids:
                 issues.append(f"finding {i} names unknown segment {sid}")
+
+        # Collect all numbers from the evidence entries this finding references.
+        ev_nums: set[str] = set()
+        for eid in f.evidence_ids:
+            if eid in evidence:
+                ev_nums |= _nums_in_evidence(evidence[eid])
+
+        # Check numbers in the finding's claim + detail text.
+        finding_text = f.claim + " " + getattr(f, "detail", "")
+        for num in _nums_in_text(finding_text):
+            total_claims += 1
+            if ev_nums and num not in ev_nums:
+                unsupported_claims += 1
+                issues.append(
+                    f"finding {i}: numeric claim '{num}' not found in evidence "
+                    + ", ".join(f.evidence_ids)
+                )
+
+    # Check summary-level numbers against the union of all evidence.
+    all_ev_nums: set[str] = set()
+    for ev in evidence.values():
+        all_ev_nums |= _nums_in_evidence(ev)
+    for num in _nums_in_text(brief.summary):
+        total_claims += 1
+        if all_ev_nums and num not in all_ev_nums:
+            unsupported_claims += 1
+            issues.append(f"summary: numeric claim '{num}' not found in any evidence")
+
+    # Tag issues list so the caller can decide severity.
+    if total_claims > 0 and unsupported_claims > total_claims / 2:
+        issues.append(f"HARD_FAIL: {unsupported_claims}/{total_claims} numeric claims unsupported")
+
     return issues
 
 
