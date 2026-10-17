@@ -33,5 +33,7 @@ architectural; heuristics add defence in depth. Prompt injection is mitigated,
 * Redaction patterns cover common key formats only.
 * The read-only policy is a verb/keyword filter over English text.
 * Session state is stored unencrypted in local SQLite.
-* `adk web`, `adk api_server` and `opspilot serve` (including `GET /runs/{run_id}`)
-  have no authentication; keep them on loopback.
+* `adk web` and `adk api_server` have no authentication; keep them on loopback.
+  `opspilot serve` requires a bearer token when `OPSPILOT_API_TOKEN` is set and
+  refuses to bind beyond loopback without one (unless `--allow-unauthenticated`).
+  The token is a single shared secret, not per-user identity.

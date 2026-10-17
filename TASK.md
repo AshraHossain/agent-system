@@ -25,4 +25,4 @@
 ## Low priority
 - [x] OpenTelemetry exporter configuration example (`docs/observability.md`; export via `uv run --with`, not yet in the lockfile)
 - [ ] Decide whether to ship the OTLP exporter as an `otel` extra: it forces `protobuf` 7.x -> 6.x across the shared lockfile and Docker image
-- [ ] Authentication in front of `adk api_server` for any shared use
+- [x] Authentication for shared use: `opspilot serve` bearer token (`OPSPILOT_API_TOKEN`), refuses non-loopback without it; plain `adk api_server` stays loopback-only
