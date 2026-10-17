@@ -26,3 +26,13 @@
 - [x] OpenTelemetry exporter configuration example (`docs/observability.md`; export via `uv run --with`, not yet in the lockfile)
 - [ ] Decide whether to ship the OTLP exporter as an `otel` extra: it forces `protobuf` 7.x -> 6.x across the shared lockfile and Docker image
 - [ ] Authentication in front of `adk api_server` for any shared use
+
+## PlateWatch backlog
+- [x] Detect/read/tag/store pipeline, vector search, PydanticAI agent, offline demo + tests (#15)
+- [x] Live Hugging Face test for user-supplied labelled photos (#16) — **never run against real models**
+- [ ] Run the live test; tune model ids and the 80%/50% floors from real output
+- [ ] Duplicate-plate policy (same car in several photos creates several records)
+- [ ] Per-image timeout and clearer handling of malformed detector boxes
+- [ ] Region-specific plate format rules (US states, EU) replacing the generic shape check
+- [ ] Learned embeddings and an ANN index (Qdrant/pgvector) beyond ~10^5 plates
+- [ ] Read-only `GET /plates/search` API; detection/OCR evaluation harness on a labelled set

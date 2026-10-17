@@ -16,6 +16,9 @@ PydanticAI agent tools: scan_new_images · search_plates · list_needs_review --
 - Real models: `uv run --with transformers --with torch platewatch ingest <dir>`. Defaults
   (`nickmuchi/yolos-small-finetuned-license-plate-detection`, `microsoft/trocr-base-printed`) are
   **untested** here; override with `PLATEWATCH_DETECTOR_MODEL` / `PLATEWATCH_OCR_MODEL`.
+- Live model check (your own labelled photos, needs network): `PLATEWATCH_LIVE_DIR=<dir>
+  uv run --with transformers --with torch pytest -m live tests/test_platewatch_live.py -s`.
+  Name each photo after its plate (`ABC1234.jpg`).
 - Live agent: `PLATEWATCH_AGENT_MODEL=<provider:model>`.
 
 Limits: the embedder is lexical (n-grams with OCR-confusable folding), not learned; search is a

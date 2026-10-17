@@ -52,8 +52,10 @@ addopts = "-m 'not live' -p no:cacheprovider"
 filterwarnings = ["ignore::UserWarning", "ignore::DeprecationWarning"]
 
 [tool.coverage.run]
-source = ["opspilot"]
+source = ["opspilot", "platewatch"]
 branch = true
+# Hugging Face backends need torch + network; covered by tests/test_platewatch_live.py (-m live).
+omit = ["platewatch/vision/huggingface.py"]
 
 [tool.coverage.report]
 # Offline suite only (live Gemini paths are excluded by design, see docs/model_configuration.md).

@@ -115,6 +115,11 @@ dependencies in the `plates` extra.
 | `tests/` | Offline test suite; `-m live` for Gemini |
 | `docs/` | Design docs, ADRs, review |
 
+## PlateWatch
+
+A separate PydanticAI module detects, tags and vector-searches vehicle licence plates:
+`uv run platewatch demo` (offline). See [docs/platewatch.md](docs/platewatch.md).
+
 ## Documentation
 
 [PLAN.md](PLAN.md) (why ADK, why each agent, LangGraph comparison) ·
