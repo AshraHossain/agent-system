@@ -1,5 +1,8 @@
 """Read-only run lookup served next to ADK's REST API (ADR-0010).
 
+With ``OPSPILOT_API_TOKEN`` set, every route (ADK's and ours, HTTP and
+websocket) requires ``Authorization: Bearer <token>``.
+
 `GET /runs/{run_id}` returns a persisted investigation's validated report. It
 reads sessions and never writes, starts or resumes anything. Runs are found
 under both names OpsPilot stores sessions as: the CLI/runner's own, and the one
@@ -8,10 +11,12 @@ under both names OpsPilot stores sessions as: the CLI/runner's own, and the one
 
 from __future__ import annotations
 
+import hmac
 import logging
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi import Path as PathParam
+from fastapi.responses import JSONResponse
 from google.adk.sessions import BaseSessionService, Session
 from pydantic import BaseModel, ValidationError
 
@@ -77,6 +82,34 @@ def runs_router(settings: Settings) -> APIRouter:
     return router
 
 
+class BearerTokenAuth:
+    """ASGI middleware: reject any HTTP or websocket request without the bearer token.
+
+    Pure ASGI rather than ``@app.middleware("http")`` so ADK's websocket routes are
+    covered too. The comparison is constant-time.
+    """
+
+    def __init__(self, app, token: str):
+        self.app = app
+        self.expected = f"Bearer {token}".encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            return await self.app(scope, receive, send)
+        given = dict(scope.get("headers") or []).get(b"authorization", b"")
+        if hmac.compare_digest(given, self.expected):
+            return await self.app(scope, receive, send)
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        response = JSONResponse(
+            {"detail": "missing or invalid bearer token"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        await response(scope, receive, send)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """ADK's REST API for `adk_apps/` plus the run lookup, on one durable session store."""
     from google.adk.cli.fast_api import get_fast_api_app
@@ -88,4 +121,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         web=False,
     )
     app.include_router(runs_router(settings))
+    if settings.api_token:
+        app.add_middleware(BearerTokenAuth, token=settings.api_token)
     return app

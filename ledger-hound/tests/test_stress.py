@@ -79,3 +79,33 @@ async def test_random_volume_cannot_find_targeted_bugs():
     """Duplicate-number bugs need a targeted probe; stress alone stays green. Both are needed."""
     result = await _stress(frozenset({"dup_case"}), n=20)
     assert result["failed"] == 0
+
+
+async def test_concurrency_changes_load_not_outcome():
+    """Scenarios are isolated, so running 8 at once must give the same per-scenario verdicts."""
+    client = ApiClient.for_app(create_app(frozenset({"overpay_ordered"})))
+    try:
+        catalog = await discover(client)
+        seq = await stress(client, catalog, n=30, seed=7)
+        par = await stress(client, catalog, n=30, seed=7, concurrency=8)
+    finally:
+        await client.aclose()
+
+    def verdicts(r: dict) -> list:
+        return [(x["id"], sorted(v["rule"] for v in x["violations"])) for x in r["results"]]
+
+    assert verdicts(par) == verdicts(seq) and par["failed"] > 0
+    assert (seq["load"]["concurrency"], par["load"]["concurrency"]) == (1, 8)
+    assert par["load"]["http_calls"] == seq["load"]["http_calls"]
+    # each scenario keeps its own transcript, even when interleaved
+    for row in par["results"]:
+        assert row["exchanges"][0]["request"]["path"].endswith("/vendors")
+
+
+async def test_concurrency_must_be_positive():
+    client = ApiClient.for_app(create_app(frozenset()))
+    try:
+        with pytest.raises(ValueError, match="concurrency"):
+            await stress(client, await discover(client), concurrency=0)
+    finally:
+        await client.aclose()

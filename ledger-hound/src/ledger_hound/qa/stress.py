@@ -18,7 +18,9 @@ same 50 scenarios on any machine. That makes a failure report actionable.
 
 from __future__ import annotations
 
+import asyncio
 import random
+import time
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -264,15 +266,50 @@ def _describe(s: Scenario) -> dict[str, Any]:
     }
 
 
-async def stress(client: ApiClient, catalog: Catalog, n: int = 50, seed: int = 7) -> dict[str, Any]:
+async def stress(
+    client: ApiClient, catalog: Catalog, n: int = 50, seed: int = 7, concurrency: int = 1
+) -> dict[str, Any]:
+    """Run ``n`` scenarios, at most ``concurrency`` at a time.
+
+    Each scenario gets its own vendor, PO and log, so running them side by side
+    changes the load on the API, not the expected outcome: any difference from a
+    sequential run is itself a finding (shared state or a missing lock).
+    """
+    if concurrency < 1:
+        raise ValueError("concurrency must be >= 1")
     missing = catalog.missing(*STRESS_ROLES, "list_items")
     if missing:
         return {"error": f"API lacks roles needed for stress: {missing}"}
-    wf = Workflow(client, catalog, f"stress{seed}")
-    items = await wf.list_items()
+    items = await Workflow(client, catalog).list_items()
     skus = [s for s in (pick(i, "sku", "code", "id") for i in items.body) if s]
-    results = [await run_scenario(wf, s) for s in generate(n, seed, skus)]
-    return aggregate(results, n, seed)
+    gate = asyncio.Semaphore(concurrency)
+    latencies: list[float] = []
+
+    async def one(s: Scenario) -> ScenarioResult:
+        async with gate:
+            own = client.view()
+            result = await run_scenario(Workflow(own, catalog, f"stress{seed}s{s.id}"), s)
+            latencies.extend(x.elapsed_ms for x in own.log)
+            return result
+
+    start = time.perf_counter()
+    results = list(await asyncio.gather(*(one(s) for s in generate(n, seed, skus))))
+    elapsed = time.perf_counter() - start
+    out = aggregate(results, n, seed)
+    latencies.sort()
+    out["load"] = {
+        "concurrency": concurrency,
+        "elapsed_s": round(elapsed, 3),
+        "scenarios_per_s": round(n / elapsed, 2) if elapsed else None,
+        "http_calls": len(latencies),
+        "latency_ms_p50": _pct(latencies, 0.50),
+        "latency_ms_p95": _pct(latencies, 0.95),
+    }
+    return out
+
+
+def _pct(values: list[float], q: float) -> float | None:
+    return values[min(len(values) - 1, int(q * len(values)))] if values else None
 
 
 def aggregate(results: list[ScenarioResult], n: int, seed: int) -> dict[str, Any]:

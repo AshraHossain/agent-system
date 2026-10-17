@@ -26,8 +26,21 @@ uv run opspilot serve --port 8000
 curl -s http://127.0.0.1:8000/runs/<session_id> | jq '.status, .report.investigation_summary'
 ```
 
-It has no authentication and binds loopback by default; `--host` anything else
-prints a warning.
+It binds loopback by default. Set `OPSPILOT_API_TOKEN` (at least 32
+characters) to require `Authorization: Bearer <token>` on every route, ADK's
+included, over HTTP and websockets:
+
+```bash
+export OPSPILOT_API_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+uv run opspilot serve --host 0.0.0.0 --port 8000
+curl -s -H "Authorization: Bearer $OPSPILOT_API_TOKEN" http://HOST:8000/runs/<session_id>
+```
+
+Binding anything but loopback without a token is refused; `--allow-unauthenticated`
+overrides that and prints a warning. Plain `adk web` / `adk api_server` cannot be
+wrapped this way, so keep them on loopback and use `opspilot serve` for any
+shared access. A single shared token is access control for a small team, not
+per-user identity; put a real identity proxy in front for anything wider.
 
 `adk_apps/opspilot_ai/agent.py` exposes both `root_agent` and an `App`
 (`app`) carrying the `BudgetPlugin`, so budgets and tool allowlists also apply

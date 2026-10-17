@@ -88,8 +88,12 @@ def test_agent_rejects_invented_ids(tmp_path):
 def test_core_does_not_import_frameworks():
     import ast
 
+    import platewatch.core
+
     banned = {"pydantic_ai", "transformers", "torch", "google"}
-    for p in Path("platewatch/core").glob("*.py"):
+    files = list(Path(platewatch.core.__file__).parent.glob("*.py"))
+    assert files
+    for p in files:
         for node in ast.walk(ast.parse(p.read_text())):
             names = (
                 [a.name for a in node.names]

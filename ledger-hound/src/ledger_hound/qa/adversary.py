@@ -517,6 +517,95 @@ async def receive_before_submit(p: Probe) -> Outcome:
     return held(f"refused with HTTP {ex.status}")
 
 
+DISCRETE_UOMS = {"EA", "EACH", "PC", "PCS", "SHEET", "BOX", "ROLL", "BAG", "PALLET"}
+
+
+async def _uoms(p: Probe) -> dict[str, str]:
+    """sku -> unit of measure, from the catalogue (empty if it publishes none)."""
+    if not p.wf.catalog.has("list_items"):
+        return {}
+    ex = await p.wf.list_items()
+    items = ex.body if ex.ok and isinstance(ex.body, list) else []
+    found = {pick(i, "sku", "code", "id"): pick(i, "uom", "unit", "unit_of_measure") for i in items}
+    return {str(k): str(v).upper() for k, v in found.items() if k and v}
+
+
+@attack(
+    "invoice_uom_mismatch",
+    "uom_consistency",
+    "Invoice the same qty and price in another unit (LB against a PO in EA)",
+    "match flags the unit mismatch; invoice never reaches the GL",
+    "high",
+    "list_items",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def invoice_uom_mismatch(p: Probe) -> Outcome:
+    if not p.wf.catalog.line_field("create_invoice", "uom"):
+        return "SKIPPED", "invoice lines take no unit of measure", {}
+    uoms = await _uoms(p)
+    sku = p.sku()
+    ordered = uoms.get(sku)
+    if not ordered:
+        return "SKIPPED", f"catalogue gives no unit of measure for {sku}", {}
+    billed = "LB" if ordered != "LB" else "EA"
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line(), uoms=[billed])
+    evidence = {"sku": sku, "po_uom": ordered, "invoice_uom": billed}
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice in {billed} refused at entry with HTTP {ex.status}", **evidence)
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    if downstream["reached_gl"]:
+        return breached(
+            f"10 {billed} matched against 10 {ordered} and approved",
+            **evidence,
+            downstream=downstream,
+        )
+    return held(f"stopped at {downstream['blocked_at']}", **evidence, downstream=downstream)
+
+
+@attack(
+    "fractional_discrete_qty",
+    "uom_consistency",
+    "Order, receive and invoice 2.5 of a discrete unit (EA, BOX, SHEET)",
+    "fractional quantity of a discrete unit refused",
+    "medium",
+    "list_items",
+    "create_invoice",
+)
+async def fractional_discrete_qty(p: Probe) -> Outcome:
+    uoms = await _uoms(p)
+    discrete = [i for i, s in enumerate(p.skus) if uoms.get(s) in DISCRETE_UOMS]
+    if not discrete:
+        return "SKIPPED", "no item with a discrete unit of measure in the catalogue", {}
+    i = discrete[0]
+    sku, half = p.sku(i), Decimal("2.5")
+    v = await p.wf.fresh_vendor()
+    accepted: list[str] = []
+    ex = await p.wf.create_po(v, p.line(qty=half, i=i))
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        accepted.append(f"PO for {half} {uoms[sku]}")
+    po = await p.wf.received_po(v, p.line(i=i), receive=[])
+    ex = await p.wf.receive(po, [(sku, half)])
+    if ex.ok:
+        accepted.append(f"receipt of {half} {uoms[sku]}")
+    elif ex.status < 500:
+        p.wf.require("receive goods", await p.wf.receive(po, [(sku, TEN)]))
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line(qty=half, i=i))
+    if ex.ok:
+        accepted.append(f"invoice for {half} {uoms[sku]}")
+    evidence = {"sku": sku, "uom": uoms[sku], "accepted": accepted}
+    if accepted:
+        return breached(f"accepted: {', '.join(accepted)}", **evidence)
+    return held(f"all 3 fractional {uoms[sku]} probes refused", **evidence)
+
+
 # ------------------------------------------------------------------- runner
 
 

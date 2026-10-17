@@ -11,6 +11,8 @@ from collections.abc import Iterable
 
 from opspilot.contracts.evidence import STATE_PREFIX, Evidence, EvidenceKind, is_evidence_id
 from opspilot.contracts.findings import (
+    Hypothesis,
+    HypothesisCategory,
     IncidentAnalysis,
     KnowledgeFinding,
     ReportDraft,
@@ -25,6 +27,35 @@ COMPONENT_RE = re.compile(
     r"\b(lnk-[a-z0-9-]+|leaf-\d+|spine-\d+|core-\d+|fw-\d+|lb-\d+|dns-\d+|wan-\d+)\b"
 )
 DIRECT_KINDS = {EvidenceKind.TELEMETRY, EvidenceKind.TOPOLOGY, EvidenceKind.DATA_QUALITY}
+CONF_RANK = {"strong": 0, "moderate": 1, "weak": 2}
+
+# Which component types each hypothesis category can describe. "link" and "service"
+# are kinds; every other value is a device type from the topology.
+_C = HypothesisCategory
+CATEGORY_TARGETS: dict[HypothesisCategory, set[str] | None] = {
+    _C.LINK_CONGESTION: {"link"},
+    _C.LINK_PHYSICAL: {"link"},
+    _C.DEVICE_SATURATION: {
+        "router",
+        "switch",
+        "firewall",
+        "load_balancer",
+        "dns_server",
+        "wan_router",
+    },
+    _C.DNS: {"dns_server", "service"},
+    _C.WAN: {"wan_router", "link"},
+    _C.TELEMETRY_ARTIFACT: None,  # any network component
+    _C.APPLICATION: {"service"},
+    _C.UNKNOWN: None,
+}
+
+NO_IMPACT_RE = re.compile(
+    r"\bno (?:services?|customers?|users?|applications?) (?:are|is|were|was) "
+    r"(?:affected|impacted)\b|\bno (?:customer |service |user )?impact\b"
+    r"|\bno action (?:is )?(?:required|needed)\b|\bnothing (?:is )?(?:affected|wrong)\b",
+    re.IGNORECASE,
+)
 
 
 def evidence_from_state(state: dict) -> dict[str, Evidence]:
@@ -64,8 +95,15 @@ def verify(
     known_services: set[str],
     suspicious_docs: set[str],
     endpoints: dict[str, list[str]] | None = None,
+    component_types: dict[str, str] | None = None,
+    rule_hypotheses: list[Hypothesis] | None = None,
 ) -> VerificationResult:
+    """``component_types`` maps component/service ids to a type ("link", "service" or a
+    device type). ``rule_hypotheses`` are the deterministic rule engine's ranked
+    candidates for the same scope; the analyst's confidence and ranking are compared
+    with them. Both are optional: without them those checks are skipped."""
     endpoints = endpoints or {}
+    component_types = component_types or {}
     irrelevant: list[str] = []
     relevance_checked = 0
     issues: list[VerificationIssue] = []
@@ -155,6 +193,18 @@ def verify(
                 "unknown_component",
                 f"{h.hypothesis_id} names {h.component_id}, which is not in the topology",
             )
+        targets = CATEGORY_TARGETS.get(h.category)
+        kind = component_types.get(h.component_id)
+        if targets is not None and kind is not None and kind not in targets:
+            unsupported.append(
+                f"{h.hypothesis_id}: {h.category.value} cannot apply to {kind} {h.component_id}"
+            )
+            issue(
+                "error",
+                "category_component_mismatch",
+                f"{h.hypothesis_id} claims {h.category.value} on {h.component_id}, a {kind}",
+                [h.hypothesis_id],
+            )
         doc_support = [
             e
             for e in h.supporting_evidence_ids
@@ -180,6 +230,7 @@ def verify(
                     f"competing explanations for {top.component_id}: {top.category.value} vs "
                     f"{other.category.value} (contradicting measurements present)"
                 )
+    _compare_with_rules(hyps, rule_hypotheses, issue)
     for c in contradictions:
         issue("warning", "contradiction", c)
     checks.append(
@@ -246,6 +297,11 @@ def verify(
             if mention not in known_components:
                 unsupported.append(f"summary mentions unknown component '{mention}'")
                 issue("error", "unknown_component_mention", f"summary mentions {mention}")
+        claims += 1
+        for sev, code, problem in _summary_problems(draft, hyps):
+            if sev == "error":
+                unsupported.append(problem)
+            issue(sev, code, problem)
     checks.append(
         Check(
             name="draft_claims_supported",
@@ -359,3 +415,73 @@ def verify(
         citations_relevance_checked=relevance_checked,
         verdict=verdict,
     )
+
+
+def _key(h: Hypothesis) -> tuple[str, str]:
+    return (h.category.value, h.component_id)
+
+
+def _compare_with_rules(hyps: list[Hypothesis], rules: list[Hypothesis] | None, issue) -> None:
+    """Analyst confidence and ranking against the deterministic rule engine.
+
+    The analyst may lower a rule's confidence (with reasons) but not raise it, and may
+    reorder hypotheses the rules rate equally (a warning) but not promote one the rules
+    rate weaker (an error).
+    """
+    if not rules or not hyps:
+        return
+    by_key = {_key(r): r for r in rules}
+    for h in hyps:
+        rule = by_key.get(_key(h))
+        if rule and CONF_RANK[h.confidence] < CONF_RANK[rule.confidence]:
+            issue(
+                "error",
+                "confidence_above_rules",
+                f"{h.hypothesis_id} is {h.confidence} but the rules support only "
+                f"{rule.confidence} for {h.category.value} on {h.component_id}",
+                [h.hypothesis_id],
+            )
+    top, rule_top = hyps[0], rules[0]
+    promoted = by_key.get(_key(top))
+    if _key(top) == _key(rule_top) or promoted is None:
+        return
+    weaker = CONF_RANK[promoted.confidence] > CONF_RANK[rule_top.confidence]
+    issue(
+        "error" if weaker else "warning",
+        "ranking_differs_from_rules",
+        f"top hypothesis {top.category.value} on {top.component_id} is ranked below "
+        f"{rule_top.category.value} on {rule_top.component_id} by the rules"
+        + (f" ({promoted.confidence} vs {rule_top.confidence})" if weaker else " (tie)"),
+        [top.hypothesis_id],
+    )
+
+
+def _summary_problems(draft: ReportDraft, hyps: list[Hypothesis]) -> list[tuple[str, str, str]]:
+    """The summary must agree with the draft's own structured findings.
+
+    Claiming no impact while services are affected is a contradiction (error).
+    Omitting the affected services or the leading component is incomplete (warning):
+    visible, but a terse summary is not by itself wrong.
+    """
+    text = draft.summary.lower()
+    out: list[tuple[str, str, str]] = []
+    if draft.affected_services and NO_IMPACT_RE.search(draft.summary):
+        out.append(
+            (
+                "error",
+                "summary_contradicts_findings",
+                "summary claims no impact while the draft lists affected services: "
+                + ", ".join(draft.affected_services),
+            )
+        )
+    if draft.affected_services and not any(s.lower() in text for s in draft.affected_services):
+        out.append(("warning", "summary_incomplete", "summary names none of the affected services"))
+    if hyps and hyps[0].component_id.lower() not in text:
+        out.append(
+            (
+                "warning",
+                "summary_incomplete",
+                f"summary does not name the leading component {hyps[0].component_id}",
+            )
+        )
+    return out

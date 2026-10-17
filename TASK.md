@@ -13,7 +13,7 @@
 - [x] Held-out split with recorded pre-fix baseline (now a regression set)
 - [ ] Independently authored evaluation set (different author)
 - [x] Verifier detection matrix: planted defects x all cases vs a clean baseline (`opspilot eval --verifier-matrix`, docs/eval_results_verifier.md)
-- [ ] Close the matrix's deterministic blind spots: summary/findings agreement, confidence vs rule confidence, ranking vs rule ranking, category/component-type mismatch
+- [x] Close the matrix's deterministic blind spots: summary/findings agreement, confidence vs rule confidence, ranking vs rule ranking, category/component-type mismatch (semantic errors caught 37/93 -> 69/93)
 - [ ] Replay the matrix's `paraphrased_certainty` (and other blind spots) against the live LLM reviewer
 
 ## Medium priority
@@ -24,5 +24,5 @@
 
 ## Low priority
 - [x] OpenTelemetry exporter configuration example (`docs/observability.md`; export via `uv run --with`, not yet in the lockfile)
-- [ ] Decide whether to ship the OTLP exporter as an `otel` extra: it forces `protobuf` 7.x -> 6.x across the shared lockfile and Docker image
-- [ ] Authentication in front of `adk api_server` for any shared use
+- [x] Decide whether to ship the OTLP exporter as an `otel` extra: not until `google-adk` allows `opentelemetry-sdk>=1.43` (ADR-0012)
+- [x] Authentication for shared use: `opspilot serve` bearer token (`OPSPILOT_API_TOKEN`), refuses non-loopback without it; plain `adk api_server` stays loopback-only
