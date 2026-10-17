@@ -17,7 +17,7 @@ uv run --with 'opentelemetry-exporter-otlp-proto-http==1.42.1' opspilot serve
 
 * **The exporter is not a project dependency.** `google-adk` ships the hooks but
   leaves the exporter optional, and adding it to `uv.lock` would force `protobuf`
-  below 7 for everyone (see [TASK.md](../TASK.md)). `uv run --with` adds it for that
+  below 7 for everyone ([ADR-0012](adr/0012-otlp-exporter-not-locked.md)). `uv run --with` adds it for that
   run only. 1.42.1 is the version tested, and the newest OpenTelemetry release that
   `google-adk` 2.11.0 accepts (it caps `opentelemetry-sdk` at 1.42.1). Without it, the commands below stop at once with this exact
   instruction instead of running untraced.
