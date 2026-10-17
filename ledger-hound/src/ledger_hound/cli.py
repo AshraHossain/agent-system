@@ -54,6 +54,13 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("-n", type=int, default=50, help="number of scenarios (default 50)")
     st.add_argument("--seed", type=int, default=7, help="RNG seed; same seed = same scenarios")
     st.add_argument("--out", default="var/stress", help="output directory")
+    st.add_argument(
+        "--concurrency", type=int, default=1, metavar="K", help="scenarios in flight at once"
+    )
+
+    df = sub.add_parser("diff", help="compare the API surface of two reports or OpenAPI files")
+    df.add_argument("old", help="earlier report JSON or OpenAPI JSON")
+    df.add_argument("new", help="later report JSON or OpenAPI JSON")
 
     dp = sub.add_parser("dspy", help="optimize the violation-classifier prompt with DSPy")
     dsub = dp.add_subparsers(dest="dspy_cmd", required=True)
@@ -77,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_stress(args))
     if args.cmd == "dspy":
         return _dspy(args)
+    if args.cmd == "diff":
+        return _diff(args)
     return _attacks()
 
 
@@ -114,6 +123,7 @@ async def _run(args: argparse.Namespace) -> int:
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    report["api_changes"] = _api_changes(out_dir / "latest.json", report)
     path = out_dir / f"report-{datetime.now():%Y%m%d-%H%M%S}.json"
     text = json.dumps(report, indent=2, default=str)
     path.write_text(text)
@@ -125,6 +135,41 @@ async def _run(args: argparse.Namespace) -> int:
         _print_report(report, path)
     breached = report["counts"]["BREACHED"] > 0 or report["happy_path"]["status"] != "PASS"
     return 1 if breached else 0  # non-zero exit lets CI / a scheduler alert on findings
+
+
+def _api_changes(previous: Path, report: dict[str, Any]) -> dict[str, Any] | None:
+    """Diff this run's API surface against the last report in the same directory."""
+    from .qa.spec_diff import diff, load_surface
+
+    try:
+        old = json.loads(previous.read_text())
+    except (OSError, ValueError):
+        return None
+    before = load_surface(old) if isinstance(old, dict) else None
+    if before is None:
+        return None
+    meta = old.get("meta", {})
+    return {
+        "baseline": {"report_generated_at": meta.get("generated_at"), "target": meta.get("target")},
+        **diff(before, report["api_surface"]),
+    }
+
+
+def _diff(args: argparse.Namespace) -> int:
+    from .qa.spec_diff import describe, diff, load_surface
+
+    surfaces = []
+    for name in (args.old, args.new):
+        doc = json.loads(Path(name).read_text())
+        found = load_surface(doc) if isinstance(doc, dict) else None
+        if found is None:
+            print(f"{name}: neither a Ledger Hound report nor an OpenAPI document")
+            return 2
+        surfaces.append(found)
+    d = diff(*surfaces)
+    for line in describe(d):
+        print(line)
+    return 1 if d["breaking"] else 0
 
 
 def _target(args: argparse.Namespace) -> tuple[Any, str]:
@@ -154,6 +199,11 @@ def _print_report(report: dict[str, Any], path: Path) -> None:
         sev = f" [{r['severity']}]" if r.get("severity") else ""
         print(f"  {ICON[r['status']]} {r['attack']:<30} {r['observed'][:90]}{sev}")
     print(f"\nSUMMARY: {report['summary']}")
+    if changes := report.get("api_changes"):
+        from .qa.spec_diff import describe
+
+        since = changes["baseline"]["report_generated_at"]
+        print(f"API CHANGES since {since}: " + "; ".join(describe(changes)))
     for note in meta["notes"]:
         print(f"note: {note}")
     print(f"\nreport: {path}")
@@ -186,7 +236,9 @@ async def _stress(args: argparse.Namespace) -> int:
 
     client, target = _target(args)
     try:
-        result = await stress(client, await discover(client), n=args.n, seed=args.seed)
+        result = await stress(
+            client, await discover(client), n=args.n, seed=args.seed, concurrency=args.concurrency
+        )
     finally:
         await client.aclose()
     if "error" in result:
@@ -199,10 +251,16 @@ async def _stress(args: argparse.Namespace) -> int:
     path = out_dir / f"stress-{datetime.now():%Y%m%d-%H%M%S}.json"
     path.write_text(json.dumps(result, indent=2, default=str))
 
+    load = result["load"]
     print(f"\nStress  target: {target}  seed: {result['seed']}")
     print(
         f"{result['failed']}/{result['scenarios']} scenarios violated a control "
-        f"(failure rate {result['failure_rate']:.0%})\n"
+        f"(failure rate {result['failure_rate']:.0%})"
+    )
+    print(
+        f"load: concurrency {load['concurrency']}, {load['elapsed_s']}s, "
+        f"{load['scenarios_per_s']} scenarios/s, {load['http_calls']} calls, "
+        f"p50 {load['latency_ms_p50']} ms, p95 {load['latency_ms_p95']} ms\n"
     )
     print("  by variant:")
     for variant, row in result["by_variant"].items():

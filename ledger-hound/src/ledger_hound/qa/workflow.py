@@ -82,13 +82,24 @@ class Workflow:
         return await self._call("get_po", po_id)
 
     async def create_invoice(
-        self, vendor_id: Any, po_id: Any, number: str, lines: list[Line]
+        self,
+        vendor_id: Any,
+        po_id: Any,
+        number: str,
+        lines: list[Line],
+        uoms: list[str] | None = None,
     ) -> Exchange:
+        """``uoms`` sets a unit per line; omitted, the API's default (the PO unit) applies."""
+        body_lines: list[dict[str, Any]] = [
+            {"sku": s, "qty": str(q), "unit_price": str(p)} for s, q, p in lines
+        ]
+        for line, uom in zip(body_lines, uoms or [], strict=False):
+            line["uom"] = uom
         body = {
             "vendor_id": vendor_id,
             "po_id": po_id,
             "invoice_number": number,
-            "lines": [{"sku": s, "qty": str(q), "unit_price": str(p)} for s, q, p in lines],
+            "lines": body_lines,
         }
         return await self._call("create_invoice", body=body)
 

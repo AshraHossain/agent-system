@@ -4,8 +4,8 @@ An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
 controls held and which were breached, with the evidence.
 
-It comes with a **practice P2P API** that has 13 switchable, realistic bugs,
-so the agent can be scored: *it catches 13/13 planted bugs, with 0 false
+It comes with a **practice P2P API** that has 15 switchable, realistic bugs,
+so the agent can be scored: *it catches 15/15 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
@@ -14,11 +14,12 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 54 offline tests, no API key needed
+uv run pytest                                  # 67 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
 uv run ledger-hound stress --local-bugs silent_partial   # 50 randomized POs -> failure rate
+uv run ledger-hound diff old.json new.json     # what changed in the API between two runs
 ```
 
 Against a real server, which is the interview setup:
@@ -49,7 +50,7 @@ uv run ledger-hound run --base-url http://localhost:8000 --agent-explore --impro
 
 ```
 discover ─► plan ─► explore ─► attack ─► explain ─► judge report
-openapi     LLM     scripted   16 lib     LLM        rules rollup
+openapi     LLM     scripted   18 lib     LLM        rules rollup
 +fallback   ranks   or agent   probes     impact     + summary
 ```
 
@@ -60,12 +61,13 @@ openapi     LLM     scripted   16 lib     LLM        rules rollup
 | `qa/workflow.py` | Business verbs (create PO, receive, invoice...) over discovered roles |
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
 | `qa/explorer.py` | Happy-path walk with a business check at every step |
-| `qa/adversary.py` | 16 attacks: the 6 brief rules plus 10 extra edge cases |
+| `qa/adversary.py` | 18 attacks: the 6 brief rules plus 12 extra edge cases (incl. unit of measure) |
 | `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
 | `qa/score.py` | Detection rate against the planted bugs |
 | `qa/stress.py` | Seeded random POs with an independent Decimal oracle; failure rate per rule and variant |
+| `qa/spec_diff.py` | API surface (operations, roles, request fields) and its diff against the previous run |
 | `qa/labels.py` | Labelled dataset for the classifier, built from the planted bugs (no LLM) |
 | `qa/dspy_opt.py` | DSPy violation classifier: optimize, evaluate, second opinion (optional extra) |
 
@@ -80,6 +82,13 @@ create → match → approve, and every gap is a violation. The output is the
 failure rate overall, per rule and per variant, written to `var/stress/`. The
 same seed always gives the same scenarios.
 
+`--concurrency K` keeps K scenarios in flight at once. Each scenario has its
+own vendor, PO and transcript, so concurrency changes the load, not the
+expected verdicts: a failure that appears only at K > 1 points at shared
+state or a missing lock. The report adds a `load` block (elapsed time,
+scenarios/s, HTTP calls, p50/p95 latency); the practice API gives identical
+verdicts at any K.
+
 | Practice API | Failure rate (50 scenarios, seed 7) |
 | --- | --- |
 | clean | 0% |
@@ -87,7 +96,28 @@ same seed always gives the same scenarios.
 | `float_money` | 30% |
 | `no_price_check` / `unmatched_approve` | 22% |
 | `silent_partial` | 18% |
-| `dup_case`, `race_approve`, ... | 0%: random volume can't find these; the targeted attacks do |
+| `dup_case`, `race_approve`, `uom_ignored`, ... | 0%: random volume can't find these; the targeted attacks do |
+
+## Unit of measure
+
+Catalogue items carry a unit (`EA`, `SHEET`, `BOX`, `ROLL`) and invoice lines
+may declare one. The clean API matches an invoice line only in the PO line's
+unit (case and spaces ignored) and refuses fractional quantities of discrete
+units. Two bugs break this: `uom_ignored` (10 LB matched against 10 EA) and
+`fractional_uom` (2.5 EA accepted). The attacks `invoice_uom_mismatch` and
+`fractional_discrete_qty` catch them, and skip on an API whose invoice lines
+or catalogue carry no unit.
+
+## API changes between runs
+
+Every report stores the `api_surface` it tested: each operation, the role
+discovery gave it, and the request fields with type and required flag. `run`
+compares it with the previous `latest.json` in the same `--out` directory and
+writes `api_changes`, listing breaking changes first (removed operation or
+field, lost role, changed type, newly required field). So a new breach can be
+read next to the endpoint change that came with it. `ledger-hound diff A B`
+compares any two reports or raw OpenAPI files and exits `1` on a breaking
+change. It is a structural diff; no LLM is involved.
 
 ## DSPy prompt optimization
 
@@ -96,7 +126,7 @@ an API response is a financial-integrity violation. It's an optional extra:
 
 ```bash
 uv sync --extra dspy
-uv run ledger-hound dspy dataset                          # 72 labelled rows, no LLM needed
+uv run ledger-hound dspy dataset                          # 79 labelled rows, no LLM needed
 uv run ledger-hound dspy optimize --optimizer bootstrap   # needs BYNARA_API_KEY
 uv run ledger-hound run --classifier var/dspy/classifier.json   # second opinion in the report
 ```
