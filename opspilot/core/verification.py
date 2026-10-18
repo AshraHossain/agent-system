@@ -51,9 +51,9 @@ CATEGORY_TARGETS: dict[HypothesisCategory, set[str] | None] = {
 }
 
 # Wording that presents an inferred cause as settled fact. A read-only investigation
-# ranks hypotheses; it never proves one. Written as a general lexicon of certainty
-# markers, not from any particular mutation; see docs/eval_results_verifier.md for
-# what it cannot catch (plain assertions such as "The firewall caused this").
+# ranks hypotheses; it never proves one. A general lexicon of certainty markers (it
+# includes the verifier matrix's phrase, so the matrix alone does not measure it); see
+# docs/eval_results_verifier.md for what it cannot catch ("The firewall caused this").
 CERTAINTY_RE = re.compile(
     r"\b(?:without (?:any |a )?(?:doubt|question)|beyond (?:any |all |a |reasonable )*doubt"
     r"|no (?:doubt|question)(?: that| about it)?|there is no (?:doubt|question)|undoubtedly"
