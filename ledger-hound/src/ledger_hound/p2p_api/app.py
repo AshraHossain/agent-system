@@ -32,6 +32,9 @@ from .bugs import parse_bugs
 CENT = Decimal("0.01")
 # Units that cannot be split: half a stud or a third of a box is a data error.
 DISCRETE_UOMS = frozenset({"EA", "SHEET", "BOX", "ROLL"})
+# Convertible unit pairs: (invoice_uom, po_uom) -> factor such that 1 po_uom = factor invoice_uom.
+# 50 LB = 1 BOX (nails are sold in 50-lb boxes; invoices may arrive in either unit).
+UOM_CONVERT: dict[tuple[str, str], Decimal] = {("LB", "BOX"): Decimal("50")}
 
 
 def money(value: Decimal) -> Decimal:
@@ -227,6 +230,14 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     def require_whole(sku: str, qty: Decimal) -> None:
         if "fractional_uom" not in bugs and uom_of(sku) in DISCRETE_UOMS and qty % 1:
             raise HTTPException(422, f"qty {qty} of {sku} must be whole ({uom_of(sku)})")
+
+    def uom_factor(from_uom: str, to_uom: str) -> Decimal | None:
+        """Return the conversion factor (1 to_uom = factor from_uom), or None if unknown.
+        Under wrong_uom_factor the factor is doubled, understating the converted quantity."""
+        factor = UOM_CONVERT.get((from_uom, to_uom))
+        if factor is None:
+            return None
+        return factor * 2 if "wrong_uom_factor" in bugs else factor
 
     def ordered_value(po: PurchaseOrder) -> Decimal:
         return sum((money(ln.qty * ln.unit_price) for ln in po.lines), Decimal("0"))
@@ -448,12 +459,23 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
         failures: list[str] = []
         for ln in inv.lines:
             po_line = by_sku[ln.sku]
-            if ln.qty > po_line.received_qty:
+            inv_qty = ln.qty
+            conv_factor: Decimal | None = None
+            if ln.uom != uom_of(ln.sku) and "uom_ignored" not in bugs:
+                conv_factor = uom_factor(ln.uom, uom_of(ln.sku))
+                if conv_factor is None:
+                    failures.append(f"uom_mismatch:{ln.sku}")
+                else:
+                    inv_qty = ln.qty / conv_factor
+            if inv_qty > po_line.received_qty:
                 failures.append(f"qty_exceeds_receipt:{ln.sku}")
-            if "no_price_check" not in bugs and ln.unit_price != po_line.unit_price:
-                failures.append(f"price_variance:{ln.sku}")
-            if "uom_ignored" not in bugs and ln.uom != uom_of(ln.sku):
-                failures.append(f"uom_mismatch:{ln.sku}")
+            if "no_price_check" not in bugs:
+                if conv_factor is not None:
+                    # invoice price is per invoice unit; scale to the PO unit before comparing
+                    if money(ln.unit_price * conv_factor) != po_line.unit_price:
+                        failures.append(f"price_variance:{ln.sku}")
+                elif ln.unit_price != po_line.unit_price:
+                    failures.append(f"price_variance:{ln.sku}")
         if failures:
             inv.status, inv.exceptions = "match_failed", failures
         elif not all(ln.received_qty >= ln.qty for ln in po.lines) and (

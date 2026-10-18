@@ -72,24 +72,58 @@ async def _received_po(client, sku: str, qty: str, price: str) -> int:
     return pid
 
 
-async def test_invoice_in_another_unit_fails_match(clean):
+async def test_invoice_in_unconvertible_unit_fails_match(clean):
+    # ROLL has no conversion to BOX; mismatch must be flagged
     client, catalog = clean
     assert catalog.line_field("create_invoice", "uom")
     assert not catalog.line_field("create_po", "uom")
     pid = await _received_po(client, "NAIL-16D-50LB", "10", "89.99")
-    line = {"sku": "NAIL-16D-50LB", "qty": "10", "unit_price": "89.99", "uom": "lb"}
+    line = {"sku": "NAIL-16D-50LB", "qty": "10", "unit_price": "89.99", "uom": "roll"}
     inv = await client.call(
         "POST",
         "/invoices",
         {"vendor_id": 1, "po_id": pid, "invoice_number": "U-1", "lines": [line]},
     )
-    assert inv.body["lines"][0]["uom"] == "LB"
+    assert inv.body["lines"][0]["uom"] == "ROLL"
     match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
     assert match.body == {
         "invoice_id": inv.body["id"],
         "status": "match_failed",
         "exceptions": ["uom_mismatch:NAIL-16D-50LB"],
     }
+
+
+async def test_invoice_in_convertible_unit_matches(clean):
+    # 100 LB = 2 BOX; PO price 89.99/BOX → invoice price 1.7998/LB (89.99/50)
+    client, _ = clean
+    pid = await _received_po(client, "NAIL-16D-50LB", "2", "89.99")
+    line = {"sku": "NAIL-16D-50LB", "qty": "100", "unit_price": "1.7998", "uom": "LB"}
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {"vendor_id": 1, "po_id": pid, "invoice_number": "U-LB-1", "lines": [line]},
+    )
+    assert inv.status == 201
+    match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
+    assert match.body["status"] == "matched", match.body
+
+
+async def test_invoice_overbill_in_convertible_unit_fails(clean):
+    # 150 LB at 1.7998/LB = 269.97 > 179.98 received → rejected at invoice creation
+    # Use a lower price (0.8999/LB) so the amount passes, but 150/50=3 BOX > 2 BOX → fails match
+    client, _ = clean
+    pid = await _received_po(client, "NAIL-16D-50LB", "2", "89.99")
+    # 0.8999/LB × 50 = 44.995 ≠ 89.99/BOX → price_variance also fires; both failures expected
+    line = {"sku": "NAIL-16D-50LB", "qty": "150", "unit_price": "0.8999", "uom": "LB"}
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {"vendor_id": 1, "po_id": pid, "invoice_number": "U-LB-2", "lines": [line]},
+    )
+    assert inv.status == 201
+    match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
+    assert match.body["status"] == "match_failed"
+    assert "qty_exceeds_receipt:NAIL-16D-50LB" in match.body["exceptions"]
 
 
 async def test_unit_defaults_to_catalogue_and_case_is_ignored(clean):

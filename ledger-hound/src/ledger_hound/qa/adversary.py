@@ -606,6 +606,50 @@ async def fractional_discrete_qty(p: Probe) -> Outcome:
     return held(f"all 3 fractional {uoms[sku]} probes refused", **evidence)
 
 
+@attack(
+    "wrong_uom_conversion_factor",
+    "uom_consistency",
+    "Invoice 150 LB at half the per-LB price; wrong factor passes both qty and price checks",
+    "match fails: 150/50=3 BOX > 2 received; price×50 also ≠ PO price",
+    "high",
+    "list_items",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def wrong_uom_conversion_factor(p: Probe) -> Outcome:
+    uoms = await _uoms(p)
+    box_items = [i for i, s in enumerate(p.skus) if uoms.get(s) == "BOX"]
+    if not box_items:
+        return "SKIPPED", "no BOX item in the catalogue", {}
+    if not p.wf.catalog.line_field("create_invoice", "uom"):
+        return "SKIPPED", "invoice lines take no unit of measure", {}
+    i = box_items[0]
+    sku = p.sku(i)
+    v = await p.wf.fresh_vendor()
+    # PO at PRICE/BOX; receive 2 BOX (= 100 LB at 50 LB/BOX)
+    po = await p.wf.received_po(v, p.line(qty=Decimal("2"), i=i))
+    # price_lb = PRICE/100: with wrong factor (100) money(price_lb×100)=PRICE ✓ and 150/100=1.5<2 ✓
+    # with correct factor (50): money(price_lb×50)=PRICE/2≠PRICE and 150/50=3>2, both fail ✓
+    price_lb = PRICE / Decimal("100")
+    ex = await p.wf.create_invoice(
+        v, po, p.wf.unique("INV"), [(sku, Decimal("150"), price_lb)], uoms=["LB"]
+    )
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice in LB refused at creation: HTTP {ex.status}", sku=sku)
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    evidence = {"sku": sku, "invoiced_lb": "150", "price_per_lb": str(price_lb), "received_box": "2"}  # noqa: E501
+    if downstream["reached_gl"]:
+        return breached(
+            "150 LB at half price slipped through with wrong conversion factor",
+            **evidence,
+            downstream=downstream,
+        )
+    return held(f"stopped at {downstream['blocked_at']}", **evidence, downstream=downstream)
+
+
 # ------------------------------------------------------------------- runner
 
 

@@ -112,6 +112,12 @@ BUGS: dict[str, Bug] = {
             "fractional_discrete_qty",
             "Fractional quantities are accepted for discrete units (2.5 EA, 0.5 BOX).",
         ),
+        Bug(
+            "wrong_uom_factor",
+            "uom_consistency",
+            "wrong_uom_conversion_factor",
+            "Unit conversion uses 2× the correct factor; qty is understated so overbilling passes.",
+        ),
     ]
 }
 
