@@ -70,10 +70,36 @@ recommendation, injection echo + secret, deprecated runbook, hallucinated
 component, historical similarity used as proof, overstated certainty, a key
 fact citing unrelated evidence, and a hypothesis citing another component's evidence.
 
+## Verifier detection matrix (`opspilot/eval/verifier_matrix.py`)
+
+The guardrail perturbations above try each defect on one hand-picked case,
+and all ten were chosen because the verifier is known to catch them, so their
+100% is expected by construction. The matrix measures the safety net more
+honestly:
+
+* **every mutation on every case it applies to** (14 main + 10 held-out),
+  compared with **the same case's clean run**, so a signal only counts if the
+  mutation caused it;
+* **three kinds of mutation**: `catch` (defects the deterministic checks are
+  designed for), `benign` (harmless edits; any flag is a false positive) and
+  `blind_spot` (semantic errors with valid citations: swapped ranking,
+  inflated confidence, a neighbouring component blamed, a summary that
+  contradicts the findings, paraphrased overconfidence, an omitted service);
+* **outcomes**: `flagged` (new issue code, reviewer concern, worse status or
+  removed recommendation), `neutralized` (no flag, but a deterministic stage
+  rebuilt the defective part), `missed` (the defect reaches the final report
+  unflagged), and `clean` for benign edits that correctly raised nothing.
+
+Offline the reviewer is the scripted mock (a keyword rule), so `blind_spot`
+results describe the deterministic verifier plus that rule. They map what a
+real LLM reviewer would have to catch; they do not measure one. Results:
+[eval_results_verifier.md](eval_results_verifier.md).
+
 ## Running
 
 ```bash
 uv run opspilot eval --guardrails          # offline; writes var/eval/eval_mock_*.{json,md}
+uv run opspilot eval --verifier-matrix     # offline, ~10 min; writes var/eval/verifier_matrix.{json,md}
 uv run pytest tests/test_evaluation.py      # regression thresholds
 GOOGLE_API_KEY=... uv run opspilot --live eval   # live; records model + config
 ```

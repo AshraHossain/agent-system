@@ -66,3 +66,6 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/list-apps && break; sleep 2; done
           curl -sf http://127.0.0.1:8000/list-apps | grep -q opspilot_ai
           docker rm -f op
+      - name: Smoke test (every console script in the image starts)
+        run: |
+          docker run --rm opspilot:ci opspilot --help

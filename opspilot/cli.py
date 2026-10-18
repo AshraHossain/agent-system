@@ -223,6 +223,8 @@ async def _eval(args, settings: Settings) -> int:
     from opspilot.eval.perturbations import run_guardrail_eval
 
     s = with_provider(settings, args.live)
+    if args.verifier_matrix:
+        return await _verifier_matrix(args, s)
     results = await run_eval(s, args.cases or None, split=args.split)
     if args.guardrails and not args.live:
         results["guardrails"] = await run_guardrail_eval(s)
@@ -234,13 +236,39 @@ async def _eval(args, settings: Settings) -> int:
     return 0
 
 
+async def _verifier_matrix(args, settings: Settings) -> int:
+    from opspilot.eval.verifier_matrix import run_verifier_matrix, to_markdown
+
+    if args.live:
+        print("--verifier-matrix patches mock policies; it runs offline only", file=sys.stderr)
+        return 2
+    result = await run_verifier_matrix(settings, args.cases or None)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "verifier_matrix.json").write_text(json.dumps(result, indent=2))
+    (out / "verifier_matrix.md").write_text(to_markdown(result))
+    print(to_markdown(result))
+    print(f"results: {out / 'verifier_matrix.json'}\n         {out / 'verifier_matrix.md'}")
+    return 0
+
+
 def _serve(args, settings: Settings) -> int:
     import uvicorn
 
     from opspilot.api import create_app
 
-    if args.host not in ("127.0.0.1", "localhost", "::1"):
+    loopback = args.host in ("127.0.0.1", "localhost", "::1")
+    if not loopback and not settings.api_token:
+        if not args.allow_unauthenticated:
+            print(
+                f"refusing to serve on {args.host} without authentication: set "
+                "OPSPILOT_API_TOKEN, bind 127.0.0.1, or pass --allow-unauthenticated",
+                file=sys.stderr,
+            )
+            return 2
         print(f"warning: serving on {args.host} with no authentication", file=sys.stderr)
+    if settings.api_token:
+        print("auth: bearer token required (OPSPILOT_API_TOKEN)", file=sys.stderr)
     uvicorn.run(create_app(settings), host=args.host, port=args.port)
     return 0
 
@@ -267,11 +295,21 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("serve", help="serve the ADK REST API plus GET /runs/{run_id}")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument(
+        "--allow-unauthenticated",
+        action="store_true",
+        help="serve beyond loopback without OPSPILOT_API_TOKEN (not recommended)",
+    )
     s = sub.add_parser("show", help="print a persisted final report")
     s.add_argument("session_id")
     e = sub.add_parser("eval", help="run the evaluation suite")
     e.add_argument("--cases", nargs="*")
     e.add_argument("--guardrails", action="store_true")
+    e.add_argument(
+        "--verifier-matrix",
+        action="store_true",
+        help="planted defects x all cases (main + held-out) vs a clean baseline; offline only",
+    )
     e.add_argument("--split", choices=["main", "heldout"], default="main")
     e.add_argument("--out", default=str(REPO_ROOT / "var" / "eval"))
     args = p.parse_args(argv)

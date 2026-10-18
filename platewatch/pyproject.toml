@@ -1,0 +1,46 @@
+[project]
+name = "platewatch"
+version = "0.1.0"
+description = "PlateWatch — licence-plate detection, tagging and vector search with a PydanticAI agent"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pydantic>=2.7,<3",
+    "pydantic-ai-slim>=1.0",
+    "pillow>=10",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+platewatch = "platewatch.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.2", "pytest-cov>=5.0", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/platewatch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: needs a real model API key; skipped by default"]
+addopts = "-m 'not live' -p no:cacheprovider"
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["var"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["platewatch"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B011"]

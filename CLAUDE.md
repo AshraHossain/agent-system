@@ -8,6 +8,12 @@ OpsPilot AI: a read-only, multi-agent network-operations investigation system
 on **Google ADK 2.11.0** (pinned). Read [PLAN.md](PLAN.md) and
 [ARCHITECTURE.md](ARCHITECTURE.md) before changing code.
 
+This file covers OpsPilot (`opspilot/`, `adk_apps/`, `tests/`). The repository
+also holds independent projects with their own conventions: `ledger-hound/`,
+`traffic-flow-analyzer/` and `platewatch/` (self-contained; see their
+README/CLAUDE.md and run commands from inside the folder). The layering rules
+below apply to OpsPilot only.
+
 ## Commands
 
 ```bash
@@ -46,6 +52,10 @@ uv run adk web adk_apps                   # ADK dev UI
 - `LoopAgent` ends when any event it yields has `actions.escalate`;
   `SequentialAgent` ignores `escalate`, so the optional `reinvestigation_gate`
   ends the rounds without skipping review or the finalizer.
+
+## Sub-projects
+
+- `traffic-flow-analyzer/` — PydanticAI-based congestion forecasting with Gradio dashboard; see its own CLAUDE.md and PLAN.md.
 
 ## Conventions
 
