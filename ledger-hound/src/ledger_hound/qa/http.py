@@ -50,6 +50,10 @@ class ApiClient:
         transport = httpx.ASGITransport(app=app)
         return cls(httpx.AsyncClient(transport=transport, base_url="http://p2p.local"))
 
+    def view(self) -> ApiClient:
+        """Same connection, separate log: concurrent tasks keep their own transcripts."""
+        return ApiClient(self._client)
+
     async def aclose(self) -> None:
         await self._client.aclose()
 

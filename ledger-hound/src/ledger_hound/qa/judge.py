@@ -25,6 +25,7 @@ from .discovery import discover
 from .explorer import Explorer
 from .http import ApiClient
 from .models import AttackResult
+from .spec_diff import surface
 
 STATUS_RANK = {"BREACHED": 0, "ERROR": 1, "HELD": 2, "SKIPPED": 3}
 
@@ -119,6 +120,7 @@ async def investigate(
             "classifier": classifier_summary,
             "http_calls": len(client.log),
         },
+        "api_surface": surface(catalog),
         "plan": plan,
         "happy_path": happy,
         "adversarial": [_entry(r) for r in results],

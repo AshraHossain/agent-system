@@ -257,8 +257,18 @@ def _serve(args, settings: Settings) -> int:
 
     from opspilot.api import create_app
 
-    if args.host not in ("127.0.0.1", "localhost", "::1"):
+    loopback = args.host in ("127.0.0.1", "localhost", "::1")
+    if not loopback and not settings.api_token:
+        if not args.allow_unauthenticated:
+            print(
+                f"refusing to serve on {args.host} without authentication: set "
+                "OPSPILOT_API_TOKEN, bind 127.0.0.1, or pass --allow-unauthenticated",
+                file=sys.stderr,
+            )
+            return 2
         print(f"warning: serving on {args.host} with no authentication", file=sys.stderr)
+    if settings.api_token:
+        print("auth: bearer token required (OPSPILOT_API_TOKEN)", file=sys.stderr)
     uvicorn.run(create_app(settings), host=args.host, port=args.port)
     return 0
 
@@ -285,6 +295,11 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("serve", help="serve the ADK REST API plus GET /runs/{run_id}")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument(
+        "--allow-unauthenticated",
+        action="store_true",
+        help="serve beyond loopback without OPSPILOT_API_TOKEN (not recommended)",
+    )
     s = sub.add_parser("show", help="print a persisted final report")
     s.add_argument("session_id")
     e = sub.add_parser("eval", help="run the evaluation suite")

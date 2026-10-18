@@ -56,3 +56,77 @@ def test_parse_bugs():
 def test_every_bug_names_a_real_attack():
     ids = {a.id for a in ATTACKS}
     assert {b.caught_by for b in BUGS.values()} <= ids
+
+
+async def _received_po(client, sku: str, qty: str, price: str) -> int:
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": sku, "qty": qty, "unit_price": price}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": sku, "qty": qty}]}
+    )
+    return pid
+
+
+async def test_invoice_in_another_unit_fails_match(clean):
+    client, catalog = clean
+    assert catalog.line_field("create_invoice", "uom")
+    assert not catalog.line_field("create_po", "uom")
+    pid = await _received_po(client, "NAIL-16D-50LB", "10", "89.99")
+    line = {"sku": "NAIL-16D-50LB", "qty": "10", "unit_price": "89.99", "uom": "lb"}
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {"vendor_id": 1, "po_id": pid, "invoice_number": "U-1", "lines": [line]},
+    )
+    assert inv.body["lines"][0]["uom"] == "LB"
+    match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
+    assert match.body == {
+        "invoice_id": inv.body["id"],
+        "status": "match_failed",
+        "exceptions": ["uom_mismatch:NAIL-16D-50LB"],
+    }
+
+
+async def test_unit_defaults_to_catalogue_and_case_is_ignored(clean):
+    client, _ = clean
+    pid = await _received_po(client, "NAIL-16D-50LB", "2", "89.99")
+    line = {"sku": "NAIL-16D-50LB", "qty": "2", "unit_price": "89.99", "uom": " box "}
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {"vendor_id": 1, "po_id": pid, "invoice_number": "U-2", "lines": [line]},
+    )
+    assert (await client.call("POST", f"/invoices/{inv.body['id']}/match")).body[
+        "status"
+    ] == "matched"
+    po = await client.call("GET", f"/purchase-orders/{pid}")
+    assert po.body["lines"][0]["uom"] == "BOX"
+
+
+async def test_fractional_discrete_qty_refused(clean):
+    client, _ = clean
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "2.5", "unit_price": "4.98"}]},
+    )
+    assert po.status == 422 and "whole" in po.body["detail"]
+    pid = await _received_po(client, "2X4-8-SPF", "4", "4.98")
+    line = {"sku": "2X4-8-SPF", "qty": "2.50", "unit_price": "4.98"}
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {"vendor_id": 1, "po_id": pid, "invoice_number": "F-1", "lines": [line]},
+    )
+    assert inv.status == 422
+    whole = await client.call(
+        "POST",
+        "/invoices",
+        {"vendor_id": 1, "po_id": pid, "invoice_number": "F-2", "lines": [line | {"qty": "2.00"}]},
+    )
+    assert whole.status == 201  # 2.00 is a whole number

@@ -13,3 +13,4 @@
 | [0009](0009-deterministic-mock-model.md) | Scripted `BaseLlm` mock for offline tests and evaluation | Accepted |
 | [0010](0010-read-only-run-lookup.md) | One read-only `GET /runs/{run_id}` route served next to ADK's API | Accepted |
 | [0011](0011-optional-gemini-embeddings.md) | Optional Gemini embeddings behind a persistent cache | Accepted |
+| [0012](0012-otlp-exporter-not-locked.md) | Keep the OTLP exporter out of the lockfile until ADK allows OpenTelemetry 1.43+ | Accepted |

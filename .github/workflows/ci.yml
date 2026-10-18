@@ -65,4 +65,3 @@ jobs:
       - name: Smoke test (every console script in the image starts)
         run: |
           docker run --rm opspilot:ci opspilot --help
-          docker run --rm opspilot:ci platewatch --help

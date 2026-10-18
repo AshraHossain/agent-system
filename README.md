@@ -95,12 +95,11 @@ each has its own README, and none imports another.
 |---|---|---|---|
 | `ledger-hound/` | Agentic QA for a Purchase-to-Pay API: explorer, adversary and judge agents, stress test, DSPy classifier | OpenAI Agents SDK, FastAPI, DSPy | `ledger-hound.yml` |
 | `traffic-flow-analyzer/` | Congestion forecasting with an interactive dashboard | PydanticAI, Gradio | `trafficflow.yml` |
-| `platewatch/` | Licence-plate detection, tagging and vector search ([docs](docs/platewatch.md)) | PydanticAI, Hugging Face | `ci.yml` (packaged with OpsPilot) |
+| `platewatch/` | Licence-plate detection, tagging and vector search ([README](platewatch/README.md)) | PydanticAI, Hugging Face | `platewatch.yml` |
 
-`ledger-hound/` and `traffic-flow-analyzer/` are self-contained (own
-`pyproject.toml`, `uv.lock`, tests); run their commands from inside the
-folder. `platewatch/` is a second package of the root project, with its
-dependencies in the `plates` extra.
+`ledger-hound/`, `traffic-flow-analyzer/` and `platewatch/` are
+self-contained (own `pyproject.toml`, `uv.lock`, tests, CI workflow); run
+their commands from inside the folder. The root project is OpsPilot only.
 
 ## Repository map (OpsPilot)
 

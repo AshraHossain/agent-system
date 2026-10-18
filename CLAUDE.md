@@ -9,11 +9,10 @@ on **Google ADK 2.11.0** (pinned). Read [PLAN.md](PLAN.md) and
 [ARCHITECTURE.md](ARCHITECTURE.md) before changing code.
 
 This file covers OpsPilot (`opspilot/`, `adk_apps/`, `tests/`). The repository
-also holds independent projects with their own conventions: `ledger-hound/`
-and `traffic-flow-analyzer/` (self-contained; see their README/CLAUDE.md and
-run commands from inside the folder) and `platewatch/` (a second package of
-the root project, see `docs/platewatch.md`). The layering rules below apply to
-OpsPilot only.
+also holds independent projects with their own conventions: `ledger-hound/`,
+`traffic-flow-analyzer/` and `platewatch/` (self-contained; see their
+README/CLAUDE.md and run commands from inside the folder). The layering rules
+below apply to OpsPilot only.
 
 ## Commands
 

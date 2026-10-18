@@ -45,7 +45,9 @@ live model would investigate real incidents.
   designed-for defects 162/162 caught, 0/45 false positives on harmless edits,
   but only 37/93 semantic errors caught. It names the gaps (false all-clear
   summary, inflated confidence, swapped ranking, link blamed for a device
-  fault, paraphrased certainty), most with a deterministic fix.
+  fault, paraphrased certainty), most with a deterministic fix. Four
+  deterministic checks then closed all but paraphrased certainty: semantic
+  errors caught rose to 69/93 with still 0/45 false positives.
 
 ## Weaknesses, in order of importance
 

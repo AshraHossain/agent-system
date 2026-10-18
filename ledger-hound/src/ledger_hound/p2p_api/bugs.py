@@ -100,6 +100,18 @@ BUGS: dict[str, Bug] = {
             "price_variance",
             "Match ignores unit-price differences between PO and invoice.",
         ),
+        Bug(
+            "uom_ignored",
+            "uom_consistency",
+            "invoice_uom_mismatch",
+            "Match compares quantities without units: 10 LB is matched against 10 EA.",
+        ),
+        Bug(
+            "fractional_uom",
+            "uom_consistency",
+            "fractional_discrete_qty",
+            "Fractional quantities are accepted for discrete units (2.5 EA, 0.5 BOX).",
+        ),
     ]
 }
 

@@ -35,6 +35,7 @@ from opspilot.contracts.report import RunMetrics, TokenUsage
 from opspilot.contracts.request import InvestigationScope
 from opspilot.contracts.verification import VerificationResult
 from opspilot.core import report as report_core
+from opspilot.core.analysis import generate_candidates
 from opspilot.core.cost import estimate_cost
 from opspilot.core.errors import ToolError
 from opspilot.core.security import validate_request
@@ -190,6 +191,16 @@ def _load(state):
     return parsed, errors
 
 
+def _rule_hypotheses(rt, state) -> list | None:
+    """Re-run the deterministic candidate rules for this scope (verifier reference)."""
+    try:
+        scope = InvestigationScope.model_validate(state["scope"])
+        return generate_candidates(rt.dataset, rt.topology, scope.window, scope.baseline).hypotheses
+    except Exception:  # missing data must not fail verification
+        log.warning("rule candidates unavailable for verification", exc_info=True)
+        return None
+
+
 def _suspicious(evidence: dict[str, Evidence]) -> set[str]:
     return {
         e.entity_id
@@ -220,6 +231,11 @@ class EvidenceVerifierAgent(BaseAgent):
             known_services=set(rt.topology.services),
             suspicious_docs=_suspicious(evidence),
             endpoints={c: v.get("endpoints", []) for c, v in rt.topology.components.items()},
+            component_types={
+                **{s: "service" for s in rt.topology.services},
+                **{c: v.get("type", "") for c, v in rt.topology.components.items()},
+            },
+            rule_hypotheses=_rule_hypotheses(rt, state),
         )
         if errors:
             from opspilot.contracts.verification import VerificationIssue

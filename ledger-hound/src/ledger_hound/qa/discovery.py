@@ -63,6 +63,7 @@ FIELD_ALIASES: list[list[str]] = [
     ["invoice_number", "invoice_no", "vendor_invoice_number", "number"],
     ["name", "vendor_name"],
     ["active", "is_active", "enabled"],
+    ["uom", "unit", "unit_of_measure"],
 ]
 _ALIAS_GROUP = {name: group for group in FIELD_ALIASES for name in group}
 
@@ -106,6 +107,18 @@ class Catalog:
         """Rename canonical field names to whatever the API's schema uses."""
         schema = self.roles[role].body_schema
         return _adapt(body, schema) if schema else body
+
+    def line_field(self, role: str, name: str) -> bool:
+        """True if the role's request lines declare ``name`` (or one of its aliases)."""
+        if role not in self.roles:
+            return False
+        schema = self.roles[role].body_schema or {}
+        for key in _ALIAS_GROUP.get("lines", ["lines"]):
+            line = (schema.get("properties") or {}).get(key, {}).get("items") or {}
+            props = line.get("properties") or {}
+            if any(n in props for n in _ALIAS_GROUP.get(name, [name])):
+                return True
+        return False
 
     def allows(self, method: str, path: str) -> bool:
         """True if (method, concrete path) matches a discovered operation."""

@@ -114,6 +114,8 @@ class Settings:
     limits: Limits = field(default_factory=Limits)
     prices: PriceTable | None = None
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    # Bearer token for `opspilot serve`; None = no authentication (loopback only).
+    api_token: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -133,4 +135,20 @@ class Settings:
             prices=load_price_table(Path(table))
             if (table := os.getenv("OPSPILOT_PRICE_TABLE"))
             else None,
+            api_token=_api_token(),
         )
+
+
+MIN_TOKEN_LENGTH = 32
+
+
+def _api_token() -> str | None:
+    token = os.getenv("OPSPILOT_API_TOKEN", "").strip()
+    if not token:
+        return None
+    if len(token) < MIN_TOKEN_LENGTH:
+        raise ValueError(
+            f"OPSPILOT_API_TOKEN must be at least {MIN_TOKEN_LENGTH} characters "
+            '(e.g. `python -c "import secrets; print(secrets.token_urlsafe(32))"`)'
+        )
+    return token

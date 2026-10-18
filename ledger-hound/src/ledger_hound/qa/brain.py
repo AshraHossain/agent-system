@@ -111,6 +111,7 @@ _IMPACT = {
     "input_validation": "Negative or zero lines create hidden credits and corrupt totals.",
     "price_variance": "A vendor can raise prices after the PO and still be paid in full.",
     "state_machine": "Process steps can be skipped, so approvals and audit trails stop meaning anything.",
+    "uom_consistency": "Quantities in different units are compared as equal, so receipts, invoices and inventory stop agreeing on what was bought.",
 }
 
 

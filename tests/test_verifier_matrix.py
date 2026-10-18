@@ -44,13 +44,22 @@ def test_benign_edits_are_never_flagged(matrix):
             assert p["clean"] == p["applicable"]
 
 
-def test_known_blind_spots_are_reported_not_hidden(matrix):
-    """Pins today's gaps so a future fix shows up as a deliberate test change."""
+def test_closed_blind_spots_stay_closed(matrix):
+    """Gaps found by the first matrix run and closed in core/verification.py."""
     m = matrix["mutations"]
-    assert m["false_all_clear"]["missed"] == 2
-    assert m["paraphrased_certainty"]["missed"] == 2
-    assert m["swapped_ranking"]["missed_cases"] == ["C05"]
+    assert m["false_all_clear"]["flagged"] == 2  # summary_contradicts_findings
+    assert m["swapped_ranking"]["flagged_cases"] == ["C05"]  # ranking_differs_from_rules (tie)
+    assert m["blamed_neighbour"]["missed"] == 0
     assert m["dropped_service"]["neutralized"] == 2  # finalizer rebuilds the service list
+    rows = {(r["mutation"], r["case"]): r for r in matrix["rows"]}
+    assert "summary_contradicts_findings:error" in rows["false_all_clear", "C03"]["signals"]
+    assert rows["swapped_ranking", "C05"]["signals"] == ["ranking_differs_from_rules:warning"]
+
+
+def test_remaining_blind_spot_is_reported_not_hidden(matrix):
+    """Paraphrased overconfidence needs a language judgement: the live reviewer's job.
+    Pinned so that closing it shows up as a deliberate test change."""
+    assert matrix["mutations"]["paraphrased_certainty"]["missed"] == 2
 
 
 def test_inapplicable_mutations_are_marked_not_scored(matrix):

@@ -13,6 +13,7 @@ With no bugs switched on, every financial rule is enforced:
 * no POs against inactive vendors
 * every GL entry balances (Decimal money, 2 dp, half-up)
 * duplicate invoice numbers per vendor are rejected (case/space-insensitive)
+* invoice lines are matched in the PO's unit of measure; discrete units are whole
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ from pydantic import BaseModel, Field
 from .bugs import parse_bugs
 
 CENT = Decimal("0.01")
+# Units that cannot be split: half a stud or a third of a box is a data error.
+DISCRETE_UOMS = frozenset({"EA", "SHEET", "BOX", "ROLL"})
 
 
 def money(value: Decimal) -> Decimal:
@@ -67,6 +70,7 @@ class InvoiceLine:
     qty: Decimal
     unit_price: Decimal
     amount: Any  # Decimal normally; float under the float_money bug
+    uom: str = ""
 
 
 @dataclass
@@ -146,6 +150,10 @@ class LineIn(BaseModel):
     unit_price: Decimal
 
 
+class InvoiceLineIn(LineIn):
+    uom: str | None = Field(default=None, description="defaults to the catalogue unit")
+
+
 class POIn(BaseModel):
     vendor_id: int
     lines: list[LineIn] = Field(min_length=1)
@@ -164,7 +172,7 @@ class InvoiceIn(BaseModel):
     vendor_id: int
     po_id: int
     invoice_number: str = Field(min_length=1)
-    lines: list[LineIn] = Field(min_length=1)
+    lines: list[InvoiceLineIn] = Field(min_length=1)
 
 
 # --------------------------------------------------------------------- the app
@@ -213,6 +221,13 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
         if "non_positive" not in bugs and value <= 0:
             raise HTTPException(422, f"{field_name} must be greater than zero")
 
+    def uom_of(sku: str) -> str:
+        return store.items[sku]["uom"]
+
+    def require_whole(sku: str, qty: Decimal) -> None:
+        if "fractional_uom" not in bugs and uom_of(sku) in DISCRETE_UOMS and qty % 1:
+            raise HTTPException(422, f"qty {qty} of {sku} must be whole ({uom_of(sku)})")
+
     def ordered_value(po: PurchaseOrder) -> Decimal:
         return sum((money(ln.qty * ln.unit_price) for ln in po.lines), Decimal("0"))
 
@@ -233,6 +248,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             "lines": [
                 {
                     "sku": ln.sku,
+                    "uom": uom_of(ln.sku),
                     "qty": out(ln.qty),
                     "unit_price": out(ln.unit_price),
                     "received_qty": out(ln.received_qty),
@@ -256,6 +272,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             "lines": [
                 {
                     "sku": ln.sku,
+                    "uom": ln.uom,
                     "qty": out(ln.qty),
                     "unit_price": out(ln.unit_price),
                     "amount": out(ln.amount),
@@ -309,6 +326,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
                 raise HTTPException(422, f"unknown sku {ln.sku}")
             require_positive("qty", ln.qty)
             require_positive("unit_price", ln.unit_price)
+            require_whole(ln.sku, ln.qty)
         po = PurchaseOrder(
             id=store.next_id(),
             vendor_id=vendor.id,
@@ -339,6 +357,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             if rl.sku not in by_sku:
                 raise HTTPException(422, f"sku {rl.sku} is not on purchase order {po.id}")
             require_positive("qty", rl.qty)
+            require_whole(rl.sku, rl.qty)
             line = by_sku[rl.sku]
             already = Decimal("0") if "over_receive_cumulative" in bugs else line.received_qty
             if already + rl.qty > line.qty:
@@ -382,11 +401,13 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
                 raise HTTPException(422, f"sku {ln.sku} is not on purchase order {po.id}")
             require_positive("qty", ln.qty)
             require_positive("unit_price", ln.unit_price)
+            require_whole(ln.sku, ln.qty)
             if float_money:
                 amount: Any = float(ln.qty) * float(ln.unit_price)
             else:
                 amount = money(ln.qty * ln.unit_price)
-            lines.append(InvoiceLine(ln.sku, ln.qty, ln.unit_price, amount))
+            uom = (ln.uom or uom_of(ln.sku)).strip().upper()
+            lines.append(InvoiceLine(ln.sku, ln.qty, ln.unit_price, amount, uom))
         total: Any = (
             sum(ln.amount for ln in lines)
             if float_money
@@ -431,6 +452,8 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
                 failures.append(f"qty_exceeds_receipt:{ln.sku}")
             if "no_price_check" not in bugs and ln.unit_price != po_line.unit_price:
                 failures.append(f"price_variance:{ln.sku}")
+            if "uom_ignored" not in bugs and ln.uom != uom_of(ln.sku):
+                failures.append(f"uom_mismatch:{ln.sku}")
         if failures:
             inv.status, inv.exceptions = "match_failed", failures
         elif not all(ln.received_qty >= ln.qty for ln in po.lines) and (
