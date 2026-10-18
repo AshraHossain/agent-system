@@ -47,7 +47,10 @@ live model would investigate real incidents.
   summary, inflated confidence, swapped ranking, link blamed for a device
   fault, paraphrased certainty), most with a deterministic fix. Four
   deterministic checks then closed all but paraphrased certainty: semantic
-  errors caught rose to 69/93 with still 0/45 false positives.
+  errors caught rose to 69/93 with still 0/45 false positives. A certainty
+  lexicon (`overstated_certainty`) then brought it to 93/93, but the
+  mutation's phrase is in the lexicon, so that last step is not independent
+  evidence: plain assertions ("The firewall caused this") still pass.
 
 ## Weaknesses, in order of importance
 
