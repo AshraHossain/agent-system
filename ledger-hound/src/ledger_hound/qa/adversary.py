@@ -640,7 +640,12 @@ async def wrong_uom_conversion_factor(p: Probe) -> Outcome:
     if not ex.ok:
         return held(f"invoice in LB refused at creation: HTTP {ex.status}", sku=sku)
     downstream = await p.push_through(entity_id(ex, "invoice_id"))
-    evidence = {"sku": sku, "invoiced_lb": "150", "price_per_lb": str(price_lb), "received_box": "2"}  # noqa: E501
+    evidence = {
+        "sku": sku,
+        "invoiced_lb": "150",
+        "price_per_lb": str(price_lb),
+        "received_box": "2",
+    }
     if downstream["reached_gl"]:
         return breached(
             "150 LB at half price slipped through with wrong conversion factor",
