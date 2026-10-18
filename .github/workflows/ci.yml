@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - name: Install
-        run: uv sync --frozen
+        run: uv sync --frozen --all-packages
       - name: Lint
         run: |
           uv run ruff check .
