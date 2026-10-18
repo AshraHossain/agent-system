@@ -9,6 +9,7 @@ NOT been exercised in CI (offline); see tests/test_platewatch_live.py.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import TYPE_CHECKING
 
@@ -40,12 +41,13 @@ class HFPlateDetector:
             x0, y0 = max(0, int(b["xmin"])), max(0, int(b["ymin"]))
             x1, y1 = int(b["xmax"]), int(b["ymax"])
             if x1 > x0 and y1 > y0:
-                out.append(
-                    RawDetection(
-                        box=BoundingBox(x_min=x0, y_min=y0, x_max=x1, y_max=y1),
-                        confidence=float(d["score"]),
+                with contextlib.suppress(Exception):  # malformed box from model — skip silently
+                    out.append(
+                        RawDetection(
+                            box=BoundingBox(x_min=x0, y_min=y0, x_max=x1, y_max=y1),
+                            confidence=float(d["score"]),
+                        )
                     )
-                )
         return out
 
 

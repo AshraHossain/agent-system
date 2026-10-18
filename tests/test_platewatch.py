@@ -132,3 +132,98 @@ def test_cli_rejects_unknown_backend():
 
     with pytest.raises(SystemExit):
         cli._backend("scripted")
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests
+# ---------------------------------------------------------------------------
+
+
+def _failing_reader(image, box):
+    """Simulates an OCR crash on the first box."""
+    raise RuntimeError("OCR engine crashed")
+
+
+def test_reader_error_skips_detection_not_image(tmp_path):
+    """A reader exception on one crop skips that crop but keeps the others."""
+    from platewatch.vision.scripted import ScriptedVision
+
+    # One good detection with a working reader.
+    img, box = make_image(tmp_path / "good.png", "ABC123", 0)
+    plans = {pixel_key(img.convert("RGB")): [(box, 0.9, "ABC123", 0.95)]}
+    real_vision = ScriptedVision(plans)
+    store = PlateStore()
+
+    # Monkey-patch reader to fail once then succeed.
+    call_count = [0]
+
+    def flaky_reader(image, box):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise RuntimeError("first read failed")
+        return real_vision.read(image, box)
+
+    from platewatch.pipeline import PlatePipeline
+
+    class PatchedReader:
+        def read(self, image, box):
+            return flaky_reader(image, box)
+
+    pipe = PlatePipeline(real_vision, PatchedReader(), store)
+    # With one failing reader, process_file should return empty (skipped)
+    records = pipe.process_file(tmp_path / "good.png", "good.png")
+    assert records == []
+    assert call_count[0] == 1
+
+
+def test_image_timeout_recorded_as_failure(tmp_path, monkeypatch):
+    """When process_file times out, scan_inbox records it as a failure, not a crash."""
+    import platewatch.pipeline as plmod
+    from platewatch.pipeline import PlatePipeline
+    from platewatch.vision.scripted import ScriptedVision
+
+    img, box = make_image(tmp_path / "slow.png", "ABC123", 0)
+    plans = {pixel_key(img.convert("RGB")): [(box, 0.9, "ABC123", 0.95)]}
+    vision = ScriptedVision(plans)
+    store = PlateStore()
+
+    original_process = PlatePipeline.process_file
+
+    def hanging_process(self, path, source):
+        import time
+
+        time.sleep(999)  # will be killed by timeout
+        return original_process(self, path, source)
+
+    monkeypatch.setattr(PlatePipeline, "process_file", hanging_process)
+    monkeypatch.setattr(plmod, "IMAGE_TIMEOUT", 0.1)
+
+    pipe = PlatePipeline(vision, vision, store)
+    summary = pipe.scan_inbox(tmp_path)
+    assert summary.images_failed == 1
+    assert "TimeoutError" in summary.failures[0]
+    assert store.count() == 0
+
+
+def test_sightings_count_tracks_duplicate_plate_text(tmp_path):
+    """Same plate text from two different images gets sightings=2 in search results."""
+    store = PlateStore()
+    # two distinct records (different ids, same plate_text)
+    store.add(_rec("id-1", "ABC1234"))
+    store.add(
+        PlateRecord(
+            id="id-2",
+            image_sha256="different-sha",
+            source="b.png",
+            box=BoundingBox(x_min=0, y_min=0, x_max=5, y_max=5),
+            raw_text="ABC1234",
+            plate_text="ABC1234",
+            detection_confidence=0.8,
+            ocr_confidence=0.8,
+            confidence=0.64,
+            tags=[],
+        )
+    )
+    hits = store.search("ABC1234")
+    assert all(h.sightings == 2 for h in hits if h.plate_text == "ABC1234")
+    assert len(hits) == 2
