@@ -12,6 +12,19 @@ from trafficflow.data.feed import CsvFeed, SyntheticFeed
 from trafficflow.data.replay import ReplayFeed, fetch_pemsd7, load_pemsd7
 
 
+def _make_live_feed(provider: str, api_key: str):
+    """Return a live feed adapter for the given provider."""
+    from trafficflow.data.live import HereLiveFeed, MockLiveFeed, TomTomLiveFeed
+
+    if provider == "tomtom":
+        key = api_key or os.environ.get("TOMTOM_API_KEY", "")
+        return TomTomLiveFeed(api_key=key)
+    if provider == "here":
+        key = api_key or os.environ.get("HERE_API_KEY", "")
+        return HereLiveFeed(api_key=key)
+    return MockLiveFeed()
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser("trafficflow")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -63,6 +76,14 @@ def main(argv: list[str] | None = None) -> int:
     sg = s.add_mutually_exclusive_group()
     sg.add_argument("--replay", help="PeMSD7_V_228.csv: replay real recorded speeds")
     sg.add_argument("--csv", help="wide CSV of speeds (timestamp + one column per segment)")
+    sg.add_argument("--live", action="store_true", help="use a live data feed adapter")
+    s.add_argument(
+        "--provider",
+        choices=["mock", "tomtom", "here"],
+        default="mock",
+        help="live feed provider (default: mock)",
+    )
+    s.add_argument("--api-key", default="", help="API key for the chosen provider")
     s.add_argument("--sensors", type=int, default=8, help="sensors shown when replaying")
     s.add_argument(
         "--poll-seconds",
@@ -70,6 +91,31 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="re-read --csv from disk every N seconds (0=disabled)",
     )
+
+    # -- monitor subcommand -------------------------------------------------
+    m = sub.add_parser(
+        "monitor", help="watch live segments and fire webhooks on threshold crossings"
+    )
+    m.add_argument("--provider", choices=["mock", "tomtom", "here"], default="mock")
+    m.add_argument("--api-key", default="")
+    m.add_argument(
+        "--level",
+        choices=["moderate", "heavy", "severe"],
+        default="heavy",
+        help="minimum congestion level that triggers an alert",
+    )
+    m.add_argument("--webhook", default="", help="webhook URL to POST alerts to")
+    m.add_argument("--poll-seconds", type=int, default=30)
+
+    # -- serve-api subcommand -----------------------------------------------
+    sa = sub.add_parser("serve-api", help="launch the FastAPI HTTP query layer")
+    sa.add_argument("--host", default="127.0.0.1")
+    sa.add_argument("--port", type=int, default=8000)
+    sa.add_argument("--live", action="store_true", help="use a live data feed adapter")
+    sa.add_argument("--provider", choices=["mock", "tomtom", "here"], default="mock")
+    sa.add_argument("--api-key", default="")
+    sa.add_argument("--model", default=None, help="model for /ask endpoint")
+
     a = p.parse_args(argv)
 
     if a.cmd == "demo":
@@ -126,6 +172,47 @@ def main(argv: list[str] | None = None) -> int:
         origins = feed.origins(times, max_steps=max(a.horizons) // 5)
         tw = a.train_window or None
         print(json.dumps(evaluate(feed, origins, a.horizons, train_window=tw), indent=2))
+    elif a.cmd == "monitor":
+        from trafficflow.alerts.monitor import AlertConfig, AlertMonitor, AlertRule
+        from trafficflow.contracts import CongestionLevel
+
+        level_map = {
+            "moderate": CongestionLevel.MODERATE,
+            "heavy": CongestionLevel.HEAVY,
+            "severe": CongestionLevel.SEVERE,
+        }
+        feed = _make_live_feed(a.provider, a.api_key)
+        segs = feed.segments()
+        rules = [
+            AlertRule(
+                segment_id=s.id,
+                min_level=level_map[a.level],
+                webhook_url=a.webhook,
+                name=s.name,
+            )
+            for s in segs
+        ]
+        monitor = AlertMonitor(
+            AlertConfig(rules=rules, feed=feed, poll_interval_seconds=a.poll_seconds)
+        )
+        print(f"Monitoring {len(rules)} segments at level>={a.level} (Ctrl-C to stop)")
+        monitor.run()
+    elif a.cmd == "serve-api":
+        try:
+            import uvicorn
+        except ImportError:
+            print("ERROR: uvicorn is required: pip install 'trafficflow[api]'", file=sys.stderr)
+            return 1
+        from trafficflow.api import build_app as build_api_app
+
+        if a.live:
+            feed = _make_live_feed(a.provider, a.api_key)
+        else:
+            feed = SyntheticFeed()
+            feed.advance(12)
+        model = a.model or os.environ.get("TRAFFICFLOW_MODEL")
+        app = build_api_app(feed, model=model)
+        uvicorn.run(app, host=a.host, port=a.port)
     else:
         from trafficflow.ui.app import build_app
 
@@ -136,11 +223,18 @@ def main(argv: list[str] | None = None) -> int:
             def factory() -> ReplayFeed:
                 return ReplayFeed(data, start=data.index[8 * 288])
 
-        elif a.csv:
+        elif getattr(a, "csv", None):
             csv_path = a.csv
 
             def factory() -> CsvFeed:  # re-reads disk on each call when poll-seconds > 0
                 return CsvFeed(csv_path)
+
+        elif getattr(a, "live", False):
+            live_feed = _make_live_feed(a.provider, a.api_key)
+            live_feed.start_polling(interval_seconds=a.poll_seconds or 30)
+
+            def factory():
+                return live_feed
 
         build_app(feed_factory=factory).launch(server_name=a.host, server_port=a.port)
     return 0
