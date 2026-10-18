@@ -14,7 +14,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from platewatch.core.store import PlateStore
 from platewatch.core.text import normalize_plate
 from platewatch.pipeline import IMAGE_SUFFIXES, PlatePipeline
