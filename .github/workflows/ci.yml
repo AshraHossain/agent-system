@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
           enable-cache: true
       - name: Install
-        run: uv sync --frozen
+        run: uv sync --frozen --all-packages
       - name: Lint
         run: |
           uv run ruff check .
@@ -29,7 +29,11 @@ jobs:
           OPSPILOT_MODEL_PROVIDER: mock
         run: >
           uv run pytest -q
-          --cov=opspilot --cov-report=term-missing --cov-report=html --cov-report=xml
+          --cov=opspilot --cov=platewatch --cov-report=term-missing --cov-report=html --cov-report=xml
+      - name: PlateWatch offline demo
+        env:
+          PYDANTIC_AI_NO_BANNER: "1"
+        run: uv run platewatch demo
       - name: Offline evaluation + guardrails
         run: uv run opspilot eval --guardrails --out var/eval
       - uses: actions/upload-artifact@v4

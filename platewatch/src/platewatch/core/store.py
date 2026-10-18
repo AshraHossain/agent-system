@@ -95,6 +95,10 @@ class PlateStore:
             ).fetchall()
             if not rows:
                 return []
+            # Count sightings per plate_text across all stored records.
+            from collections import Counter
+
+            text_counts: Counter[str] = Counter(r[2] for r in rows)
             matrix = np.stack([np.frombuffer(r[5], dtype=np.float32) for r in rows])
             scores = matrix @ self._embedder.embed(q)
             order = np.argsort(-scores)[: max(1, min(limit, 50))]
@@ -113,6 +117,7 @@ class PlateStore:
                         exact=text == q,
                         confidence=conf,
                         tags=json.loads(tags),
+                        sightings=text_counts[text],
                     )
                 )
             hits.sort(key=lambda h: (not h.exact, -h.score))

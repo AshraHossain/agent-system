@@ -53,6 +53,9 @@ class SearchHit(BaseModel):
     exact: bool
     confidence: float
     tags: list[str]
+    sightings: int = Field(
+        default=1, ge=1, description="total stored sightings with this plate text"
+    )
 
 
 class ScanSummary(BaseModel):

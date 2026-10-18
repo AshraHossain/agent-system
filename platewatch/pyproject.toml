@@ -26,6 +26,7 @@ packages = ["src/platewatch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 markers = ["live: needs a real model API key; skipped by default"]
 addopts = "-m 'not live' -p no:cacheprovider"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]

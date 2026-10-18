@@ -26,3 +26,12 @@
 - [x] OpenTelemetry exporter configuration example (`docs/observability.md`; export via `uv run --with`, not yet in the lockfile)
 - [x] Decide whether to ship the OTLP exporter as an `otel` extra: not until `google-adk` allows `opentelemetry-sdk>=1.43` (ADR-0012)
 - [x] Authentication for shared use: `opspilot serve` bearer token (`OPSPILOT_API_TOKEN`), refuses non-loopback without it; plain `adk api_server` stays loopback-only
+
+## PlateWatch backlog
+- [x] Detect/read/tag/store pipeline, vector search, PydanticAI agent, offline demo + tests (#15)
+- [x] Live Hugging Face test for user-supplied labelled photos (#16) — **never run against real models**
+- [x] Per-image timeout and per-detection exception isolation; sightings count in search results
+- [ ] Run the live test; tune model ids and the 80%/50% floors from real output
+- [ ] Region-specific plate format rules (US states, EU) replacing the generic shape check
+- [ ] Learned embeddings and an ANN index (Qdrant/pgvector) beyond ~10^5 plates
+- [ ] Read-only `GET /plates/search` API; detection/OCR evaluation harness on a labelled set
