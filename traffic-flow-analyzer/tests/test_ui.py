@@ -1,3 +1,4 @@
+import os
 import socket
 
 import plotly.graph_objects as go
@@ -7,7 +8,8 @@ from trafficflow.data.feed import SyntheticFeed
 from trafficflow.ui.app import build_app
 from trafficflow.ui.plots import heatmap_figure, speed_figure, status_table
 
-_CHROMIUM = "/opt/pw-browsers/chromium-1161/chrome-linux/chrome"
+_CHROMIUM_LOCAL = "/opt/pw-browsers/chromium-1161/chrome-linux/chrome"
+_CHROMIUM = _CHROMIUM_LOCAL if os.path.exists(_CHROMIUM_LOCAL) else None
 
 
 def _free_port() -> int:
@@ -27,10 +29,10 @@ def test_dashboard_browser_smoke():
     app.launch(server_port=port, prevent_thread_lock=True, show_error=True)
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(
-                executable_path=_CHROMIUM,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
+            launch_kwargs = {"args": ["--no-sandbox", "--disable-dev-shm-usage"]}
+            if _CHROMIUM:
+                launch_kwargs["executable_path"] = _CHROMIUM
+            browser = p.chromium.launch(**launch_kwargs)
             page = browser.new_page()
             page.goto(f"http://127.0.0.1:{port}", timeout=30000)
             page.wait_for_selector("gradio-app", timeout=20000)
