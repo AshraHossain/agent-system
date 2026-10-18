@@ -37,4 +37,4 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: uv run playwright install chromium
-      - run: uv run pytest -m slow -x -q
+      - run: uv run pytest -m slow -x -q --no-cov
