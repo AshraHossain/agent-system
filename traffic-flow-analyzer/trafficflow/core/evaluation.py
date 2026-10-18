@@ -85,9 +85,14 @@ def evaluate(
     origins: Sequence[datetime],
     horizons: Sequence[int] = (15, 30, 60),
     segment_ids: Sequence[str] | None = None,
+    train_window: int | None = None,
 ) -> dict[str, Any]:
     """Evaluate on `origins`. `feed` needs `now` (settable), `segments()`, `history()` and
-    `next_values()` (held-back future, used only here). Restores `feed.now` afterwards."""
+    `next_values()` (held-back future, used only here). Restores `feed.now` afterwards.
+
+    `train_window`: if set, each origin uses only the most recent `train_window` history
+    points instead of the full 7-day window, preventing evaluation on training data.
+    """
     steps_for = {h: h // STEP_MINUTES for h in horizons}
     max_steps = max(steps_for.values())
     segs = [s for s in feed.segments() if segment_ids is None or s.id in segment_ids]
@@ -102,6 +107,8 @@ def evaluate(
             bucket = "peak" if (ts.hour in PEAK_HOURS and ts.weekday() < 5) else "offpeak"
             for seg in segs:
                 hist = feed.history(seg.id, days=7)
+                if train_window is not None and len(hist) > train_window:
+                    hist = hist.iloc[-train_window:]
                 actual = feed.next_values(seg.id, max_steps)
                 if len(actual) < max_steps:
                     continue

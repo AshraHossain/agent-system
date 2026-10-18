@@ -54,6 +54,10 @@ uv run adk web adk_apps                   # ADK dev UI
   `SequentialAgent` ignores `escalate`, so the optional `reinvestigation_gate`
   ends the rounds without skipping review or the finalizer.
 
+## Sub-projects
+
+- `traffic-flow-analyzer/` — PydanticAI-based congestion forecasting with Gradio dashboard; see its own CLAUDE.md and PLAN.md.
+
 ## Conventions
 
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.

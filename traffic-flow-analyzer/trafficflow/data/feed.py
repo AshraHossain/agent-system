@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import warnings
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -22,13 +23,32 @@ class Feed(Protocol):
 
 
 class SyntheticFeed:
-    """Simulated network. Data after `now` exists only as hidden ground truth for backtests."""
+    """Simulated network. Data after `now` exists only as hidden ground truth for backtests.
 
-    def __init__(self, seed: int = 7, now: datetime | None = None, days: int = 21):
+    `tz`: when set to a `datetime.timezone`, `now` returns timezone-aware datetimes.
+    Defaults to `None` (naive datetimes) for backward compatibility.
+    """
+
+    def __init__(
+        self,
+        seed: int = 7,
+        now: datetime | None = None,
+        days: int = 21,
+        tz: timezone | None = None,
+    ):
         self._start = datetime(2026, 9, 1)
         self._data = simulate(self._start, days=days, seed=seed)
         self.end = self._data.index[-1]
-        self.now = now or datetime(2026, 9, 16, 7, 30)
+        self._tz = tz
+        self._now = now or datetime(2026, 9, 16, 7, 30)
+
+    @property
+    def now(self) -> datetime:
+        return self._now.replace(tzinfo=self._tz) if self._tz is not None else self._now
+
+    @now.setter
+    def now(self, value: datetime) -> None:
+        self._now = value.replace(tzinfo=None) if value.tzinfo is not None else value
 
     def segments(self) -> list[SegmentInfo]:
         return list(SEGMENTS)
@@ -40,7 +60,17 @@ class SyntheticFeed:
 
     def history(self, segment_id: str, days: float = 7) -> pd.Series:
         s = self._col(segment_id)
-        return s[(s.index <= self.now) & (s.index > self.now - timedelta(days=days))]
+        result = s[(s.index <= self._now) & (s.index > self._now - timedelta(days=days))]
+        if len(result) > 1:
+            gaps = result.index.to_series().diff().iloc[1:]
+            gap_threshold = timedelta(minutes=STEP_MINUTES * 2)
+            large = gaps[gaps > gap_threshold]
+            for ts, gap in large.items():
+                warnings.warn(
+                    f"history gap at {ts}: {gap} (expected ≤{gap_threshold})",
+                    stacklevel=2,
+                )
+        return result
 
     def truth(self, segment_id: str, start: datetime, end: datetime) -> pd.Series:
         """Ground truth for evaluation only; never exposed to tools or agents."""
@@ -50,16 +80,17 @@ class SyntheticFeed:
     def next_values(self, segment_id: str, steps: int):
         """The next `steps` points after `now` (evaluation only)."""
         s = self._col(segment_id)
-        return s[s.index > self.now].iloc[:steps].to_numpy()
+        return s[s.index > self._now].iloc[:steps].to_numpy()
 
     def advance(self, steps: int = 1) -> datetime:
-        self.now = min(self.now + timedelta(minutes=STEP_MINUTES * steps), self.end)
+        self._now = min(self._now + timedelta(minutes=STEP_MINUTES * steps), self.end)
         return self.now
 
 
 class CsvFeed:
     """Wide CSV: `timestamp` + one speed column (km/h) per segment, 5-minute grid.
-    Segment ids are the column names; free-flow speed is the 95th percentile of each column."""
+    Segment ids are the column names; free-flow speed is the 95th percentile of each column.
+    Timezone: all-naive or all-aware timestamps are supported; mixed-tz CSVs are not."""
 
     def __init__(self, path: str | Path):
         df = pd.read_csv(path, parse_dates=["timestamp"], index_col="timestamp").sort_index()

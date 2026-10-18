@@ -125,6 +125,10 @@ dependencies in the `plates` extra.
 [models](docs/model_configuration.md) · [observability](docs/observability.md) · [deployment](docs/deployment.md) ·
 [ADRs](docs/adr/README.md) · [architecture review](docs/review.md)
 
+## Sub-projects
+
+- **traffic-flow-analyzer/** — PydanticAI-based congestion forecasting with Gradio dashboard. See [traffic-flow-analyzer/README.md](traffic-flow-analyzer/README.md).
+
 ## License
 
 Proprietary — see [LICENSE](LICENSE).

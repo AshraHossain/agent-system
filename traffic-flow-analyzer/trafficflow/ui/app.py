@@ -8,10 +8,29 @@ from collections.abc import Callable
 import gradio as gr
 
 from trafficflow.agents.pipeline import ask, run_report
+from trafficflow.core.congestion import congestion_index, level_for
 from trafficflow.data.feed import Feed, SyntheticFeed
-from trafficflow.ui.plots import heatmap_figure, speed_figure, status_table
+from trafficflow.ui.plots import (
+    SEGMENT_COORDS,
+    heatmap_figure,
+    map_figure,
+    speed_figure,
+    status_table,
+)
 
 BADGE = {"normal": "🟢 NORMAL", "watch": "🟡 WATCH", "degraded": "🔴 DEGRADED"}
+
+
+def _map_pts(feed):
+    pts = []
+    for seg in feed.segments():
+        hist = feed.history(seg.id, days=7)
+        speed = float(hist.iloc[-3:].mean())
+        idx = congestion_index(speed, seg.free_flow_kmh)
+        level = level_for(idx)
+        lat, lon = SEGMENT_COORDS.get(seg.id, (34.05, -118.25))
+        pts.append((seg.id, lat, lon, level))
+    return map_figure(pts)
 
 
 def _refresh(feed, segment, horizon):
@@ -20,6 +39,7 @@ def _refresh(feed, segment, horizon):
         speed_figure(feed, segment, int(horizon)),
         heatmap_figure(feed, int(horizon)),
         status_table(feed, int(horizon)),
+        _map_pts(feed),
     )
 
 
@@ -37,6 +57,7 @@ def build_app(
             "The data source is a simulated or replayed recording, not a live feed."
         )
         feed = gr.State(first_feed)
+        report_history = gr.State([])
         with gr.Row():
             segment = gr.Dropdown(seg_choices, value=seg_choices[0][1], label="Segment")
             horizon = gr.Slider(15, 180, value=60, step=15, label="Forecast horizon (min)")
@@ -55,9 +76,17 @@ def build_app(
             evidence = gr.JSON(label="Evidence")
         with gr.Tab("Ask"):
             q = gr.Textbox(label="Question", placeholder="How is Ring Road North in the next hour?")
+            ask_btn = gr.Button("Ask", variant="primary")
             answer = gr.Markdown()
+            ask_history = gr.State([])
+        with gr.Tab("Map"):
+            map_plot = gr.Plot(label="Segment map")
+        with gr.Tab("History"):
+            hist_dropdown = gr.Dropdown(choices=[], label="Past reports", interactive=True)
+            hist_summary = gr.Markdown()
+            hist_clear = gr.Button("Clear history")
 
-        outs = [clock, speed_plot, heat_plot, table]
+        outs = [clock, speed_plot, heat_plot, table, map_plot]
         timer = gr.Timer(5, active=False)
 
         def advance(f, steps):
@@ -68,21 +97,46 @@ def build_app(
             f.advance(1)
             return (f, *_refresh(f, seg, hz))
 
-        async def brief(f, hz):
+        async def brief(f, hz, rh):
             r = await run_report(f, int(hz), model)
             lines = [f"### {r.brief.headline}", r.brief.summary, "", "**Findings**"]
             lines += [f"- {x.claim} _({', '.join(x.evidence_ids)})_" for x in r.brief.findings]
             lines += ["", "**Recommendations**"] + [f"- {x}" for x in r.brief.recommendations]
             if r.issues:
                 lines += ["", "⚠️ **Verification issues:** " + "; ".join(r.issues)]
+            entry = {
+                "label": f"{r.as_of:%Y-%m-%d %H:%M} — {r.status.value}",
+                "summary": "\n".join(lines),
+            }
+            updated_rh = [*rh, entry][-10:]
+            choices = [e["label"] for e in updated_rh]
             return (
                 f"## {BADGE[r.status.value]}  (rule-based status, as of {r.as_of:%H:%M})",
                 "\n".join(lines),
                 r.evidence,
+                updated_rh,
+                gr.Dropdown(choices=choices, value=choices[-1] if choices else None),
             )
 
-        async def answer_q(f, text):
-            return await ask(f, text, model) if text.strip() else ""
+        async def answer_q(f, text, hist):
+            if not text.strip():
+                return hist, ""
+            reply = await ask(f, text, model, history=hist)
+            updated = [
+                *hist,
+                {"role": "user", "content": text},
+                {"role": "assistant", "content": reply},
+            ]
+            last_5 = updated[-10:]  # 5 exchanges = 10 messages
+            lines = []
+            for msg in last_5:
+                prefix = "**You:** " if msg["role"] == "user" else "**AI:** "
+                lines.append(prefix + msg["content"])
+            return updated, "\n\n".join(lines)
+
+        def select_history(label, rh):
+            entry = next((e for e in rh if e["label"] == label), None)
+            return entry["summary"] if entry else ""
 
         demo.load(lambda f, s, h: _refresh(f, s, h), [feed, segment, horizon], outs)
         for c in (segment, horizon):
@@ -92,6 +146,16 @@ def build_app(
         )
         live.change(lambda on: gr.Timer(active=on), live, timer)
         timer.tick(tick, [feed, segment, horizon], [feed, *outs])
-        brief_btn.click(brief, [feed, horizon], [status_md, brief_md, evidence])
-        q.submit(answer_q, [feed, q], answer)
+        brief_btn.click(
+            brief,
+            [feed, horizon, report_history],
+            [status_md, brief_md, evidence, report_history, hist_dropdown],
+        )
+        ask_btn.click(answer_q, [feed, q, ask_history], [ask_history, answer])
+        q.submit(answer_q, [feed, q, ask_history], [ask_history, answer])
+        hist_dropdown.change(select_history, [hist_dropdown, report_history], hist_summary)
+        hist_clear.click(
+            lambda: ([], gr.Dropdown(choices=[]), ""),
+            outputs=[report_history, hist_dropdown, hist_summary],
+        )
     return demo
