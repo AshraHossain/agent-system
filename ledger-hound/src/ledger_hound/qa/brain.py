@@ -56,6 +56,7 @@ class Brain(Protocol):
     async def annotate(self, steps: list[dict[str, Any]]) -> list[str]: ...
     async def explain(self, breaches: list[dict[str, Any]]) -> list[str]: ...
     async def summarize(self, facts: dict[str, Any]) -> str: ...
+    async def explain_diff(self, diff: dict[str, Any]) -> str: ...
 
 
 # --------------------------------------------------------------------- mock
@@ -96,6 +97,23 @@ class MockBrain:
             f"{c['SKIPPED']} skipped). Rules breached: {worst}."
         )
 
+    async def explain_diff(self, diff: dict[str, Any]) -> str:
+        if diff.get("unchanged"):
+            return "No API changes since the previous run."
+        parts: list[str] = []
+        if diff.get("operations_added"):
+            parts.append(f"{len(diff['operations_added'])} operation(s) added")
+        if diff.get("operations_removed"):
+            parts.append(f"{len(diff['operations_removed'])} operation(s) removed")
+        if diff.get("changed"):
+            parts.append(f"{len(diff['changed'])} operation(s) changed")
+        breaking = diff.get("breaking") or []
+        if breaking:
+            sample = "; ".join(breaking[:3])
+            suffix = f" ({len(breaking) - 3} more)" if len(breaking) > 3 else ""
+            parts.append(f"{len(breaking)} breaking change(s): {sample}{suffix}")
+        return "API changed since the previous run: " + ", ".join(parts) + "."
+
 
 _IMPACT = {
     "overpayment_protection": "The company can be billed, and pay, for goods it never received.",
@@ -129,6 +147,10 @@ class _Lines(BaseModel):
 
 class _Summary(BaseModel):
     summary: str
+
+
+class _DiffExplanation(BaseModel):
+    explanation: str
 
 
 def extract_json(text: str) -> Any:
@@ -251,6 +273,23 @@ class LiveBrain:
             return out.summary
 
         return await self._safe("summarize", live, lambda: self._mock.summarize(facts))
+
+    async def explain_diff(self, diff: dict[str, Any]) -> str:
+        async def live():
+            out = await self._ask(
+                "api-change-analyst",
+                "You are reviewing API changes between two runs of a financial-integrity QA tool "
+                "for a Purchase-to-Pay system. Summarise what changed and explain the likely impact "
+                "on the controls being tested: a removed operation means a probe will be skipped; "
+                "a new required field changes how attacks are constructed; a changed type may break "
+                "existing probes. Write 2-4 sentences for a senior engineer. Be specific about "
+                "breaking changes.",
+                diff,
+                _DiffExplanation,
+            )
+            return out.explanation
+
+        return await self._safe("explain_diff", live, lambda: self._mock.explain_diff(diff))
 
 
 def make_brain(mock: bool = False) -> Brain:

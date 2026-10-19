@@ -61,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
     df = sub.add_parser("diff", help="compare the API surface of two reports or OpenAPI files")
     df.add_argument("old", help="earlier report JSON or OpenAPI JSON")
     df.add_argument("new", help="later report JSON or OpenAPI JSON")
+    df.add_argument(
+        "--explain",
+        action="store_true",
+        help="add a plain-English LLM explanation of the changes (needs BYNARA_API_KEY)",
+    )
 
     dp = sub.add_parser("dspy", help="optimize the violation-classifier prompt with DSPy")
     dsub = dp.add_subparsers(dest="dspy_cmd", required=True)
@@ -124,6 +129,8 @@ async def _run(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     report["api_changes"] = _api_changes(out_dir / "latest.json", report)
+    if report["api_changes"] and not report["api_changes"]["unchanged"]:
+        report["api_changes"]["explanation"] = await brain.explain_diff(report["api_changes"])
     path = out_dir / f"report-{datetime.now():%Y%m%d-%H%M%S}.json"
     text = json.dumps(report, indent=2, default=str)
     path.write_text(text)
@@ -169,6 +176,12 @@ def _diff(args: argparse.Namespace) -> int:
     d = diff(*surfaces)
     for line in describe(d):
         print(line)
+    if getattr(args, "explain", False) and not d["unchanged"]:
+        from .qa.brain import make_brain
+
+        brain = make_brain()
+        explanation = asyncio.run(brain.explain_diff(d))
+        print(f"\nExplanation: {explanation}")
     return 1 if d["breaking"] else 0
 
 
@@ -204,6 +217,8 @@ def _print_report(report: dict[str, Any], path: Path) -> None:
 
         since = changes["baseline"]["report_generated_at"]
         print(f"API CHANGES since {since}: " + "; ".join(describe(changes)))
+        if explanation := changes.get("explanation"):
+            print(f"  {explanation}")
     for note in meta["notes"]:
         print(f"note: {note}")
     print(f"\nreport: {path}")

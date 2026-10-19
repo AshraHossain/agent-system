@@ -7,6 +7,7 @@ import json
 
 from ledger_hound.cli import main
 from ledger_hound.p2p_api.app import create_app
+from ledger_hound.qa.brain import MockBrain
 from ledger_hound.qa.spec_diff import describe, diff, load_surface, surface_from_spec
 
 
@@ -91,3 +92,66 @@ def test_diff_command_exit_codes(tmp_path, capsys):
     )
     (tmp_path / "junk.json").write_text("{}")
     assert main(["diff", str(old), str(tmp_path / "junk.json")]) == 2
+
+
+# --------------------------------------------------------------------- brain explain_diff
+
+
+async def test_mock_brain_explain_diff_unchanged():
+    brain = MockBrain()
+    result = await brain.explain_diff({"unchanged": True})
+    assert result == "No API changes since the previous run."
+
+
+async def test_mock_brain_explain_diff_breaking():
+    brain = MockBrain()
+    s = surface_from_spec(_spec())
+    del s["operations"]["POST /purchase-orders/{po_id}/submit"]
+    result = await brain.explain_diff(diff(surface_from_spec(_spec()), s))
+    assert "breaking" in result.lower()
+    assert "operation" in result.lower()
+
+
+async def test_mock_brain_explain_diff_additive_only():
+    brain = MockBrain()
+    s = surface_from_spec(_spec())
+    s["operations"]["POST /credit-notes"] = {"role": None, "fields": {}}
+    result = await brain.explain_diff(diff(surface_from_spec(_spec()), s))
+    assert "added" in result
+    assert "breaking" not in result.lower()
+
+
+def test_run_records_explanation_when_api_changes(tmp_path):
+    out = str(tmp_path)
+    assert main(["run", "--mock", "--out", out, "--quiet"]) == 0
+    first = json.loads((tmp_path / "latest.json").read_text())
+    assert first["api_changes"] is None  # no baseline yet
+
+    # Inject a synthetic change into the baseline so the next run sees a diff.
+    first["api_surface"]["operations"]["DELETE /vendors/{vendor_id}"] = {
+        "role": None,
+        "fields": {},
+    }
+    (tmp_path / "latest.json").write_text(json.dumps(first))
+
+    assert main(["run", "--mock", "--out", out, "--quiet"]) == 0
+    second = json.loads((tmp_path / "latest.json").read_text())
+    changes = second["api_changes"]
+    assert changes["breaking"] == ["operation removed: DELETE /vendors/{vendor_id}"]
+    assert "explanation" in changes
+    assert isinstance(changes["explanation"], str) and changes["explanation"]
+
+
+def test_diff_command_explain_flag(tmp_path, capsys):
+    spec = _spec()
+    old_path = tmp_path / "old.json"
+    new_path = tmp_path / "new.json"
+    old_path.write_text(json.dumps(spec))
+    del spec["paths"]["/vendors/{vendor_id}/exposure"]
+    new_path.write_text(json.dumps(spec))
+
+    rc = main(["diff", "--explain", str(old_path), str(new_path)])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "BREAKING" in out
+    assert "Explanation:" in out

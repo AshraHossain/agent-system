@@ -111,3 +111,21 @@ async def test_full_investigation_with_mock_brain(clean):
         "gl_balance",
         "duplicate_invoice_detection",
     }
+
+
+async def test_live_brain_explain_diff_returns_string():
+    from conftest import live_brain, text
+
+    brain, _ = live_brain([text('{"explanation": "The submit endpoint was removed."}')])
+    result = await brain.explain_diff(
+        {
+            "unchanged": False,
+            "operations_removed": ["POST /purchase-orders/{po_id}/submit"],
+            "operations_added": [],
+            "role_changes": [{"role": "submit_po", "before": "POST /...", "after": None}],
+            "changed": {},
+            "breaking": ["operation removed: POST /purchase-orders/{po_id}/submit"],
+            "source": None,
+        }
+    )
+    assert isinstance(result, str) and result
