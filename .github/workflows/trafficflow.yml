@@ -39,25 +39,26 @@ jobs:
             try { parsed = JSON.parse(raw); } catch { parsed = null; }
 
             let body = "## Forecast Benchmark Results\n\n";
-            if (!parsed) {
+            if (!parsed || !parsed.results) {
               body += "```\n" + raw + "\n```\n";
             } else {
-              const horizons = Object.keys(parsed);
-              body += "| Method | " + horizons.map(h => `H=${h}min MAE`).join(" | ")
-                    + " | " + horizons.map(h => `H=${h}min RMSE`).join(" | ") + " |\n";
-              body += "|---|" + horizons.map(() => "---").join("|") + "|"
-                    + horizons.map(() => "---").join("|") + "|\n";
+              // Output schema: {horizons:[15,30,60], origins:N, segments:N, results:{...}}
+              // results keys: "15min/all", "15min/peak", ... each has method sub-keys
+              const results = parsed.results;
+              const scenarios = Object.keys(results);
+              const firstKey = scenarios[0];
+              const methods = Object.keys(results[firstKey]).filter(m => m !== "interval_90");
 
-              // Collect all method names across horizons
-              const methods = new Set();
-              for (const h of horizons) {
-                for (const m of Object.keys(parsed[h] || {})) methods.add(m);
+              body += "| Scenario | " + methods.map(m => `${m} MAE`).join(" | ")
+                    + " | " + methods.map(m => `${m} RMSE`).join(" | ") + " |\n";
+              body += "|---|" + methods.map(() => "---").join("|")
+                    + "|" + methods.map(() => "---").join("|") + "|\n";
+              for (const [scenario, data] of Object.entries(results)) {
+                const maes  = methods.map(m => data[m]?.mae?.toFixed(2)  ?? "—");
+                const rmses = methods.map(m => data[m]?.rmse?.toFixed(2) ?? "—");
+                body += `| ${scenario} | ${maes.join(" | ")} | ${rmses.join(" | ")} |\n`;
               }
-              for (const method of methods) {
-                const maes = horizons.map(h => parsed[h]?.[method]?.mae?.toFixed(2) ?? "—");
-                const rmses = horizons.map(h => parsed[h]?.[method]?.rmse?.toFixed(2) ?? "—");
-                body += `| ${method} | ${maes.join(" | ")} | ${rmses.join(" | ")} |\n`;
-              }
+              body += `\n_${parsed.origins} origins × ${parsed.segments} sensors_\n`;
               body += "\n<details><summary>Raw JSON</summary>\n\n```json\n"
                     + JSON.stringify(parsed, null, 2) + "\n```\n</details>\n";
             }
