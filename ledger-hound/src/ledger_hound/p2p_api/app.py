@@ -454,7 +454,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     @app.post("/invoices/{invoice_id}/match")
     async def match_invoice(invoice_id: int) -> dict[str, Any]:
         inv = invoice_or_404(invoice_id)
-        if inv.status != "pending":
+        if inv.status != "pending" and "rematch_allowed" not in bugs:
             raise HTTPException(409, f"invoice is already {inv.status}")
         po = store.pos[inv.po_id]
         by_sku = {ln.sku: ln for ln in po.lines}

@@ -125,6 +125,13 @@ BUGS: dict[str, Bug] = {
             "Match uses a 10% price tolerance instead of exact match;"
             " small price hikes slip through.",
         ),
+        Bug(
+            "rematch_allowed",
+            "state_machine",
+            "rematch_after_backorder",
+            "Match does not check invoice status; already-matched invoices can be re-matched,"
+            " silently clearing partial-receipt exceptions.",
+        ),
     ]
 }
 

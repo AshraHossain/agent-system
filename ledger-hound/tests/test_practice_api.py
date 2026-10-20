@@ -209,3 +209,56 @@ async def test_relaxed_price_tolerance_lets_ten_pct_through():
     # 10% is exactly within the 10% tolerance; match should pass
     assert match.body["status"] == "matched", match.body
     await client.aclose()
+
+
+async def _partial_receipt_setup(client, bug: str = "") -> tuple[int, int]:
+    """PO for 10 studs, receive 6 only. Returns (po_id, invoice_id)."""
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "10", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "6"}]}
+    )
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": f"RM{bug}-1",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "6", "unit_price": "4.98"}],
+        },
+    )
+    return pid, inv.body["id"]
+
+
+async def test_rematch_blocked_on_clean_api(clean):
+    # Partial receipt → match gives matched_with_exceptions → clean API blocks re-match
+    client, _ = clean
+    pid, inv_id = await _partial_receipt_setup(client)
+    m1 = await client.call("POST", f"/invoices/{inv_id}/match")
+    assert m1.body["status"] == "matched_with_exceptions"
+    m2 = await client.call("POST", f"/invoices/{inv_id}/match")
+    assert m2.status == 409
+
+
+async def test_rematch_allowed_bug_clears_exception():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"rematch_allowed"})))
+    pid, inv_id = await _partial_receipt_setup(client, bug="BUG")
+    m1 = await client.call("POST", f"/invoices/{inv_id}/match")
+    assert m1.body["status"] == "matched_with_exceptions"
+    # Fill the backorder — PO was for 10, received 6, now receive 4 more
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "4"}]}
+    )
+    m2 = await client.call("POST", f"/invoices/{inv_id}/match")
+    assert m2.status == 200
+    assert m2.body["status"] == "matched"
+    await client.aclose()

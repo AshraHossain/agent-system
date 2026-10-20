@@ -533,6 +533,46 @@ async def price_tolerance_overbill(p: Probe) -> Outcome:
 
 
 @attack(
+    "rematch_after_backorder",
+    "state_machine",
+    "Re-match a matched_with_exceptions invoice after the backorder fills",
+    "second match call returns 409; partial-receipt exception is preserved",
+    "medium",
+    "create_invoice",
+    "match_invoice",
+    "receive_po",
+)
+async def rematch_after_backorder(p: Probe) -> Outcome:
+    # Partial receipt (6 of 10) → invoice for 6 → first match gives matched_with_exceptions.
+    # Backorder fills (receive remaining 4). Vendor calls match again to clear the exception.
+    # Clean API: 409 (invoice is already matched_with_exceptions).
+    # Bug: second match succeeds and silently clears the partial-receipt exception.
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line(), receive=[(p.sku(), Decimal("6"))])
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line(Decimal("6")))
+    if not ex.ok:
+        return "ERROR", f"invoice creation failed: HTTP {ex.status}", {"body": ex.body}
+    inv_id = entity_id(ex, "invoice_id")
+    m1 = await p.wf.match(inv_id)
+    if not m1.ok:
+        return "ERROR", f"first match failed: HTTP {m1.status}", {"body": m1.body}
+    if m1.body.get("status") != "matched_with_exceptions":
+        return "SKIPPED", f"expected matched_with_exceptions, got {m1.body.get('status')}", {}
+    # Fill the backorder
+    p.wf.require("fill backorder", await p.wf.receive(po, [(p.sku(), Decimal("4"))]))
+    m2 = await p.wf.match(inv_id)
+    if m2.status >= 500 or m2.status == 0:
+        return crashed(m2)
+    if m2.ok and m2.body.get("status") == "matched":
+        return breached(
+            "re-match after backorder cleared partial-receipt exception",
+            first_match=m1.body,
+            second_match=m2.body,
+        )
+    return held(f"re-match refused with HTTP {m2.status}", first_match=m1.body)
+
+
+@attack(
     "receive_before_submit",
     "state_machine",
     "Receive goods on a draft (unsubmitted) PO",

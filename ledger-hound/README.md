@@ -4,8 +4,8 @@ An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
 controls held and which were breached, with the evidence.
 
-It comes with a **practice P2P API** that has 17 switchable, realistic bugs,
-so the agent can be scored: *it catches 17/17 planted bugs, with 0 false
+It comes with a **practice P2P API** that has 18 switchable, realistic bugs,
+so the agent can be scored: *it catches 18/18 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
@@ -61,7 +61,7 @@ openapi     LLM     scripted   18 lib     LLM        rules rollup
 | `qa/workflow.py` | Business verbs (create PO, receive, invoice...) over discovered roles |
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
 | `qa/explorer.py` | Happy-path walk with a business check at every step |
-| `qa/adversary.py` | 20 attacks: the 6 brief rules plus 14 extra edge cases (incl. unit of measure, UoM conversion and price-variance tolerance) |
+| `qa/adversary.py` | 21 attacks: the 6 brief rules plus 15 extra edge cases (incl. UoM, price-variance tolerance and backorder re-match) |
 | `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
@@ -111,6 +111,17 @@ against 10 EA), `fractional_uom` (2.5 EA accepted), and `wrong_uom_factor`
 through both the quantity and price checks). The attacks `invoice_uom_mismatch`,
 `fractional_discrete_qty`, and `wrong_uom_conversion_factor` catch them, and
 skip on an API whose invoice lines or catalogue carry no unit.
+
+## Backorder re-match
+
+When a partial shipment arrives, the match endpoint flags the invoice as
+`matched_with_exceptions` (partial receipt) instead of `matched`. This exception
+is an audit trail: it shows the invoice was processed before full delivery. The
+`rematch_allowed` bug skips the status check in match, letting a vendor call
+match again after the backorder fills — the exception disappears from the final
+state with no record that it ever existed. The `rematch_after_backorder` attack
+catches it: partial receipt → first match gives `matched_with_exceptions` → fill
+the backorder → call match again. Clean API: 409. Bug: silently clears the exception.
 
 ## Price variance tolerance
 
