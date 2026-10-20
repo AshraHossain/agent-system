@@ -8,6 +8,8 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
     defaults:
       run:
         working-directory: traffic-flow-analyzer
