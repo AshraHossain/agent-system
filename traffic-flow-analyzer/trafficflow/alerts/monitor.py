@@ -25,10 +25,14 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from trafficflow.contracts import CongestionLevel
 from trafficflow.core.congestion import congestion_index, level_for
 from trafficflow.data.feed import Feed
+
+if TYPE_CHECKING:
+    from trafficflow.alerts.store import AlertStore
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +73,7 @@ class AlertEvent:
 @dataclass
 class AlertMonitor:
     config: AlertConfig
+    store: AlertStore | None = None
     _active: dict[str, CongestionLevel] = field(default_factory=dict, init=False)
     _stop: threading.Event = field(default_factory=threading.Event, init=False)
 
@@ -119,6 +124,14 @@ class AlertMonitor:
                     rule=rule,
                 )
                 events.append(ev)
+                if self.store is not None:
+                    self.store.record(
+                        ev.ts,
+                        ev.segment_id,
+                        ev.level,
+                        ev.speed_kmh,
+                        rule_name=rule.name or rule.segment_id,
+                    )
                 if not was_active and rule.webhook_url:
                     self._fire(ev)
             elif was_active:

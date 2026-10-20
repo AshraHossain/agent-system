@@ -88,3 +88,33 @@ def test_openapi_schema(client):
     assert "paths" in schema
     assert "/segments" in schema["paths"]
     assert "/forecast/{segment_id}" in schema["paths"]
+
+
+def test_get_path(client):
+    r = client.get("/path/S1/S6")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["source"] == "S1"
+    assert data["target"] == "S6"
+    assert data["path"][0] == "S1"
+    assert data["path"][-1] == "S6"
+    assert data["total_km"] > 0
+    assert data["travel_minutes"] > 0
+    assert "bottleneck" in data
+
+
+def test_get_path_unknown_source(client):
+    r = client.get("/path/UNKNOWN/S1")
+    assert r.status_code == 404
+
+
+def test_get_path_unknown_target(client):
+    r = client.get("/path/S1/UNKNOWN")
+    assert r.status_code == 404
+
+
+def test_stream_endpoint_in_openapi(client):
+    """The /stream endpoint appears in the OpenAPI schema."""
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    assert "/stream" in r.json()["paths"]
