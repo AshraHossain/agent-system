@@ -164,3 +164,48 @@ async def test_fractional_discrete_qty_refused(clean):
         {"vendor_id": 1, "po_id": pid, "invoice_number": "F-2", "lines": [line | {"qty": "2.00"}]},
     )
     assert whole.status == 201  # 2.00 is a whole number
+
+
+async def test_price_variance_fails_match_on_clean_api(clean):
+    # PO at 10.00/unit, receive 10, invoice 9 units at 11.00 (9*11=99 <= 100 received)
+    # Amount passes overpayment gate but price variance should fail match
+    client, _ = clean
+    pid = await _received_po(client, "2X4-8-SPF", "10", "10.00")
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "PV-1",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "9", "unit_price": "11.00"}],
+        },
+    )
+    assert inv.status == 201, inv.body
+    match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
+    assert match.body["status"] == "match_failed"
+    assert "price_variance:2X4-8-SPF" in match.body["exceptions"]
+
+
+async def test_relaxed_price_tolerance_lets_ten_pct_through():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    # Same setup but with the relaxed_price_tolerance bug — 10% should pass
+    client = ApiClient.for_app(create_app(frozenset({"relaxed_price_tolerance"})))
+    pid = await _received_po(client, "2X4-8-SPF", "10", "10.00")
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "PV-2",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "9", "unit_price": "11.00"}],
+        },
+    )
+    assert inv.status == 201, inv.body
+    match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
+    # 10% is exactly within the 10% tolerance; match should pass
+    assert match.body["status"] == "matched", match.body
+    await client.aclose()

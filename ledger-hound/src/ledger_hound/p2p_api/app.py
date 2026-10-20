@@ -188,6 +188,8 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     seed(store)
     approve_lock = asyncio.Lock()
     float_money = "float_money" in bugs
+    # 10% tolerance lets a small price hike slip through match
+    price_tolerance = Decimal("0.10") if "relaxed_price_tolerance" in bugs else Decimal("0")
 
     app = FastAPI(
         title="P2P API (practice)",
@@ -472,10 +474,14 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             if "no_price_check" not in bugs:
                 if conv_factor is not None:
                     # invoice price is per invoice unit; scale to the PO unit before comparing
-                    if money(ln.unit_price * conv_factor) != po_line.unit_price:
+                    scaled = money(ln.unit_price * conv_factor)
+                    variance = abs(scaled - po_line.unit_price) / po_line.unit_price
+                    if variance > price_tolerance:
                         failures.append(f"price_variance:{ln.sku}")
-                elif ln.unit_price != po_line.unit_price:
-                    failures.append(f"price_variance:{ln.sku}")
+                else:
+                    variance = abs(ln.unit_price - po_line.unit_price) / po_line.unit_price
+                    if variance > price_tolerance:
+                        failures.append(f"price_variance:{ln.sku}")
         if failures:
             inv.status, inv.exceptions = "match_failed", failures
         elif not all(ln.received_qty >= ln.qty for ln in po.lines) and (

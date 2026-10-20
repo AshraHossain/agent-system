@@ -500,6 +500,39 @@ async def price_variance(p: Probe) -> Outcome:
 
 
 @attack(
+    "price_tolerance_overbill",
+    "price_variance",
+    "Invoice at 10% above PO price (tests whether any tolerance is too wide)",
+    "match flags the 10% price variance; invoice never reaches the GL",
+    "high",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def price_tolerance_overbill(p: Probe) -> Outcome:
+    # PO at PRICE/unit, receive TEN units, invoice 9 units at 10% above PO price.
+    # 9 × (PRICE×1.1) = 9 × 11.00 = 99.00 ≤ 100.00 received; passes the overpayment gate.
+    # Exact-match check should flag the price variance; a loose tolerance lets it through.
+    invoice_price = Decimal("11.00")  # PRICE * 1.10
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line(Decimal("9"), invoice_price))
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice refused at entry with HTTP {ex.status}")
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    if downstream["reached_gl"]:
+        return breached(
+            f"price 10% over PO ({PRICE} -> {invoice_price}) passed match and was approved",
+            po_price=str(PRICE),
+            invoice_price=str(invoice_price),
+            downstream=downstream,
+        )
+    return held(f"stopped at {downstream['blocked_at']}", downstream=downstream)
+
+
+@attack(
     "receive_before_submit",
     "state_machine",
     "Receive goods on a draft (unsubmitted) PO",

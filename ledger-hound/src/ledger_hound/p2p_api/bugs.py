@@ -118,6 +118,13 @@ BUGS: dict[str, Bug] = {
             "wrong_uom_conversion_factor",
             "Unit conversion uses 2× the correct factor; qty is understated so overbilling passes.",
         ),
+        Bug(
+            "relaxed_price_tolerance",
+            "price_variance",
+            "price_tolerance_overbill",
+            "Match uses a 10% price tolerance instead of exact match;"
+            " small price hikes slip through.",
+        ),
     ]
 }
 
