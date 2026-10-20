@@ -4,8 +4,8 @@ An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
 controls held and which were breached, with the evidence.
 
-It comes with a **practice P2P API** that has 15 switchable, realistic bugs,
-so the agent can be scored: *it catches 15/15 planted bugs, with 0 false
+It comes with a **practice P2P API** that has 16 switchable, realistic bugs,
+so the agent can be scored: *it catches 16/16 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
@@ -61,7 +61,7 @@ openapi     LLM     scripted   18 lib     LLM        rules rollup
 | `qa/workflow.py` | Business verbs (create PO, receive, invoice...) over discovered roles |
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
 | `qa/explorer.py` | Happy-path walk with a business check at every step |
-| `qa/adversary.py` | 18 attacks: the 6 brief rules plus 12 extra edge cases (incl. unit of measure) |
+| `qa/adversary.py` | 19 attacks: the 6 brief rules plus 13 extra edge cases (incl. unit of measure and UoM conversion) |
 | `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
@@ -103,10 +103,14 @@ verdicts at any K.
 Catalogue items carry a unit (`EA`, `SHEET`, `BOX`, `ROLL`) and invoice lines
 may declare one. The clean API matches an invoice line only in the PO line's
 unit (case and spaces ignored) and refuses fractional quantities of discrete
-units. Two bugs break this: `uom_ignored` (10 LB matched against 10 EA) and
-`fractional_uom` (2.5 EA accepted). The attacks `invoice_uom_mismatch` and
-`fractional_discrete_qty` catch them, and skip on an API whose invoice lines
-or catalogue carry no unit.
+units. **Unit conversion** is also supported: 50 LB = 1 BOX, so a correctly
+converted invoice (100 LB at 1.7998/LB against a 2-BOX PO at 89.99/BOX)
+passes match. Three bugs break unit handling: `uom_ignored` (10 LB matched
+against 10 EA), `fractional_uom` (2.5 EA accepted), and `wrong_uom_factor`
+(the conversion table uses 2× the real factor, letting a 150 LB overbill slip
+through both the quantity and price checks). The attacks `invoice_uom_mismatch`,
+`fractional_discrete_qty`, and `wrong_uom_conversion_factor` catch them, and
+skip on an API whose invoice lines or catalogue carry no unit.
 
 ## API changes between runs
 
@@ -117,7 +121,13 @@ writes `api_changes`, listing breaking changes first (removed operation or
 field, lost role, changed type, newly required field). So a new breach can be
 read next to the endpoint change that came with it. `ledger-hound diff A B`
 compares any two reports or raw OpenAPI files and exits `1` on a breaking
-change. It is a structural diff; no LLM is involved.
+change.
+
+Pass `--explain` to `ledger-hound diff`, or run with a live brain, to get a
+plain-English paragraph explaining what changed and the likely impact on
+control coverage (e.g. a removed endpoint means a probe will skip; a new
+required field changes how attacks are constructed). Falls back to the mock
+brain without an API key.
 
 ## DSPy prompt optimization
 
