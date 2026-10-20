@@ -262,3 +262,53 @@ async def test_rematch_allowed_bug_clears_exception():
     assert m2.status == 200
     assert m2.body["status"] == "matched"
     await client.aclose()
+
+
+async def test_extra_sku_rejected_on_clean_api(clean):
+    # PO for 2X4-8-SPF only; invoice that also bills OSB-716-4X8 should be rejected
+    client, _ = clean
+    pid = await _received_po(client, "2X4-8-SPF", "4", "4.98")
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "EX-1",
+            "lines": [
+                {"sku": "2X4-8-SPF", "qty": "4", "unit_price": "4.98"},
+                {"sku": "OSB-716-4X8", "qty": "2", "unit_price": "14.25"},
+            ],
+        },
+    )
+    assert inv.status == 422
+    assert "OSB-716-4X8" in inv.body.get("detail", "")
+
+
+async def test_extra_sku_allowed_bug_posts_to_gl():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"extra_sku_allowed"})))
+    # Receive 10 units so the combined invoice total (4×4.98 + 2×14.25 = 48.42) stays
+    # within the received value cap (10×4.98 = 49.80).
+    pid = await _received_po(client, "2X4-8-SPF", "10", "4.98")
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "EX-2",
+            "lines": [
+                {"sku": "2X4-8-SPF", "qty": "4", "unit_price": "4.98"},
+                {"sku": "OSB-716-4X8", "qty": "2", "unit_price": "14.25"},
+            ],
+        },
+    )
+    # Bug lets the extra-SKU invoice be created; the unauthorized charge is in the system.
+    assert inv.status == 201, inv.body
+    match = await client.call("POST", f"/invoices/{inv.body['id']}/match")
+    # OSB line qty (2) has no PO receipt — match should fail on qty_exceeds_receipt
+    assert match.body["status"] == "match_failed"
+    await client.aclose()

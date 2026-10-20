@@ -573,6 +573,44 @@ async def rematch_after_backorder(p: Probe) -> Outcome:
 
 
 @attack(
+    "invoice_extra_sku",
+    "match_gate",
+    "Invoice a line for a SKU not on the PO (freight / tax charge injection)",
+    "invoice refused: the extra SKU is not on the purchase order",
+    "high",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def invoice_extra_sku(p: Probe) -> Outcome:
+    # PO for sku(0); invoice for sku(0) + sku(1) — sku(1) simulates an off-PO freight line.
+    if len(p.skus) < 2:
+        return "SKIPPED", "catalogue has fewer than 2 SKUs; cannot build an off-PO line", {}
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line(i=0))
+    # Invoice 9 of sku(0) + 1 of sku(1) — total 100 = received, overpayment cap passes.
+    # The clean API rejects it because sku(1) is not on the PO.
+    main_line: Line = (p.sku(0), Decimal("9"), PRICE)
+    extra_line: Line = (p.sku(1), Decimal("1"), PRICE)
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), [main_line, extra_line])
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(
+            f"extra-SKU invoice rejected at creation (HTTP {ex.status})",
+            extra_sku=p.sku(1),
+        )
+    # Invoice creation accepted an off-PO SKU — the unauthorized charge is now in
+    # the system as a liability, regardless of whether match later catches it.
+    return breached(
+        f"invoice with off-PO line for {p.sku(1)} accepted at creation (HTTP {ex.status})",
+        po_sku=p.sku(0),
+        extra_sku=p.sku(1),
+        invoice_id=entity_id(ex, "invoice_id"),
+    )
+
+
+@attack(
     "receive_before_submit",
     "state_machine",
     "Receive goods on a draft (unsubmitted) PO",

@@ -4,8 +4,8 @@ An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
 controls held and which were breached, with the evidence.
 
-It comes with a **practice P2P API** that has 18 switchable, realistic bugs,
-so the agent can be scored: *it catches 18/18 planted bugs, with 0 false
+It comes with a **practice P2P API** that has 19 switchable, realistic bugs,
+so the agent can be scored: *it catches 19/19 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
@@ -61,7 +61,7 @@ openapi     LLM     scripted   18 lib     LLM        rules rollup
 | `qa/workflow.py` | Business verbs (create PO, receive, invoice...) over discovered roles |
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
 | `qa/explorer.py` | Happy-path walk with a business check at every step |
-| `qa/adversary.py` | 21 attacks: the 6 brief rules plus 15 extra edge cases (incl. UoM, price-variance tolerance and backorder re-match) |
+| `qa/adversary.py` | 22 attacks: the 6 brief rules plus 16 extra edge cases (incl. UoM, price-variance tolerance, backorder re-match and freight/tax injection) |
 | `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
@@ -132,6 +132,18 @@ small tolerance to absorb daily commodity-price fluctuations. The
 priced up to 10% above the PO slip through match. The `price_tolerance_overbill`
 attack catches it: it invoices 9 units at 10% above the PO price (total stays
 within the received-goods cap, so only the match step can stop it).
+
+## Freight and tax line injection
+
+The clean API rejects any invoice line whose SKU is not on the referenced PO.
+Without this check, a vendor can append a freight surcharge, a setup fee, or a
+tax line to a legitimate invoice and have it accepted into the AP ledger — even
+though no PO line authorises the spend. The `extra_sku_allowed` bug disables
+the SKU-membership check at invoice creation. The `invoice_extra_sku` attack
+catches it: it creates a PO for one SKU, then submits a two-line invoice that
+also bills a second, unordered SKU. Clean API: 422 (extra SKU rejected). Bug:
+201 (invoice accepted with the off-PO line already in the system as a
+liability).
 
 ## API changes between runs
 

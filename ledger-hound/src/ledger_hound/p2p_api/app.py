@@ -410,7 +410,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
         po_skus = {ln.sku for ln in po.lines}
         lines: list[InvoiceLine] = []
         for ln in body.lines:
-            if ln.sku not in po_skus:
+            if ln.sku not in po_skus and "extra_sku_allowed" not in bugs:
                 raise HTTPException(422, f"sku {ln.sku} is not on purchase order {po.id}")
             require_positive("qty", ln.qty)
             require_positive("unit_price", ln.unit_price)
@@ -460,7 +460,10 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
         by_sku = {ln.sku: ln for ln in po.lines}
         failures: list[str] = []
         for ln in inv.lines:
-            po_line = by_sku[ln.sku]
+            po_line = by_sku.get(ln.sku)
+            if po_line is None:
+                failures.append(f"qty_exceeds_receipt:{ln.sku}")
+                continue
             inv_qty = ln.qty
             conv_factor: Decimal | None = None
             if ln.uom != uom_of(ln.sku) and "uom_ignored" not in bugs:

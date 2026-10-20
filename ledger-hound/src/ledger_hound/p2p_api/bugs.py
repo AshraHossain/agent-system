@@ -132,6 +132,13 @@ BUGS: dict[str, Bug] = {
             "Match does not check invoice status; already-matched invoices can be re-matched,"
             " silently clearing partial-receipt exceptions.",
         ),
+        Bug(
+            "extra_sku_allowed",
+            "match_gate",
+            "invoice_extra_sku",
+            "Invoice creation does not verify that all line SKUs are on the PO;"
+            " freight or tax lines not in the order can be invoiced and paid.",
+        ),
     ]
 }
 
