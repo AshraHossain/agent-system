@@ -21,6 +21,9 @@ Or programmatically::
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
@@ -29,6 +32,7 @@ from trafficflow.data.feed import Feed
 
 try:
     from fastapi import FastAPI, HTTPException
+    from fastapi.responses import StreamingResponse
     from pydantic import BaseModel as _BaseModel
 except ImportError as _err:
     raise ImportError("fastapi is required: pip install 'trafficflow[api]'") from _err
@@ -82,6 +86,15 @@ class AskRequest(_BaseModel):
 
 class AskResponse(_BaseModel):
     answer: str
+
+
+class PathOut(_BaseModel):
+    source: str
+    target: str
+    path: list[str]
+    total_km: float
+    travel_minutes: float
+    bottleneck: str
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +188,30 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         readings = [{"ts": str(ts), "speed_kmh": float(v)} for ts, v in h.items()]
         return HistoryOut(segment_id=segment_id, days=days, readings=readings)
 
+    @app.get("/path/{source}/{target}", response_model=PathOut)
+    def get_path(source: str, target: str, weight: str = "time"):
+        """Shortest path between two segments (by travel time or distance)."""
+        from trafficflow.core.graph import SegmentGraph
+
+        valid_ids = {s.id for s in feed.segments()}
+        if source not in valid_ids:
+            raise HTTPException(status_code=404, detail=f"Segment {source!r} not found")
+        if target not in valid_ids:
+            raise HTTPException(status_code=404, detail=f"Segment {target!r} not found")
+        g = SegmentGraph()
+        g.update_speeds(feed)
+        result = g.shortest_path(source, target, weight=weight)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"No path from {source} to {target}")
+        return PathOut(
+            source=source,
+            target=target,
+            path=result.path,
+            total_km=result.total_km,
+            travel_minutes=result.travel_minutes,
+            bottleneck=result.bottleneck,
+        )
+
     @app.post("/ask", response_model=AskResponse)
     async def ask_question(body: AskRequest):
         from trafficflow.agents.pipeline import ask
@@ -184,5 +221,51 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return AskResponse(answer=answer)
+
+    @app.get(
+        "/stream",
+        summary="SSE: live speed updates for all segments",
+        response_class=StreamingResponse,
+    )
+    async def stream_speeds(interval: float = 5.0):
+        """Server-Sent Events endpoint.
+
+        Pushes one JSON event per *interval* seconds with current speeds and
+        congestion levels for every segment.  Connect with::
+
+            curl -N http://localhost:8000/stream
+
+        Each event is ``data: <json>\\n\\n`` following the SSE spec.
+        """
+        interval = max(1.0, min(interval, 60.0))
+
+        async def _generate() -> AsyncIterator[str]:
+            from trafficflow.core.congestion import congestion_index, level_for
+
+            while True:
+                readings: dict[str, Any] = {"ts": datetime.now().isoformat(), "segments": {}}
+                for seg in feed.segments():
+                    try:
+                        h = feed.history(seg.id, days=0.02)
+                        speed = float(h.iloc[-1]) if not h.empty else seg.free_flow_kmh
+                    except Exception:
+                        speed = seg.free_flow_kmh
+                    idx = congestion_index(speed, seg.free_flow_kmh)
+                    readings["segments"][seg.id] = {
+                        "speed_kmh": round(speed, 2),
+                        "congestion_index": round(idx, 3),
+                        "level": level_for(idx).value,
+                    }
+                yield f"data: {json.dumps(readings)}\n\n"
+                await asyncio.sleep(interval)
+
+        return StreamingResponse(
+            _generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app
