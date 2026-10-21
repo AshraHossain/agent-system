@@ -363,7 +363,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     @app.post("/purchase-orders/{po_id}/receive")
     async def receive_po(po_id: int, body: ReceiveIn) -> dict[str, Any]:
         po = po_or_404(po_id)
-        if po.status not in {"submitted", "partially_received"}:
+        if po.status not in {"submitted", "partially_received"} and "receive_draft_po" not in bugs:
             raise HTTPException(409, f"cannot receive against a {po.status} purchase order")
         by_sku = {ln.sku: ln for ln in po.lines}
         for rl in body.lines:
@@ -389,7 +389,9 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
 
     @app.post("/invoices", status_code=201)
     async def create_invoice(body: InvoiceIn) -> dict[str, Any]:
-        vendor_or_404(body.vendor_id)
+        vendor = vendor_or_404(body.vendor_id)
+        if not vendor.active and "inactive_vendor_invoice" not in bugs:
+            raise HTTPException(422, f"vendor {body.vendor_id} is inactive")
         po = po_or_404(body.po_id)
         if po.vendor_id != body.vendor_id and "cross_vendor" not in bugs:
             raise HTTPException(422, "invoice vendor does not match purchase order vendor")
@@ -508,6 +510,9 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             if inv.status not in approvable:
                 raise HTTPException(409, f"cannot approve an invoice that is {inv.status}")
             await asyncio.sleep(0.01)  # simulated ledger write latency
+            if "approve_skips_gl" in bugs and inv.status == "matched_with_exceptions":
+                inv.status = "approved"
+                return {"invoice_id": inv.id, "status": inv.status, "gl_entry": None}
             if float_money:
                 debits = [
                     {

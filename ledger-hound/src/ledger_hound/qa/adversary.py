@@ -766,6 +766,66 @@ async def wrong_uom_conversion_factor(p: Probe) -> Outcome:
     return held(f"stopped at {downstream['blocked_at']}", **evidence, downstream=downstream)
 
 
+@attack(
+    "invoice_inactive_vendor",
+    "inactive_vendor_gate",
+    "Invoice against a PO after the vendor is deactivated",
+    "invoice refused once vendor is deactivated",
+    "high",
+    "create_invoice",
+    "update_vendor",
+)
+async def invoice_inactive_vendor(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    p.wf.require("deactivate vendor", await p.wf.set_vendor_active(v, False))
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line())
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice refused for inactive vendor (HTTP {ex.status})", vendor_id=str(v))
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    where = (
+        "and reached the GL"
+        if downstream["reached_gl"]
+        else f"(stopped later at {downstream['blocked_at']})"
+    )
+    return breached(
+        f"invoice accepted for inactive vendor (HTTP {ex.status}) {where}",
+        vendor_id=str(v),
+        downstream=downstream,
+    )
+
+
+@attack(
+    "partial_match_no_gl",
+    "gl_balance",
+    "Approve a partial-receipt invoice and verify GL is posted",
+    "GL entry created even when receipt is partial",
+    "critical",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def partial_match_no_gl(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line(), receive=[(p.sku(), Decimal("6"))])
+    inv_id = await p.wf.invoice(v, po, p.line(qty=Decimal("6")))
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    ex = p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    gl = ex.body.get("gl_entry") if isinstance(ex.body, dict) else None
+    if gl is None and p.wf.catalog.has("gl_entries"):
+        gl_ex = await p.wf.gl_for(inv_id)
+        if gl_ex.ok and isinstance(gl_ex.body, list) and gl_ex.body:
+            gl = gl_ex.body[0]
+    if gl is None:
+        return breached(
+            "approve returned 200 but no GL entry was created for partial-match invoice",
+            invoice_id=str(inv_id),
+        )
+    return held("GL entry present for partial-match invoice", invoice_id=str(inv_id))
+
+
 # ------------------------------------------------------------------- runner
 
 

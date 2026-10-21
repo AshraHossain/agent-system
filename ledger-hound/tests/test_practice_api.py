@@ -312,3 +312,159 @@ async def test_extra_sku_allowed_bug_posts_to_gl():
     # OSB line qty (2) has no PO receipt — match should fail on qty_exceeds_receipt
     assert match.body["status"] == "match_failed"
     await client.aclose()
+
+
+# --- receive_draft_po ---
+
+
+async def test_receive_on_draft_po_rejected(clean):
+    client, _ = clean
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "5", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    # PO is in draft (not submitted)
+    ex = await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "5"}]}
+    )
+    assert ex.status == 409
+    assert "draft" in ex.body.get("detail", "")
+
+
+async def test_receive_draft_po_bug_accepted():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"receive_draft_po"})))
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "5", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    # Bug: receipt accepted even though PO is still draft
+    ex = await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "5"}]}
+    )
+    assert ex.status == 200, ex.body
+    await client.aclose()
+
+
+# --- inactive_vendor_invoice ---
+
+
+async def test_invoice_for_inactive_vendor_rejected(clean):
+    client, _ = clean
+    # Use the seeded inactive vendor (id=2 or whichever is inactive)
+    vendors = (await client.call("GET", "/vendors")).body
+    assert any(v["active"] is False for v in vendors)
+    # Create a PO for a fresh active vendor, then deactivate after
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "5", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "5"}]}
+    )
+    # Deactivate vendor 1 after PO was raised
+    await client.call("PATCH", "/vendors/1", {"active": False})
+    ex = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "INV-INACT-1",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "5", "unit_price": "4.98"}],
+        },
+    )
+    assert ex.status == 422
+    assert "inactive" in ex.body.get("detail", "")
+
+
+async def test_inactive_vendor_invoice_bug_accepted():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"inactive_vendor_invoice"})))
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "5", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "5"}]}
+    )
+    # Deactivate vendor; bug skips the check
+    await client.call("PATCH", "/vendors/1", {"active": False})
+    ex = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "INV-INACT-BUG",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "5", "unit_price": "4.98"}],
+        },
+    )
+    assert ex.status == 201, ex.body
+    await client.aclose()
+
+
+# --- approve_skips_gl ---
+
+
+async def _partial_match_setup(client):
+    """Create a partial receipt → invoice → match (returns matched_with_exceptions)."""
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "10", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "6"}]}
+    )
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "INV-PART",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "6", "unit_price": "4.98"}],
+        },
+    )
+    inv_id = inv.body["id"]
+    match = await client.call("POST", f"/invoices/{inv_id}/match")
+    assert match.body["status"] == "matched_with_exceptions"
+    return inv_id
+
+
+async def test_partial_match_always_creates_gl_entry(clean):
+    client, _ = clean
+    inv_id = await _partial_match_setup(client)
+    approved = await client.call("POST", f"/invoices/{inv_id}/approve")
+    assert approved.status == 200
+    assert approved.body["gl_entry"] is not None
+
+
+async def test_approve_skips_gl_bug_no_gl_entry():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"approve_skips_gl"})))
+    inv_id = await _partial_match_setup(client)
+    approved = await client.call("POST", f"/invoices/{inv_id}/approve")
+    assert approved.status == 200
+    # Bug: no GL entry created for matched_with_exceptions invoice
+    assert approved.body["gl_entry"] is None
+    await client.aclose()

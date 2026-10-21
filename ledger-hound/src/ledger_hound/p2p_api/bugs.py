@@ -139,6 +139,26 @@ BUGS: dict[str, Bug] = {
             "Invoice creation does not verify that all line SKUs are on the PO;"
             " freight or tax lines not in the order can be invoiced and paid.",
         ),
+        Bug(
+            "receive_draft_po",
+            "state_machine",
+            "receive_before_submit",
+            "Receipt endpoint accepts goods against a PO that has not been submitted.",
+        ),
+        Bug(
+            "inactive_vendor_invoice",
+            "inactive_vendor_gate",
+            "invoice_inactive_vendor",
+            "Invoice creation does not verify that the vendor is still active;"
+            " invoices can be raised for deactivated vendors.",
+        ),
+        Bug(
+            "approve_skips_gl",
+            "gl_balance",
+            "partial_match_no_gl",
+            "Approve skips GL posting for matched_with_exceptions invoices;"
+            " partial-receipt approvals create no ledger entry.",
+        ),
     ]
 }
 
