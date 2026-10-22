@@ -62,7 +62,7 @@ You are a QA engineer exploring a Purchase-to-Pay (P2P) API you have never seen.
 Goal: complete one valid end-to-end flow:
   find (or create) an ACTIVE vendor -> find real SKUs -> create a purchase order
   -> submit it -> receive ALL goods -> create an invoice for exactly the received
-  goods at the PO prices -> run 3-way match -> approve.
+  goods at the PO prices -> run 3-way match -> approve -> pay the invoice.
 Start with list_operations. Read error messages and adapt your next call when
 something is rejected. Use a unique invoice_number. Do not try to break rules.
 When done, reply with JSON only:
@@ -128,19 +128,29 @@ async def verify_end_state(client: ApiClient, catalog: Catalog, claim: dict[str,
         inv = await wf.client.call("GET", catalog.path("get_invoice", inv_id))
         amount = dec(pick(inv.body, "amount", "total"))
         fails = []
-        if pick(inv.body, "status") != "approved":
-            fails.append(f"invoice status {pick(inv.body, 'status')!r}, expected 'approved'")
+        expected_status = "paid" if catalog.has("pay_invoice") else "approved"
+        if pick(inv.body, "status") != expected_status:
+            fails.append(
+                f"invoice status {pick(inv.body, 'status')!r}, expected {expected_status!r}"
+            )
         if received is not None and amount is not None and amount != received:
             fails.append(f"invoice {amount} != received value {received}")
-        out.append(("verify invoice", "approved, amount == received value", inv, fails))
+        out.append(("verify invoice", f"{expected_status}, amount == received value", inv, fails))
 
     if catalog.has("gl_entries"):
         gl = await wf.gl_for(inv_id)
         entries = gl.body if gl.ok and isinstance(gl.body, list) else []
-        fails = [] if len(entries) == 1 else [f"{len(entries)} GL entries for invoice (expected 1)"]
-        if entries:
-            fails += gl_problems(entries[0])
-        out.append(("verify GL", "exactly one balanced entry", gl, fails))
+        # Approve posts one entry; pay posts a second — both must be balanced.
+        expected_entries = 2 if catalog.has("pay_invoice") else 1
+        fails = (
+            []
+            if len(entries) == expected_entries
+            else [f"{len(entries)} GL entries for invoice (expected {expected_entries})"]
+        )
+        for entry in entries:
+            fails += gl_problems(entry)
+        noun = "entries" if expected_entries > 1 else "entry"
+        out.append(("verify GL", f"exactly {expected_entries} balanced {noun}", gl, fails))
     return out
 
 

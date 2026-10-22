@@ -30,6 +30,7 @@ CORE_ROLES = (
     "create_invoice",
     "match_invoice",
     "approve_invoice",
+    "pay_invoice",
 )
 
 
@@ -166,6 +167,23 @@ class Explorer:
                 ex,
                 fails,
                 f"open AP {before} -> {after}",
+            )
+
+        # 7. pay the invoice — disburse and clear the AP liability
+        if self.catalog.has("pay_invoice"):
+            ex = await wf.pay(inv_id, po_value)
+            entry = pick(ex.body, "gl_entry", "journal_entry", "gl")
+            fails = [] if ex.ok else ["payment rejected"]
+            if ex.ok:
+                status = pick(ex.body, "status")
+                if status != "paid":
+                    fails.append(f"invoice status after payment is {status!r}, expected 'paid'")
+                fails += gl_problems(entry) if entry else ["no GL entry produced"]
+            self._add(
+                "pay invoice",
+                "2xx, status paid, balanced disbursement GL entry",
+                ex,
+                fails,
             )
 
     async def _pick_lines(self) -> list[Line]:

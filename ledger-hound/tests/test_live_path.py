@@ -74,6 +74,12 @@ async def test_agent_explorer_drives_api_and_oracle_grades_it(clean):
             ),
             tool("call_api", method="POST", path="/invoices/5/match", body_json=""),
             tool("call_api", method="POST", path="/invoices/5/approve", body_json=""),
+            tool(
+                "call_api",
+                method="POST",
+                path="/invoices/5/pay",
+                body_json=json.dumps({"amount": "49.80"}),
+            ),
             text('{"vendor_id": 1, "po_id": 4, "invoice_id": 5, "notes": "done"}'),
         ]
     )
