@@ -109,6 +109,9 @@ class Workflow:
     async def approve(self, invoice_id: Any) -> Exchange:
         return await self._call("approve_invoice", invoice_id)
 
+    async def pay(self, invoice_id: Any, amount: Any) -> Exchange:
+        return await self._call("pay_invoice", invoice_id, body={"amount": str(amount)})
+
     async def exposure(self, vendor_id: Any) -> Exchange:
         return await self._call("vendor_exposure", vendor_id)
 

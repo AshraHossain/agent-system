@@ -468,3 +468,148 @@ async def test_approve_skips_gl_bug_no_gl_entry():
     # Bug: no GL entry created for matched_with_exceptions invoice
     assert approved.body["gl_entry"] is None
     await client.aclose()
+
+
+# --- payment disbursement ---
+
+
+async def _approved_invoice(client) -> int:
+    """PO 4 studs, receive all, invoice, match, approve. Returns invoice_id."""
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "4", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "4"}]}
+    )
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": f"PAY-{pid}",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "4", "unit_price": "4.98"}],
+        },
+    )
+    inv_id = inv.body["id"]
+    await client.call("POST", f"/invoices/{inv_id}/match")
+    await client.call("POST", f"/invoices/{inv_id}/approve")
+    return inv_id
+
+
+async def test_happy_pay_posts_disbursement_gl(clean):
+    client, _ = clean
+    inv_id = await _approved_invoice(client)
+    paid = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+    assert paid.status == 200
+    assert paid.body["status"] == "paid"
+    lines = paid.body["gl_entry"]["lines"]
+    total_debit = sum(float(x["debit"]) for x in lines)
+    total_credit = sum(float(x["credit"]) for x in lines)
+    assert abs(total_debit - total_credit) < 0.001
+    assert abs(total_debit - 19.92) < 0.001
+
+
+async def test_pay_requires_approval(clean):
+    client, _ = clean
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "2", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "2"}]}
+    )
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "PAY-UNAPP-1",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "2", "unit_price": "4.98"}],
+        },
+    )
+    inv_id = inv.body["id"]
+    ex = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "9.96"})
+    assert ex.status == 409
+    assert "pending" in ex.body.get("detail", "")
+
+
+async def test_pay_unapproved_bug_accepted():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"pay_unapproved"})))
+    po = await client.call(
+        "POST",
+        "/purchase-orders",
+        {"vendor_id": 1, "lines": [{"sku": "2X4-8-SPF", "qty": "2", "unit_price": "4.98"}]},
+    )
+    pid = po.body["id"]
+    await client.call("POST", f"/purchase-orders/{pid}/submit")
+    await client.call(
+        "POST", f"/purchase-orders/{pid}/receive", {"lines": [{"sku": "2X4-8-SPF", "qty": "2"}]}
+    )
+    inv = await client.call(
+        "POST",
+        "/invoices",
+        {
+            "vendor_id": 1,
+            "po_id": pid,
+            "invoice_number": "PAY-UNAPP-BUG",
+            "lines": [{"sku": "2X4-8-SPF", "qty": "2", "unit_price": "4.98"}],
+        },
+    )
+    inv_id = inv.body["id"]
+    ex = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "9.96"})
+    assert ex.status == 200, ex.body
+    await client.aclose()
+
+
+async def test_double_pay_rejected(clean):
+    client, _ = clean
+    inv_id = await _approved_invoice(client)
+    first = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+    assert first.status == 200
+    second = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+    assert second.status == 409
+    assert "paid" in second.body.get("detail", "")
+
+
+async def test_double_pay_bug_posts_twice():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"double_pay"})))
+    inv_id = await _approved_invoice(client)
+    first = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+    assert first.status == 200
+    second = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+    assert second.status == 200, second.body
+    await client.aclose()
+
+
+async def test_overpay_rejected(clean):
+    client, _ = clean
+    inv_id = await _approved_invoice(client)
+    ex = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "99.99"})
+    assert ex.status == 422
+    assert "exceeds" in ex.body.get("detail", "")
+
+
+async def test_overpay_disbursement_bug_accepted():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"overpay_disbursement"})))
+    inv_id = await _approved_invoice(client)
+    ex = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "99.99"})
+    assert ex.status == 200, ex.body
+    await client.aclose()

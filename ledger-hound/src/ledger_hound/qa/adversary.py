@@ -826,6 +826,102 @@ async def partial_match_no_gl(p: Probe) -> Outcome:
     return held("GL entry present for partial-match invoice", invoice_id=str(inv_id))
 
 
+@attack(
+    "pay_unapproved_invoice",
+    "payment_gate",
+    "Pay an invoice that has never been approved",
+    "payment refused until invoice is approved",
+    "critical",
+    "create_invoice",
+    "pay_invoice",
+)
+async def pay_unapproved_invoice(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    inv_id = await p.wf.invoice(v, po, p.line())
+    ex = await p.wf.pay(inv_id, PRICE * TEN)
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        return breached(
+            f"payment accepted for unapproved invoice (HTTP {ex.status})",
+            invoice_id=str(inv_id),
+        )
+    return held(
+        f"payment refused for unapproved invoice (HTTP {ex.status})", invoice_id=str(inv_id)
+    )
+
+
+@attack(
+    "double_payment",
+    "exposure_integrity",
+    "Pay an already-paid invoice a second time",
+    "second payment refused",
+    "critical",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+    "pay_invoice",
+)
+async def double_payment(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    inv_id = await p.wf.invoice(v, po, p.line())
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    amt = PRICE * TEN
+    p.wf.require("first payment", await p.wf.pay(inv_id, amt))
+    ex = await p.wf.pay(inv_id, amt)
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        cash_credits = 0
+        if p.wf.catalog.has("gl_entries"):
+            gl_ex = await p.wf.gl_for(inv_id)
+            if gl_ex.ok and isinstance(gl_ex.body, list):
+                for entry in gl_ex.body:
+                    for ln in entry.get("lines", []):
+                        if "1000" in str(ln.get("account", "")) and dec(ln.get("credit", 0)) > 0:
+                            cash_credits += 1
+        return breached(
+            f"second payment accepted (HTTP {ex.status}); {cash_credits} cash entries in GL",
+            invoice_id=str(inv_id),
+            cash_gl_credits=cash_credits,
+        )
+    return held(f"second payment refused (HTTP {ex.status})", invoice_id=str(inv_id))
+
+
+@attack(
+    "payment_exceeds_invoice",
+    "overpayment_protection",
+    "Pay more than the invoice amount",
+    "payment refused if it exceeds the invoice",
+    "critical",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+    "pay_invoice",
+)
+async def payment_exceeds_invoice(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    inv_id = await p.wf.invoice(v, po, p.line())
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    overpayment = PRICE * TEN * Decimal("2")
+    ex = await p.wf.pay(inv_id, overpayment)
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        return breached(
+            f"payment of {overpayment} accepted for invoice worth {PRICE * TEN}",
+            invoice_id=str(inv_id),
+            paid=str(overpayment),
+            invoiced=str(PRICE * TEN),
+        )
+    return held(f"overpayment refused (HTTP {ex.status})", invoice_id=str(inv_id))
+
+
 # ------------------------------------------------------------------- runner
 
 

@@ -178,6 +178,10 @@ class InvoiceIn(BaseModel):
     lines: list[InvoiceLineIn] = Field(min_length=1)
 
 
+class PaymentIn(BaseModel):
+    amount: Decimal
+
+
 # --------------------------------------------------------------------- the app
 
 
@@ -556,6 +560,41 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             return await check_and_post()
         async with approve_lock:
             return await check_and_post()
+
+    @app.post("/invoices/{invoice_id}/pay")
+    async def pay_invoice(invoice_id: int, body: PaymentIn) -> dict[str, Any]:
+        inv = invoice_or_404(invoice_id)
+        payable = {"approved"}
+        if "pay_unapproved" in bugs:
+            payable |= {"pending", "match_failed", "matched", "matched_with_exceptions"}
+        if "double_pay" in bugs:
+            payable.add("paid")
+        if inv.status not in payable:
+            raise HTTPException(409, f"cannot pay an invoice that is {inv.status}")
+        require_positive("amount", body.amount)
+        amt = money(body.amount)
+        if "overpay_disbursement" not in bugs and amt > money(inv.amount):
+            raise HTTPException(422, f"payment {amt} exceeds invoice amount {money(inv.amount)}")
+        entry = GLEntry(
+            id=store.next_id(),
+            invoice_id=inv.id,
+            vendor_id=inv.vendor_id,
+            lines=[
+                {
+                    "account": "2000 Accounts Payable",
+                    "debit": amt,
+                    "credit": Decimal("0.00"),
+                },
+                {
+                    "account": "1000 Cash/Bank",
+                    "debit": Decimal("0.00"),
+                    "credit": amt,
+                },
+            ],
+        )
+        store.gl.append(entry)
+        inv.status = "paid"
+        return {"invoice_id": inv.id, "status": inv.status, "gl_entry": gl_json(entry)}
 
     # -- ledger and exposure -------------------------------------------------
 

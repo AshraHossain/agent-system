@@ -159,6 +159,25 @@ BUGS: dict[str, Bug] = {
             "Approve skips GL posting for matched_with_exceptions invoices;"
             " partial-receipt approvals create no ledger entry.",
         ),
+        Bug(
+            "pay_unapproved",
+            "payment_gate",
+            "pay_unapproved_invoice",
+            "Payment endpoint does not require the invoice to be in approved status.",
+        ),
+        Bug(
+            "double_pay",
+            "exposure_integrity",
+            "double_payment",
+            "Paying an already-paid invoice posts a second disbursement GL entry.",
+        ),
+        Bug(
+            "overpay_disbursement",
+            "overpayment_protection",
+            "payment_exceeds_invoice",
+            "Payment amount is not verified against the invoice amount;"
+            " overpayment posts to the GL.",
+        ),
     ]
 }
 

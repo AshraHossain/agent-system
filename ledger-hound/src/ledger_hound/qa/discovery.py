@@ -35,6 +35,7 @@ ROLE_PATTERNS: dict[str, tuple[str, str]] = {
     "get_invoice": ("GET", r".*/invoices/{}"),
     "match_invoice": ("POST", r".*/invoices/{}/match"),
     "approve_invoice": ("POST", r".*/invoices/{}/approve"),
+    "pay_invoice": ("POST", r".*/invoices/{}/pay"),
     "gl_entries": ("GET", r".*/(gl|ledger)(/entries)?"),
 }
 
@@ -49,6 +50,7 @@ FALLBACK_OPERATIONS: list[tuple[str, str]] = [
     ("POST", "/invoices"),
     ("POST", "/invoices/{id}/match"),
     ("POST", "/invoices/{id}/approve"),
+    ("POST", "/invoices/{id}/pay"),
     ("GET", "/vendors/{id}/exposure"),
 ]
 
