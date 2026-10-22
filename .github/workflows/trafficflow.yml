@@ -26,7 +26,8 @@ jobs:
             --sensors 38 \
             --horizons 15 30 60 \
             --from-hour 6 --to-hour 20 \
-            --period weekday)
+            --period weekday \
+            --split)
           echo "result<<EOF" >> "$GITHUB_OUTPUT"
           echo "$RESULT" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"

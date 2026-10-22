@@ -50,8 +50,11 @@ def _empirical_quantiles(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return per-step (q05, q95) empirical residual quantiles over the training window.
 
-    Uses a rolling-origin approach: for each index i in the second half of history,
-    predict h steps ahead using the profile baseline and collect the residual.
+    Uses a rolling-origin approach: calibration residuals are computed against a
+    train-half-only seasonal profile so the second half of history is genuinely
+    out-of-sample.  This avoids calibration leakage that would otherwise make
+    intervals appear narrower than they really are.
+
     Falls back to the MAD-based half-width for any step with fewer than
     MIN_SAMPLES_FOR_EMPIRICAL samples.
     """
@@ -60,13 +63,15 @@ def _empirical_quantiles(
     vals = history.to_numpy()
     idx = history.index
 
-    # Precompute residuals once; use a rolling window of 3 for recent_level at each origin.
-    all_res = residuals(history, profile)
+    # Build the profile from the FIRST half only so the calibration window (second half)
+    # is out-of-sample with respect to the profile fit — prevents interval leakage.
+    train_profile = seasonal_profile(history.iloc[:cal_start])
+    all_res = residuals(history, train_profile)
     res_vals = all_res.to_numpy()
-    sigma_global = max(robust_sigma(all_res), 0.01)
+    sigma_global = max(robust_sigma(all_res.iloc[:cal_start]), 0.01)
 
     # Precompute profile lookup for every step in history by time-of-day key
-    all_base = profile.reindex(_key(idx)).to_numpy()  # shape (n,)
+    all_base = train_profile.reindex(_key(idx)).to_numpy()  # shape (n,)
 
     per_step_res: list[list[float]] = [[] for _ in range(steps)]
     for i in range(cal_start, n - steps):
@@ -123,8 +128,10 @@ def forecast_segment(
     q05, q95 = _empirical_quantiles(history, profile, steps)
     points = []
     for i, (ts, m) in enumerate(zip(future, mean, strict=True)):
-        lower = max(0.0, float(m) + q05[i])
-        upper = float(m) + q95[i]
+        # Clamp so the interval always contains the point forecast, even when
+        # empirical quantiles are biased (both positive or both negative).
+        lower = min(float(m), max(0.0, float(m) + q05[i]))
+        upper = max(float(m), float(m) + q95[i])
         idx = congestion_index(float(m), segment.free_flow_kmh)
         points.append(
             ForecastPoint(
