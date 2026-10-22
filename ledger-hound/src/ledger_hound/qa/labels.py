@@ -48,6 +48,7 @@ RULE_TEXT: dict[str, str] = {
     "price_variance": "An invoice priced above the PO unit price must not pass matching or reach the GL.",
     "state_machine": "Goods cannot be received on a PO that has not been submitted.",
     "uom_consistency": "Invoice lines must be matched in the PO line's unit of measure, and discrete units (EA, BOX, SHEET, ROLL) must be whole quantities.",
+    "payment_gate": "An invoice must be in approved status before a payment disbursement can be posted.",
     "any": (
         "All P2P financial controls: invoice total <= received value; 3-way match before approval; "
         "partial receipts flagged at match; invoice prices equal PO prices; balanced GL at cent "

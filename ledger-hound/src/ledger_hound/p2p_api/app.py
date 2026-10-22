@@ -573,8 +573,9 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             raise HTTPException(409, f"cannot pay an invoice that is {inv.status}")
         require_positive("amount", body.amount)
         amt = money(body.amount)
-        if "overpay_disbursement" not in bugs and amt > money(inv.amount):
-            raise HTTPException(422, f"payment {amt} exceeds invoice amount {money(inv.amount)}")
+        inv_amount = inv.amount if isinstance(inv.amount, Decimal) else Decimal(str(inv.amount))
+        if "overpay_disbursement" not in bugs and amt > money(inv_amount):
+            raise HTTPException(422, f"payment {amt} exceeds invoice amount {money(inv_amount)}")
         entry = GLEntry(
             id=store.next_id(),
             invoice_id=inv.id,
