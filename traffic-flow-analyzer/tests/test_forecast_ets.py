@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from trafficflow.contracts import CongestionLevel
-from trafficflow.core.forecast import MIN_POINTS, forecast_segment, forecast_segment_ets
+from trafficflow.core.forecast import METHOD, MIN_POINTS, forecast_segment, forecast_segment_ets
 from trafficflow.data.feed import SyntheticFeed
 
 
@@ -76,6 +76,6 @@ def test_seasonal_vs_ets_both_succeed(history_and_segment):
         pytest.skip("not enough history")
     fc_seasonal = forecast_segment(h, seg, horizon_minutes=30)
     fc_ets = forecast_segment_ets(h, seg, horizon_minutes=30)
-    assert fc_seasonal.method == "seasonal-median + decaying residual"
+    assert fc_seasonal.method == METHOD
     assert fc_ets.method == "holt-winters-ets"
     assert len(fc_seasonal.points) == len(fc_ets.points)

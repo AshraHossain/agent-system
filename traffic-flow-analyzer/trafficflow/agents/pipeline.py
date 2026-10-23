@@ -12,6 +12,7 @@ from trafficflow.agents.deps import TrafficDeps
 from trafficflow.contracts import TrafficBrief, TrafficReport
 from trafficflow.core.anomaly import detect
 from trafficflow.core.forecast import forecast_segment
+from trafficflow.core.freshness import stale_segments
 from trafficflow.core.status import network_status
 from trafficflow.data.feed import Feed
 
@@ -111,16 +112,17 @@ async def run_report(
     segs = {s.id: s for s in feed.segments()}
     issues = verify_brief(brief, deps.evidence, set(segs))
     # status is computed from deterministic core outputs, independent of the LLM text
-    forecasts = [forecast_segment(feed.history(i, 7), s, horizon_minutes) for i, s in segs.items()]
+    hists = {i: feed.history(i, 7) for i in segs}
+    forecasts = [forecast_segment(hists[i], s, horizon_minutes) for i, s in segs.items()]
     anomalies = [
-        a
-        for i, s in segs.items()
-        for a in detect(feed.history(i, 7), i, free_flow_kmh=s.free_flow_kmh)
+        a for i, s in segs.items() for a in detect(hists[i], i, free_flow_kmh=s.free_flow_kmh)
     ]
+    stale = stale_segments(hists, feed.now)
     return TrafficReport(
         as_of=feed.now,
         horizon_minutes=horizon_minutes,
-        status=network_status(forecasts, anomalies),
+        status=network_status(forecasts, anomalies, stale),
+        stale_segments=stale,
         brief=brief,
         evidence=deps.evidence,
         issues=issues,

@@ -22,6 +22,10 @@
 - [x] `serve --csv` with `--poll-seconds`; live feed adapters (mock / TomTom / HERE) with a poller
 - [x] Mock writer dedupes repeated findings and recommendations
 - [x] Held-out (`--split`) 38-sensor results recorded in the results doc
+- [x] Short horizon: blend toward the latest reading (`LAST_WEIGHT=0.9`, tuned on the train
+      half); held-out 15-min MAE 4.69 vs persistence 4.92 (was 5.87)
+- [x] Interval: leave-one-day-out conformal, tail 0.035 (train half); held-out coverage ~90%
+- [x] Stale segments rule out NORMAL status; reports list `stale_segments`
 - [x] Timezone-aware feed option; history-gap warnings; `get_current_conditions` reports
       `age_minutes` and `stale` (> 15 min, `core/freshness.py`)
 - [x] Browser smoke test in CI drives the dashboard (briefing, Ask, History), not just loads it
@@ -39,12 +43,8 @@
 - [ ] Terms/key review before enabling the TomTom or HERE adapters against the real APIs
 
 ## Open
-- [ ] Short horizon: the model still loses to persistence at 15 min on PeMSD7 (held-out MAE
-      ~5.9 vs ~4.9). Candidate: blend toward the last reading for the first steps, tuned on the
-      train half only
-- [ ] Interval still under-covers (86-89% vs nominal 90%) and is now wide (24-40 km/h);
-      consider a per-step conformal correction
+- [ ] Interval is calibrated but wide (22-41 km/h); narrowing it needs a better point model
+      or conditioning on time of day (peak under-covers slightly, off-peak over-covers)
 - [ ] Record the all-228-sensor held-out run (`evaluate --all-sensors --split`)
 - [ ] Weekend evaluation: PeMSD7 is weekday-only, so it needs another dataset
 - [ ] Real coordinates for replayed sensors on the map (PeMSD7 ships none)
-- [ ] Stale data does not yet affect the rule-based network status (only reported by the tool)

@@ -1,32 +1,41 @@
 # Evaluation on real data: PeMSD7 replay
 
 Out-of-sample rolling-origin evaluation of the forecaster on real recorded speeds, against
-three baselines. **Current summary (held-out split, after interval calibration): the model
-beats persistence at 30 and 60 minutes and loses at 15 minutes; the "90%" interval now covers
-86-89% of outcomes, but it is about 2.5-3.5x wider than before.** See
-[Current results](#current-results-held-out-split-after-calibration). The sections after it
-are the original pre-calibration run, kept for comparison.
+three baselines. **Current summary (held-out split): the model beats persistence at every
+horizon (15 min: 4.69 vs 4.92 km/h MAE) and its "90%" interval covers 89.7-90.2% of
+outcomes.** See [Current results](#current-results-held-out-split). The sections after it are
+earlier runs, kept for comparison.
 
-## Current results: held-out split, after calibration
+## Current results: held-out split
 
-`--split` keeps only the second half of the origins (278 of 555), so nothing reported here
-was seen while the interval was calibrated. 38 sensors; same setup as below otherwise.
+`--split` keeps only the second half of the origins (278 of 555). The two constants chosen
+on data, `LAST_WEIGHT = 0.9` (blend toward the latest reading) and `INTERVAL_TAIL = 0.035`
+(leave-one-day-out conformal interval), were picked on the **first** half only, so nothing
+reported here was seen while tuning. 38 sensors; same setup as below otherwise.
 
 ```bash
-uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --sensors 38 --split
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --sensors 38 --split   # ~2-8 min
 ```
 
 | Horizon | Model MAE | Persistence | Seasonal naive | Historical avg | Coverage | Width (km/h) |
 |---|---|---|---|---|---|---|
-| 15 min | 5.87 | **4.92** | 9.75 | 8.41 | 0.860 | 24.1 |
-| 30 min | **7.05** | 7.23 | 9.99 | 8.59 | 0.869 | 31.8 |
-| 60 min | **7.66** | 11.02 | 9.88 | 8.46 | 0.888 | 40.5 |
+| 15 min | **4.69** | 4.92 | 9.75 | 8.41 | 0.898 | 22.1 |
+| 30 min | **6.37** | 7.23 | 9.99 | 8.59 | 0.897 | 31.9 |
+| 60 min | **7.71** | 11.02 | 9.88 | 8.46 | 0.902 | 40.5 |
 
-* Coverage rose from ~61% to 86-89% largely by **widening** the band (mean width 10-12 km/h
-  → 24-40 km/h). It is closer to honest, but too wide to be useful at 60 minutes; a
-  per-step conformal correction is the next candidate (see [TASK.md](../TASK.md)).
-* Point forecasts are essentially unchanged by the calibration fix, as expected: it only
-  touches the interval.
+By period (MAE model / persistence; coverage): peak 15 min 4.88 / 5.12, 0.886; off-peak
+15 min 4.47 / 4.68, 0.912; peak 60 min 8.06 / 11.38, 0.888; off-peak 60 min 7.31 / 10.60, 0.918.
+
+* **Short horizon fixed.** Blending toward the latest reading (weight `0.9**h`, residual from
+  the last reading only) moved 15-minute MAE from 5.87 to 4.69, now below persistence.
+  Training-half MAE was 4.59 vs 4.80, so the held-out gain is consistent, not a tuning artefact.
+  At 60 minutes the model is unchanged (7.66 → 7.71).
+* **Interval calibrated, but wide.** Coverage matches the nominal 90% overall; peak hours are
+  slightly under (~88.7%) and off-peak slightly over (~91%). The width (22-41 km/h) is about
+  what the previous band had: on this data a band that honestly covers 90% is that wide,
+  because errors are heavy-tailed (the 5% tail level gave only ~85% at 17-34 km/h).
+* **Previous held-out run** (before the blend and the new interval): model 5.87 / 7.05 / 7.66
+  MAE, coverage 0.86-0.89 at 24-41 km/h.
 * The all-228-sensor held-out run has not been recorded yet.
 
 ## Original pre-calibration run (all origins)
@@ -48,9 +57,10 @@ not transfer to real data in the same way.
   (**555 origins**, 21090 forecasts per horizon). Horizons crossing a weekend gap are excluded.
 * **Metric:** error at the forecast step exactly *h* minutes ahead (km/h; MAPE in %).
   *Peak* = weekday origins at hours 6-9 and 15-18; *off-peak* = the rest.
-* **No tuning on this data.** The forecaster constants (persistence 0.92/step, 1.645 interval
-  multiplier) were fixed during development on the simulated feed, before any real data was
-  loaded. This is a single deterministic run (no randomness).
+* **No tuning on this data (this original run).** The forecaster constants (persistence
+  0.92/step, 1.645 interval multiplier) were fixed during development on the simulated feed,
+  before any real data was loaded. This is a single deterministic run (no randomness). The
+  current results above add two constants tuned on the first half of origins only.
 * **Free-flow speed** per sensor = 95th percentile of its first 7 recorded days.
 
 Reproduce:
