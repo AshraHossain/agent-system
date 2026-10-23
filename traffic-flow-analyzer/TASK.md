@@ -21,7 +21,7 @@
       every agent message during an eval run and asserts no label appears
 - [x] `serve --csv` with `--poll-seconds`; live feed adapters (mock / TomTom / HERE) with a poller
 - [x] Mock writer dedupes repeated findings and recommendations
-- [x] Held-out (`--split`) 38-sensor results recorded in the results doc
+- [x] Held-out (`--split`) results for 38 and all 228 sensors recorded in the results doc
 - [x] Short horizon: blend toward the latest reading (`LAST_WEIGHT=0.9`, tuned on the train
       half); held-out 15-min MAE 4.69 vs persistence 4.92 (was 5.87)
 - [x] Interval: leave-one-day-out conformal from the same time of day (±2 h, tail 0.05, both
@@ -46,6 +46,5 @@
 ## Open
 - [ ] Interval is calibrated but still wide (21-35 km/h); narrowing it further needs a
       better point model (errors are heavy-tailed)
-- [ ] Record the all-228-sensor held-out run (`evaluate --all-sensors --split`)
 - [ ] Weekend evaluation: PeMSD7 is weekday-only, so it needs another dataset
 - [ ] Real coordinates for replayed sensors on the map (PeMSD7 ships none)
