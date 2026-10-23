@@ -22,7 +22,7 @@ from trafficflow.core.simulate import STEP_MINUTES
 
 PHI = 0.92  # per-step persistence of the recent deviation
 LAST_WEIGHT = 0.9  # weight on the latest reading decays as LAST_WEIGHT**h
-INTERVAL_TAIL = 0.05  # probability mass in each tail of the calibrated interval
+INTERVAL_TAIL = 0.035  # per tail; ~90% coverage on the training half (0.05 gave ~85%)
 CALIBRATION_DAYS = 6
 Z90 = 1.645
 MIN_POINTS = 2 * 288
