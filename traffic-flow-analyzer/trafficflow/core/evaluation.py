@@ -58,6 +58,17 @@ BASELINES: dict[str, Baseline] = {
 }
 
 
+def select_period(origins: Sequence[datetime], period: str) -> list[datetime]:
+    """Keep origins on weekdays, on weekends, or all of them."""
+    if period == "weekday":
+        return [o for o in origins if o.weekday() < 5]
+    if period == "weekend":
+        return [o for o in origins if o.weekday() >= 5]
+    if period == "all":
+        return list(origins)
+    raise ValueError(f"unknown period {period!r}")
+
+
 class _Acc:
     def __init__(self) -> None:
         self.abs: list[float] = []

@@ -43,6 +43,7 @@ The dashboard is served at `http://localhost:7860`. To use a real CSV feed, moun
 
 ```bash
 uv run trafficflow fetch-data                      # PeMSD7 -> var/data (SHA-256 checked, not committed)
+uv run trafficflow fetch-data --dataset pems08     # PEMS08 (includes weekends) -> var/data/pems08.npz
 uv run trafficflow evaluate var/data/PeMSD7_V_228.csv   # model vs baselines, interval coverage
 uv run trafficflow serve --replay var/data/PeMSD7_V_228.csv --sensors 8   # dashboard on real recordings
 ```

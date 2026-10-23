@@ -8,10 +8,24 @@ import pandas as pd
 import pytest
 
 from trafficflow.cli import main
-from trafficflow.core.evaluation import evaluate, historical_average, persistence, seasonal_naive
+from trafficflow.core.evaluation import (
+    evaluate,
+    historical_average,
+    persistence,
+    seasonal_naive,
+    select_period,
+)
 from trafficflow.core.forecast import forecast_segment
 from trafficflow.data import replay
-from trafficflow.data.replay import MPH_TO_KMH, ReplayFeed, fetch_pemsd7, load_pemsd7
+from trafficflow.data.replay import (
+    MPH_TO_KMH,
+    ReplayFeed,
+    fetch_pems08,
+    fetch_pemsd7,
+    load_pems08,
+    load_pemsd7,
+    load_replay,
+)
 from trafficflow.ui.app import build_app
 
 
@@ -158,3 +172,61 @@ def test_cli_evaluate_on_replay(pems, capsys):
 def test_cli_demo_replay(pems, capsys):
     assert main(["demo", "--replay", str(pems)]) == 0
     assert capsys.readouterr().out.startswith("[")
+
+
+def write_pems08_like(path, days=10, sensors=3, seed=0):
+    """PEMS08 layout: (days*288, sensors, [flow, occupancy, speed mph]) in an .npz."""
+    rng = np.random.default_rng(seed)
+    h = np.tile(np.arange(288) / 12, days)
+    dip = 25 * np.exp(-0.5 * ((h - 8) / 1.2) ** 2)
+    speed = np.column_stack(
+        [65 - dip * (0.6 + 0.2 * k) + rng.normal(0, 1, len(h)) for k in range(sensors)]
+    )
+    data = np.stack([speed * 3, speed / 1000, speed], axis=2)
+    np.savez(path, data=data)
+    return path
+
+
+@pytest.fixture
+def pems08(tmp_path):
+    return write_pems08_like(tmp_path / "pems08.npz")
+
+
+def test_load_pems08_keeps_weekends_and_converts_speed(pems08):
+    raw = np.load(pems08)["data"][:, :, 2]
+    df = load_pems08(pems08)
+    assert df.attrs["source"] == "PEMS08"
+    assert df.index[0] == pd.Timestamp("2016-07-01") and df.index.freq == "5min"
+    assert (df.index.dayofweek >= 5).any()  # 2016-07-02 is a Saturday
+    np.testing.assert_allclose(df["P000"].to_numpy(), raw[:, 0] * MPH_TO_KMH)
+    assert list(load_pems08(pems08, sensors=2).columns) == ["P000", "P002"]
+    assert load_replay(pems08).attrs["source"] == "PEMS08"
+
+
+def test_replay_feed_on_pems08_scores_weekend_origins(pems08):
+    feed = ReplayFeed(load_pems08(pems08))
+    assert feed.segments()[0].name.endswith("(PEMS08)")
+    origins = feed.origins(["08:00"], max_steps=12)
+    weekend = select_period(origins, "weekend")
+    assert weekend and all(o.weekday() >= 5 for o in weekend)
+    assert len(select_period(origins, "weekday")) + len(weekend) == len(origins)
+    assert select_period(origins, "all") == origins
+    with pytest.raises(ValueError):
+        select_period(origins, "holidays")
+
+
+def test_fetch_pems08_checks_hash(tmp_path, monkeypatch):
+    blob = b"npz-bytes"
+    monkeypatch.setattr(replay, "urlopen", lambda url, timeout: _Resp(blob))
+    with pytest.raises(ValueError, match="hash"):
+        fetch_pems08(tmp_path / "d")
+    assert not (tmp_path / "d" / replay.PEMS08_FILE).exists()
+    monkeypatch.setattr(replay, "PEMS08_SHA256", __import__("hashlib").sha256(blob).hexdigest())
+    assert fetch_pems08(tmp_path / "d").read_bytes() == blob
+
+
+def test_cli_evaluate_pems08_weekend(pems08, capsys):
+    args = ["evaluate", str(pems08), "--sensors", "2", "--from-hour", "8", "--to-hour", "8"]
+    assert main([*args, "--period", "weekend"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["origins"] > 0 and out["segments"] == 2
