@@ -134,3 +134,40 @@ def test_status_rules(feed):
     anomalies = [a for s in segs for a in detect(feed.history(s.id), s.id)]
     assert network_status(fcs, anomalies) == NetworkStatus.DEGRADED
     assert network_status([], []) == NetworkStatus.NORMAL
+
+
+def test_selection_backtest_picks_lowest_mae(feed):
+    from trafficflow.core.selection import CANDIDATES, backtest_candidates
+
+    seg = feed.segments()[0]
+    r = backtest_candidates(feed.history(seg.id), seg, 60)
+    assert r["origins"] > 0
+    assert set(r["mae_by_model"]) == set(CANDIDATES)
+    assert r["selected_model"] == min(r["mae_by_model"], key=r["mae_by_model"].get)
+
+
+def test_selection_never_uses_future(feed):
+    """Appending later readings must not change a backtest on the earlier history."""
+    from trafficflow.core.selection import backtest_candidates
+
+    seg = feed.segments()[0]
+    early = feed.history(seg.id)
+    before = backtest_candidates(early, seg, 30, origins=2)
+    feed.advance(6)
+    later = feed.history(seg.id, days=8)
+    again = backtest_candidates(later.loc[early.index[0] : early.index[-1]], seg, 30, origins=2)
+    assert before == again
+
+
+def test_freshness_flags_stale_readings():
+    from datetime import datetime, timedelta
+
+    from trafficflow.core.freshness import STALE_AFTER_MINUTES, data_age_minutes, is_stale
+
+    now = datetime(2026, 1, 1, 8, 0, tzinfo=UTC)
+    fresh = (now - timedelta(minutes=5)).replace(tzinfo=None)  # mixed tz is tolerated
+    old = now - timedelta(minutes=STALE_AFTER_MINUTES + 5)
+    assert data_age_minutes(fresh, now) == 5.0
+    assert not is_stale(fresh, now)
+    assert is_stale(old, now)
+    assert data_age_minutes(now + timedelta(minutes=1), now) == 0.0

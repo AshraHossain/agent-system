@@ -10,9 +10,9 @@ from pydantic_ai import RunContext
 from trafficflow.agents.deps import TrafficDeps
 from trafficflow.core.anomaly import detect
 from trafficflow.core.congestion import congestion_index, level_for
-from trafficflow.core.forecast import forecast_moving_average as _forecast_ma
-from trafficflow.core.forecast import forecast_persistence as _forecast_persistence
 from trafficflow.core.forecast import forecast_segment as _forecast
+from trafficflow.core.freshness import data_age_minutes, is_stale
+from trafficflow.core.selection import CANDIDATES, backtest_candidates
 
 Ctx = RunContext[TrafficDeps]
 
@@ -40,12 +40,17 @@ async def get_current_conditions(ctx: Ctx, segment_id: str) -> dict[str, Any]:
     seg = _segment(ctx, segment_id)
     if seg is None:
         return _unknown(ctx, segment_id)
-    hist = ctx.deps.feed.history(segment_id, days=1)
+    hist = ctx.deps.feed.history(segment_id, days=1).dropna()
+    if hist.empty:
+        return {"status": "error", "error": f"no readings for {segment_id!r}"}
     speed = float(hist.iloc[-3:].mean())
     idx = congestion_index(speed, seg.free_flow_kmh)
+    last = hist.index[-1].to_pydatetime()
     data = {
         "segment_id": segment_id,
-        "as_of": hist.index[-1].isoformat(),
+        "as_of": last.isoformat(),
+        "age_minutes": round(data_age_minutes(last, ctx.deps.feed.now), 1),
+        "stale": is_stale(last, ctx.deps.feed.now),
         "speed_kmh": round(speed, 1),
         "congestion_index": round(idx, 3),
         "level": level_for(idx).value,
@@ -83,17 +88,13 @@ async def compare_models(
     segment_id: str,
     horizon_minutes: Annotated[int, Field(ge=5, le=180)] = 60,
 ) -> dict[str, Any]:
-    """Run three forecasters on one segment and return the first 3 points from each."""
+    """Backtest the candidate forecasters on one segment; a fixed rule selects the best one."""
     seg = _segment(ctx, segment_id)
     if seg is None:
         return _unknown(ctx, segment_id)
     hist = ctx.deps.feed.history(segment_id, days=7)
     results: dict[str, Any] = {}
-    for name, fn in (
-        ("seasonal_residual", _forecast),
-        ("moving_average", _forecast_ma),
-        ("persistence", _forecast_persistence),
-    ):
+    for name, fn in CANDIDATES.items():
         try:
             fc = fn(hist, seg, horizon_minutes)
             results[name] = [p.model_dump(mode="json") for p in fc.points[:3]]
@@ -103,6 +104,7 @@ async def compare_models(
         "segment_id": segment_id,
         "horizon_minutes": horizon_minutes,
         "models": results,
+        "backtest": backtest_candidates(hist, seg, horizon_minutes),
     }
     return {"status": "ok", "evidence_id": ctx.deps.record("compare_models", data), **data}
 

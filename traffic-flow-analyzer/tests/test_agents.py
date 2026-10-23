@@ -89,6 +89,21 @@ def test_compare_models_tool():
     for model_points in result["models"].values():
         assert isinstance(model_points, list)
         assert len(model_points) == 3
+    bt = result["backtest"]
+    assert bt["origins"] > 0
+    assert bt["selected_model"] == min(bt["mae_by_model"], key=bt["mae_by_model"].get)
+    assert result["evidence_id"] in c.deps.evidence
+
+
+def test_current_conditions_reports_freshness():
+    feed = SyntheticFeed()
+    result = asyncio.run(tools.get_current_conditions(ctx(feed), "S1"))
+    assert result["stale"] is False and result["age_minutes"] == 0.0
+
+
+def test_forecast_and_ask_agents_expose_compare_models():
+    for factory in (agents.forecast_analyst, agents.ask_agent):
+        assert "compare_models" in factory()._function_toolset.tools
 
 
 async def test_brief_writer_no_duplicate_findings():

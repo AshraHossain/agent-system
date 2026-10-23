@@ -10,6 +10,7 @@ import gradio as gr
 from trafficflow.agents.pipeline import ask, run_report
 from trafficflow.core.congestion import congestion_index, level_for
 from trafficflow.data.feed import Feed, SyntheticFeed
+from trafficflow.reports import ReportStore
 from trafficflow.ui.plots import (
     SEGMENT_COORDS,
     heatmap_figure,
@@ -44,10 +45,21 @@ def _refresh(feed, segment, horizon):
 
 
 def build_app(
-    model: str | None = None, feed_factory: Callable[[], Feed] | None = None
+    model: str | None = None,
+    feed_factory: Callable[[], Feed] | None = None,
+    report_store: ReportStore | None = None,
 ) -> gr.Blocks:
-    """`feed_factory` builds the (per-session) feed; defaults to the simulated network."""
+    """`feed_factory` builds the (per-session) feed; defaults to the simulated network.
+    `report_store` keeps briefings for the History tab (in-memory unless a path is given)."""
     make_feed = feed_factory or SyntheticFeed
+    store = report_store or ReportStore()
+
+    def history_dropdown(value=None):
+        choices = [(r["label"], r["id"]) for r in store.recent(10)]
+        if value is None and choices:
+            value = choices[-1][1]
+        return gr.Dropdown(choices=choices, value=value)
+
     first_feed = make_feed()
     seg_choices = [(f"{s.id} {s.name}", s.id) for s in first_feed.segments()]
     with gr.Blocks(title="Traffic Flow Analyzer") as demo:
@@ -57,7 +69,6 @@ def build_app(
             "The data source is a simulated or replayed recording, not a live feed."
         )
         feed = gr.State(first_feed)
-        report_history = gr.State([])
         with gr.Row():
             segment = gr.Dropdown(seg_choices, value=seg_choices[0][1], label="Segment")
             horizon = gr.Slider(15, 180, value=60, step=15, label="Forecast horizon (min)")
@@ -97,25 +108,19 @@ def build_app(
             f.advance(1)
             return (f, *_refresh(f, seg, hz))
 
-        async def brief(f, hz, rh):
+        async def brief(f, hz):
             r = await run_report(f, int(hz), model)
             lines = [f"### {r.brief.headline}", r.brief.summary, "", "**Findings**"]
             lines += [f"- {x.claim} _({', '.join(x.evidence_ids)})_" for x in r.brief.findings]
             lines += ["", "**Recommendations**"] + [f"- {x}" for x in r.brief.recommendations]
             if r.issues:
                 lines += ["", "⚠️ **Verification issues:** " + "; ".join(r.issues)]
-            entry = {
-                "label": f"{r.as_of:%Y-%m-%d %H:%M} — {r.status.value}",
-                "summary": "\n".join(lines),
-            }
-            updated_rh = [*rh, entry][-10:]
-            choices = [e["label"] for e in updated_rh]
+            store.save(r, "\n".join(lines))
             return (
                 f"## {BADGE[r.status.value]}  (rule-based status, as of {r.as_of:%H:%M})",
                 "\n".join(lines),
                 r.evidence,
-                updated_rh,
-                gr.Dropdown(choices=choices, value=choices[-1] if choices else None),
+                history_dropdown(),
             )
 
         async def answer_q(f, text, hist):
@@ -134,11 +139,11 @@ def build_app(
                 lines.append(prefix + msg["content"])
             return updated, "\n\n".join(lines)
 
-        def select_history(label, rh):
-            entry = next((e for e in rh if e["label"] == label), None)
-            return entry["summary"] if entry else ""
+        def select_history(report_id):
+            return store.summary(int(report_id)) if report_id is not None else ""
 
         demo.load(lambda f, s, h: _refresh(f, s, h), [feed, segment, horizon], outs)
+        demo.load(history_dropdown, outputs=hist_dropdown)
         for c in (segment, horizon):
             c.change(lambda f, s, h: _refresh(f, s, h), [feed, segment, horizon], outs)
         step_btn.click(lambda f: advance(f, 6), feed, feed).then(
@@ -146,16 +151,14 @@ def build_app(
         )
         live.change(lambda on: gr.Timer(active=on), live, timer)
         timer.tick(tick, [feed, segment, horizon], [feed, *outs])
-        brief_btn.click(
-            brief,
-            [feed, horizon, report_history],
-            [status_md, brief_md, evidence, report_history, hist_dropdown],
-        )
+        brief_btn.click(brief, [feed, horizon], [status_md, brief_md, evidence, hist_dropdown])
         ask_btn.click(answer_q, [feed, q, ask_history], [ask_history, answer])
         q.submit(answer_q, [feed, q, ask_history], [ask_history, answer])
-        hist_dropdown.change(select_history, [hist_dropdown, report_history], hist_summary)
-        hist_clear.click(
-            lambda: ([], gr.Dropdown(choices=[]), ""),
-            outputs=[report_history, hist_dropdown, hist_summary],
-        )
+        hist_dropdown.change(select_history, hist_dropdown, hist_summary)
+
+        def clear_history():
+            store.clear()
+            return gr.Dropdown(choices=[], value=None), ""
+
+        hist_clear.click(clear_history, outputs=[hist_dropdown, hist_summary])
     return demo

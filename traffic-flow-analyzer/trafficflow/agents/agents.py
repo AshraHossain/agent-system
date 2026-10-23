@@ -26,7 +26,12 @@ def forecast_analyst(model: str | None = None) -> Agent[TrafficDeps, ForecastFin
         output_type=ForecastFinding,
         instructions=prompts.FORECAST_ANALYST,
         name="forecast_analyst",
-        tools=[tools.list_segments, tools.forecast_segment, tools.get_current_conditions],
+        tools=[
+            tools.list_segments,
+            tools.forecast_segment,
+            tools.get_current_conditions,
+            tools.compare_models,
+        ],
         retries=2,
     )
 
@@ -64,6 +69,7 @@ def ask_agent(model: str | None = None) -> Agent[TrafficDeps, str]:
             tools.forecast_segment,
             tools.get_current_conditions,
             tools.detect_incidents,
+            tools.compare_models,
         ],
         retries=2,
     )

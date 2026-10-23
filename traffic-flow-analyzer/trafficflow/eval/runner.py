@@ -57,7 +57,9 @@ def run_cases(
         from trafficflow.core.anomaly import detect
 
         anomalies = [
-            a for seg in feed.segments() for a in detect(feed.history(seg.id, days=7), seg.id)
+            a
+            for seg in feed.segments()
+            for a in detect(feed.history(seg.id, days=7), seg.id, free_flow_kmh=seg.free_flow_kmh)
         ]
         n_incidents = len(anomalies)
 

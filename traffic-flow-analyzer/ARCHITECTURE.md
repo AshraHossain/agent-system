@@ -5,11 +5,13 @@
 ```
 trafficflow/
   contracts/   Pydantic models: segments, forecasts, anomalies, agent outputs, report  (no AI libs)
-  core/        simulate, forecast, congestion, anomaly, status, evaluation, backtest  (no AI libs)
+  core/        simulate, forecast, congestion, anomaly, status, evaluation, backtest,
+               selection (rule-based forecaster choice), freshness (stale data)  (no AI libs)
   data/        Feed protocol; SyntheticFeed (deterministic, advancing clock); CsvFeed;
                replay.py: ReplayFeed (recorded speeds, held-back truth) + PeMSD7 fetch/load
   agents/      deps, tools, prompts, agent factories, mock models, pipeline
   ui/          plots.py (pure Plotly builders), app.py (Gradio Blocks)
+  reports.py   ReportStore: SQLite history of generated briefings
   cli.py       trafficflow demo | backtest | fetch-data | evaluate | serve
 ```
 
