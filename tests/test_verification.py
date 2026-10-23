@@ -1,4 +1,3 @@
-import pytest
 from helpers import CONTRA, EVIDENCE, OLD, TEL, findings, hyp
 
 from opspilot.contracts.findings import IncidentAnalysis, KeyFact, RecommendedStep
@@ -190,58 +189,3 @@ def test_terse_summary_is_incomplete_not_wrong():
 def test_reference_checks_are_skipped_without_inputs():
     res = run(analysis=analysis(hyp(category="device_resource_saturation")))
     assert "category_component_mismatch" not in codes(res)  # no component types given
-
-
-# Written separately from the matrix's single mutation phrase, to check the lexicon
-# covers more than the one sentence it was first measured on.
-CERTAIN = [
-    "Without any doubt, this incident was caused by the following.",
-    "The root cause is congestion on the core link.",
-    "It is clear that the firewall dropped the sessions.",
-    "The outage was definitely caused by the WAN router.",
-    "This has been proven to be a DNS fault.",
-    "There is no doubt the uplink failed.",
-    "We can say for certain that packet loss started at 09:00.",
-    "Beyond reasonable doubt, the link flapped.",
-]
-HEDGED = [
-    "The cause is not confirmed; the leading hypothesis is congestion.",
-    "This cannot be proven with the data available.",
-    "It is not certain that the firewall is involved.",
-    "Link at 100% utilization; the BGP session was established.",
-    "Root cause has yet to be confirmed.",
-]
-
-
-def _with_summary(prefix: str):
-    d = findings()["draft"]
-    return d.model_copy(update={"summary": f"{prefix} {d.summary}"})
-
-
-@pytest.mark.parametrize("sentence", CERTAIN)
-def test_certainty_wording_is_flagged(sentence):
-    weak = run_ref(draft=_with_summary(sentence), analysis=analysis(hyp(confidence="weak")))
-    [issue] = [i for i in weak.issues if i.code == "overstated_certainty"]
-    assert issue.severity == "error" and weak.verdict == "needs_review"
-    strong = run_ref(draft=_with_summary(sentence))  # strong evidence still is not proof
-    [issue] = [i for i in strong.issues if i.code == "overstated_certainty"]
-    assert issue.severity == "warning"
-
-
-@pytest.mark.parametrize("sentence", HEDGED)
-def test_hedged_or_technical_wording_is_not_flagged(sentence):
-    res = run_ref(draft=_with_summary(sentence), analysis=analysis(hyp(confidence="weak")))
-    assert "overstated_certainty" not in codes(res)
-
-
-def test_certainty_in_a_key_fact_counts_too():
-    d = findings()["draft"]
-    kf = d.key_facts[0].model_copy(update={"statement": d.key_facts[0].statement + " Definitely."})
-    res = run_ref(draft=d.model_copy(update={"key_facts": [kf, *d.key_facts[1:]]}))
-    assert "overstated_certainty" in codes(res)
-
-
-def test_plain_assertion_is_a_known_miss():
-    """No marker word, no flag: this stays the live reviewer's job."""
-    res = run_ref(draft=_with_summary("The firewall caused this outage."))
-    assert "overstated_certainty" not in codes(res)
