@@ -57,6 +57,14 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument(
         "--concurrency", type=int, default=1, metavar="K", help="scenarios in flight at once"
     )
+    st.add_argument(
+        "--shrink", type=int, default=0, metavar="N", help="shrink the first N failing scenarios"
+    )
+    st.add_argument(
+        "--explain",
+        action="store_true",
+        help="add a narrative of where failures cluster (LLM with BYNARA_API_KEY, else mock)",
+    )
 
     df = sub.add_parser("diff", help="compare the API surface of two reports or OpenAPI files")
     df.add_argument("old", help="earlier report JSON or OpenAPI JSON")
@@ -247,12 +255,17 @@ async def _score(args: argparse.Namespace) -> int:
 
 async def _stress(args: argparse.Namespace) -> int:
     from .qa.discovery import discover
-    from .qa.stress import stress
+    from .qa.stress import digest, scenario_text, stress
 
     client, target = _target(args)
     try:
         result = await stress(
-            client, await discover(client), n=args.n, seed=args.seed, concurrency=args.concurrency
+            client,
+            await discover(client),
+            n=args.n,
+            seed=args.seed,
+            concurrency=args.concurrency,
+            shrink=args.shrink,
         )
     finally:
         await client.aclose()
@@ -260,6 +273,13 @@ async def _stress(args: argparse.Namespace) -> int:
         print(result["error"])
         return 2
     result["target"] = target
+    brain_notes: list[str] = []
+    if args.explain:
+        from .qa.brain import make_brain
+
+        brain = make_brain()
+        result["narrative"] = await brain.narrate_stress(digest(result))
+        brain_notes = brain.notes
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -288,6 +308,22 @@ async def _stress(args: argparse.Namespace) -> int:
         for r in [r for r in result["results"] if r["violations"]][:3]:
             v = r["violations"][0]
             print(f"    #{r['id']} {r['variant']}: [{v['rule']}] {v['detail'][:90]}")
+    if shrunk := result.get("shrunk"):
+        print("  shrunk (smallest scenario that still fails):")
+        for m in shrunk:
+            if not m["reproduced"]:
+                print(f"    #{m['id']} [{m['rule']}] did not reproduce: suspect shared state")
+                continue
+            a, b = (
+                f"{s['lines']} line{'s' * (s['lines'] != 1)}, {s['units']} units"
+                for s in (m["size"]["original"], m["size"]["minimal"])
+            )
+            print(f"    #{m['id']} [{m['rule']}] {a} -> {b} ({m['runs']} runs)")
+            print(f"      {scenario_text(m['minimal'])}")
+    if narrative := result.get("narrative"):
+        print(f"\nNARRATIVE: {narrative}")
+    for note in brain_notes:
+        print(f"note: {note}")
     print(f"\nstress report: {path}")
     return 1 if result["failed"] else 0
 

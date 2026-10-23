@@ -7,9 +7,19 @@ from decimal import Decimal
 import pytest
 
 from ledger_hound.p2p_api.app import create_app
+from ledger_hound.qa.brain import MockBrain
 from ledger_hound.qa.discovery import discover
 from ledger_hound.qa.http import ApiClient
-from ledger_hound.qa.stress import VARIANTS, Scenario, expect, generate, stress
+from ledger_hound.qa.stress import (
+    VARIANTS,
+    Scenario,
+    _candidates,
+    digest,
+    expect,
+    generate,
+    shrink_scenario,
+    stress,
+)
 
 SKUS = ["A", "B", "C", "D", "E"]
 D = Decimal
@@ -124,3 +134,77 @@ async def test_concurrency_must_be_positive():
             await stress(client, await discover(client), concurrency=0)
     finally:
         await client.aclose()
+
+
+# --- shrinking and narrative ---------------------------------------------------
+
+
+def _units(s: Scenario) -> Decimal:
+    return sum(
+        (q for _, q, _ in s.po_lines),
+        sum((q for _, q in s.received), sum((q for _, q, _ in s.invoice_lines), D(0))),
+    )
+
+
+def test_shrink_candidates_are_strictly_smaller_and_consistent():
+    for s in generate(30, 5, SKUS):
+        for c in _candidates(s):
+            assert len(c.po_lines) < len(s.po_lines) or _units(c) < _units(s)
+            ordered = {sku: qty for sku, qty, _ in c.po_lines}
+            assert all(0 < got <= ordered[sku] for sku, got in c.received)
+            assert all(sku in ordered and q > 0 for sku, q, _ in c.invoice_lines)
+            assert {sku: p for sku, _, p in c.po_lines}.items() <= {
+                sku: p for sku, _, p in s.po_lines
+            }.items(), "prices are never changed"
+
+
+async def test_shrink_reduces_a_failure_to_its_smallest_form():
+    """pay_unapproved needs an invoice that is created but stopped at match: 2 in, 1 billed."""
+    client = ApiClient.for_app(create_app(frozenset({"pay_unapproved"})))
+    try:
+        result = await stress(client, await discover(client), n=50, seed=7, shrink=1)
+    finally:
+        await client.aclose()
+    [m] = result["shrunk"]
+    assert m["reproduced"] and m["rule"] == "payment_gate"
+    assert m["size"]["minimal"] == {"lines": 1, "units": 2}
+    [(sku, qty, price)] = m["minimal"]["po_lines"]
+    assert m["minimal"]["received"] == [[sku, "2"]]
+    assert m["minimal"]["invoice_lines"] == [[sku, "1", str(D(price) * 2)]]
+
+
+async def test_shrink_takes_one_scenario_per_rule_first():
+    client = ApiClient.for_app(create_app(frozenset({"pay_unapproved", "silent_partial"})))
+    try:
+        result = await stress(client, await discover(client), n=50, seed=7, shrink=2)
+    finally:
+        await client.aclose()
+    assert sorted(m["rule"] for m in result["shrunk"]) == ["partial_receipt_flag", "payment_gate"]
+
+
+async def test_shrink_reports_a_failure_that_does_not_reproduce():
+    client = ApiClient.for_app(create_app(frozenset()))
+    try:
+        s = generate(1, 7, ["2X4-8-SPF"])[0]
+        m = await shrink_scenario(client, await discover(client), s, "payment_gate")
+    finally:
+        await client.aclose()
+    assert m == {"id": 1, "rule": "payment_gate", "reproduced": False, "runs": 1}
+
+
+async def test_mock_narrative_names_rule_variant_and_reproduction():
+    client = ApiClient.for_app(create_app(frozenset({"pay_unapproved"})))
+    try:
+        result = await stress(client, await discover(client), n=50, seed=7, shrink=1)
+    finally:
+        await client.aclose()
+    facts = digest(result)
+    assert "exchanges" not in str(facts), "the narrator gets facts, not transcripts"
+    text = await MockBrain().narrate_stress(facts)
+    assert "payment_gate" in text and "price_up_qty_down variant (11/11 failed)" in text
+    assert "Smallest reproduction for payment_gate: PO 2 x" in text
+
+
+async def test_mock_narrative_on_a_clean_run():
+    text = await MockBrain().narrate_stress(digest(await _stress(frozenset(), n=10)))
+    assert text == "All 10 scenarios held every control."

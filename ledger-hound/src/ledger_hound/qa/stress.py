@@ -23,7 +23,8 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal
 from typing import Any
 
@@ -297,14 +298,117 @@ def _describe(s: Scenario) -> dict[str, Any]:
     }
 
 
+def scenario_text(d: dict[str, Any]) -> str:
+    """One line for humans and the narrator: ``PO 2 x A @ 0.57; received 2 x A; invoice ...``."""
+    po = ", ".join(f"{q} x {s} @ {p}" for s, q, p in d["po_lines"])
+    got = ", ".join(f"{q} x {s}" for s, q in d["received"]) or "nothing"
+    inv = ", ".join(f"{q} x {s} @ {p}" for s, q, p in d["invoice_lines"])
+    return f"PO {po}; received {got}; invoice {inv}"
+
+
+# ------------------------------------------------------------------ shrinking
+
+
+def _smaller(q: Decimal) -> list[Decimal]:
+    return sorted({max(Decimal(1), q // 2), q - 1} - {q}) if q > 1 else []
+
+
+def _candidates(s: Scenario) -> Iterator[Scenario]:
+    """Strictly smaller scenarios: one PO line fewer, or one quantity reduced.
+
+    Prices are left alone on purpose: a float-trap price is often the cause.
+    """
+    if len(s.po_lines) > 1:
+        for sku, _, _ in s.po_lines:
+            yield replace(
+                s,
+                po_lines=[ln for ln in s.po_lines if ln[0] != sku],
+                received=[r for r in s.received if r[0] != sku],
+                invoice_lines=[ln for ln in s.invoice_lines if ln[0] != sku],
+            )
+    for i, (sku, q, p) in enumerate(s.po_lines):
+        for new in _smaller(q):
+            po = [*s.po_lines]
+            po[i] = (sku, new, p)
+            received = [(k, min(r, new)) if k == sku else (k, r) for k, r in s.received]
+            yield replace(s, po_lines=po, received=received)
+    for i, (sku, q) in enumerate(s.received):
+        for new in _smaller(q):
+            got = [*s.received]
+            got[i] = (sku, new)
+            yield replace(s, received=got)
+    for i, (sku, q, p) in enumerate(s.invoice_lines):
+        for new in _smaller(q):
+            inv = [*s.invoice_lines]
+            inv[i] = (sku, new, p)
+            yield replace(s, invoice_lines=inv)
+
+
+def _size(s: Scenario) -> dict[str, int]:
+    return {"lines": len(s.po_lines), "units": int(sum(q for _, q, _ in s.po_lines))}
+
+
+async def shrink_scenario(
+    client: ApiClient, catalog: Catalog, s: Scenario, rule: str, budget: int = 100
+) -> dict[str, Any]:
+    """Find a smaller scenario that still breaks ``rule``, re-running each candidate on the API.
+
+    Greedy, like a property-based tester's shrink phase: keep taking the first
+    smaller candidate that still fails until none does or ``budget`` runs are used.
+    A failure that does not reproduce on the first re-run is reported as such:
+    that by itself points at shared state.
+    """
+    runs = 0
+
+    async def violation(c: Scenario) -> dict[str, str] | None:
+        nonlocal runs
+        runs += 1
+        res = await _run_scenario(Workflow(client.view(), catalog, f"shrink{s.id}r{runs}"), c)
+        return next((v for v in res.violations if v["rule"] == rule), None)
+
+    found = await violation(s)
+    if found is None:
+        return {"id": s.id, "rule": rule, "reproduced": False, "runs": runs}
+    best = s
+    progress = True
+    while progress and runs < budget:
+        progress = False
+        for cand in _candidates(best):
+            if runs >= budget:
+                break
+            if not cand.invoice_lines:
+                continue
+            if (hit := await violation(cand)) is not None:
+                best, found, progress = cand, hit, True
+                break
+    return {
+        "id": s.id,
+        "rule": rule,
+        "reproduced": True,
+        "runs": runs,
+        "detail": found["detail"],
+        "original": _describe(s),
+        "minimal": _describe(best),
+        "size": {"original": _size(s), "minimal": _size(best)},
+    }
+
+
 async def stress(
-    client: ApiClient, catalog: Catalog, n: int = 50, seed: int = 7, concurrency: int = 1
+    client: ApiClient,
+    catalog: Catalog,
+    n: int = 50,
+    seed: int = 7,
+    concurrency: int = 1,
+    shrink: int = 0,
 ) -> dict[str, Any]:
     """Run ``n`` scenarios, at most ``concurrency`` at a time.
 
     Each scenario gets its own vendor, PO and log, so running them side by side
     changes the load on the API, not the expected outcome: any difference from a
     sequential run is itself a finding (shared state or a missing lock).
+
+    ``shrink`` > 0 shrinks that many failing scenarios afterwards (outside the
+    load figures) and adds them under ``"shrunk"``.
     """
     if concurrency < 1:
         raise ValueError("concurrency must be >= 1")
@@ -323,8 +427,9 @@ async def stress(
             latencies.extend(x.elapsed_ms for x in own.log)
             return result
 
+    scenarios = generate(n, seed, skus)
     start = time.perf_counter()
-    results = list(await asyncio.gather(*(one(s) for s in generate(n, seed, skus))))
+    results = list(await asyncio.gather(*(one(s) for s in scenarios)))
     elapsed = time.perf_counter() - start
     out = aggregate(results, n, seed)
     latencies.sort()
@@ -336,7 +441,42 @@ async def stress(
         "latency_ms_p50": _pct(latencies, 0.50),
         "latency_ms_p95": _pct(latencies, 0.95),
     }
+    if shrink:
+        by_id = {s.id: s for s in scenarios}
+        failing = [r for r in results if r.violations]
+        # One scenario per distinct rule first, so a mixed run shows each failure mode.
+        firsts: dict[str, ScenarioResult] = {}
+        for r in failing:
+            firsts.setdefault(r.violations[0]["rule"], r)
+        first_ids = {r.id for r in firsts.values()}
+        picked = [*firsts.values(), *(r for r in failing if r.id not in first_ids)][:shrink]
+        out["shrunk"] = [
+            await shrink_scenario(client, catalog, by_id[r.id], r.violations[0]["rule"])
+            for r in picked
+        ]
     return out
+
+
+def digest(result: dict[str, Any]) -> dict[str, Any]:
+    """The facts a narrator needs, without the HTTP transcripts."""
+    examples = [
+        {"id": r["id"], "variant": r["variant"], **v, "scenario": scenario_text(r["scenario"])}
+        for r in result["results"]
+        for v in r["violations"]
+    ]
+    return {
+        "scenarios": result["scenarios"],
+        "failed": result["failed"],
+        "failure_rate": result["failure_rate"],
+        "by_rule": result["by_rule"],
+        "by_variant": result["by_variant"],
+        "examples": examples[:6],
+        "shrunk": [
+            {"rule": m["rule"], "minimal": scenario_text(m["minimal"]), "detail": m["detail"]}
+            for m in result.get("shrunk", [])
+            if m["reproduced"]
+        ],
+    }
 
 
 def _pct(values: list[float], q: float) -> float | None:

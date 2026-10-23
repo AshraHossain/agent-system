@@ -140,6 +140,24 @@ async def test_full_investigation_with_mock_brain(clean):
     }
 
 
+async def test_live_brain_narrates_stress_and_falls_back_on_bad_json():
+    facts = {
+        "scenarios": 4,
+        "failed": 1,
+        "failure_rate": 0.25,
+        "by_rule": {"payment_gate": 1},
+        "by_variant": {"exact": {"scenarios": 3, "failed": 0}, "x": {"scenarios": 1, "failed": 1}},
+        "examples": [],
+        "shrunk": [],
+    }
+    brain, _ = live_brain([text('{"narrative": "Unapproved invoices are paid."}')])
+    assert await brain.narrate_stress(facts) == "Unapproved invoices are paid."
+
+    brain, _ = live_brain([text("nope"), text("still nope")])
+    assert (await brain.narrate_stress(facts)).startswith("1 of 4 scenarios violated")
+    assert "narrate_stress: fell back to mock" in brain.notes[0]
+
+
 async def test_live_brain_explain_diff_returns_string():
     from conftest import live_brain, text
 

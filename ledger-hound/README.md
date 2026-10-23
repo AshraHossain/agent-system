@@ -14,11 +14,11 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 115 offline tests, no API key needed
+uv run pytest                                  # 124 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
-uv run ledger-hound stress --local-bugs silent_partial   # 50 randomized POs -> failure rate
+uv run ledger-hound stress --local-bugs silent_partial --shrink 1   # 50 random POs -> failure rate
 uv run ledger-hound diff old.json new.json     # what changed in the API between two runs
 ```
 
@@ -66,11 +66,11 @@ vendor ─► PO ─► submit ─► receive ─► invoice ─► match ─►
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
 | `qa/explorer.py` | Happy-path walk, approve through pay, with a business check at every step |
 | `qa/adversary.py` | 28 attacks: the 6 brief rules plus 22 extra edge cases (incl. UoM, price-variance tolerance, backorder re-match, freight/tax injection and payment disbursement) |
-| `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
+| `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize, explain API diffs, narrate stress results) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
 | `qa/score.py` | Detection rate against the planted bugs |
-| `qa/stress.py` | Seeded random POs pushed through to payment against an independent Decimal oracle; failure rate per rule and variant |
+| `qa/stress.py` | Seeded random POs pushed through to payment against an independent Decimal oracle; failure rate per rule and variant; shrinking of failures |
 | `qa/spec_diff.py` | API surface (operations, roles, request fields) and its diff against the previous run |
 | `qa/labels.py` | Labelled dataset for the classifier, built from the planted bugs (no LLM) |
 | `qa/dspy_opt.py` | DSPy violation classifier: optimize, evaluate, second opinion (optional extra) |
@@ -94,6 +94,16 @@ expected verdicts: a failure that appears only at K > 1 points at shared
 state or a missing lock. The report adds a `load` block (elapsed time,
 scenarios/s, HTTP calls, p50/p95 latency); the practice API gives identical
 verdicts at any K.
+
+`--shrink N` reduces up to N failing scenarios (one per violated rule first)
+to the smallest version that still breaks the same rule. Each candidate (one
+PO line fewer, or one quantity lower; prices are kept, since a float-trap
+price is often the cause) is re-run against the API. `--shrink 1` on
+`pay_unapproved` ends at *PO 2 units, receive 2, invoice 1 at double the
+price*, the smallest invoice that is created but stopped at match. A failure
+that does not reproduce on re-run is reported as such, which points at shared
+state. `--explain` adds a short narrative of where failures cluster by rule
+and variant (LLM with `BYNARA_API_KEY`, deterministic mock otherwise).
 
 | Practice API | Failure rate (50 scenarios, seed 7) |
 | --- | --- |

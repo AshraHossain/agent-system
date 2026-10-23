@@ -6,6 +6,8 @@ What the model does here:
 * ``annotate``  - one-line interpretation of each happy-path step
 * ``explain``   - business impact of each breach, in an auditor's words
 * ``summarize`` - the report's executive summary
+* ``explain_diff`` - what an API change means for the probes
+* ``narrate_stress`` - where stress-test failures cluster, and why
 
 What it never does is decide pass/fail. The oracle does that.
 
@@ -57,6 +59,7 @@ class Brain(Protocol):
     async def explain(self, breaches: list[dict[str, Any]]) -> list[str]: ...
     async def summarize(self, facts: dict[str, Any]) -> str: ...
     async def explain_diff(self, diff: dict[str, Any]) -> str: ...
+    async def narrate_stress(self, facts: dict[str, Any]) -> str: ...
 
 
 # --------------------------------------------------------------------- mock
@@ -114,6 +117,26 @@ class MockBrain:
             parts.append(f"{len(breaking)} breaking change(s): {sample}{suffix}")
         return "API changed since the previous run: " + ", ".join(parts) + "."
 
+    async def narrate_stress(self, facts: dict[str, Any]) -> str:
+        n, failed = facts["scenarios"], facts["failed"]
+        if not failed:
+            return f"All {n} scenarios held every control."
+        rule, hits = next(iter(facts["by_rule"].items()))
+        rows = facts["by_variant"]
+        worst = max(rows, key=lambda v: rows[v]["failed"] / rows[v]["scenarios"])
+        text = (
+            f"{failed} of {n} scenarios violated a control ({facts['failure_rate']:.0%}). "
+            f"Most frequent rule: {rule} ({hits} scenarios). Failures concentrate in the "
+            f"{worst} variant ({rows[worst]['failed']}/{rows[worst]['scenarios']} failed)."
+        )
+        clean = sorted(v for v, row in rows.items() if not row["failed"])
+        if clean:
+            text += f" No failures in: {', '.join(clean)}."
+        if facts["shrunk"]:
+            m = facts["shrunk"][0]
+            text += f" Smallest reproduction for {m['rule']}: {m['minimal']}."
+        return text
+
 
 _IMPACT = {
     "overpayment_protection": "The company can be billed, and pay, for goods it never received.",
@@ -130,6 +153,7 @@ _IMPACT = {
     "price_variance": "A vendor can raise prices after the PO and still be paid in full.",
     "state_machine": "Process steps can be skipped, so approvals and audit trails stop meaning anything.",
     "uom_consistency": "Quantities in different units are compared as equal, so receipts, invoices and inventory stop agreeing on what was bought.",
+    "payment_gate": "Cash can leave the company for invoices nobody approved.",
 }
 
 
@@ -151,6 +175,10 @@ class _Summary(BaseModel):
 
 class _DiffExplanation(BaseModel):
     explanation: str
+
+
+class _Narrative(BaseModel):
+    narrative: str
 
 
 def extract_json(text: str) -> Any:
@@ -290,6 +318,23 @@ class LiveBrain:
             return out.explanation
 
         return await self._safe("explain_diff", live, lambda: self._mock.explain_diff(diff))
+
+    async def narrate_stress(self, facts: dict[str, Any]) -> str:
+        async def live():
+            out = await self._ask(
+                "stress-analyst",
+                "These are the results of a randomized stress test of a Purchase-to-Pay API: "
+                "failure counts by rule and by invoice variant, sample violations, and shrunk "
+                "minimal reproductions. In 3-5 sentences for an engineer, say where failures "
+                "cluster (which variants and which rules occur together), the most likely cause "
+                "in the API, and the smallest reproduction to start debugging from. The verdicts "
+                "are verified arithmetic: do not dispute them. Use only the facts given.",
+                facts,
+                _Narrative,
+            )
+            return out.narrative
+
+        return await self._safe("narrate_stress", live, lambda: self._mock.narrate_stress(facts))
 
 
 def make_brain(mock: bool = False) -> Brain:
