@@ -1,10 +1,11 @@
 """Exploration agent, scripted mode: walk the happy path end to end.
 
 Given only the discovered catalog, it finds an active vendor and real SKUs,
-then runs vendor -> PO -> submit -> receive -> invoice -> match -> approve.
+then runs vendor -> PO -> submit -> receive -> invoice -> match -> approve -> pay.
 At every step it checks the business result as well as the status code:
-the PO total, the received value, a clean match, a balanced GL entry, and
-vendor exposure rising by exactly the invoice amount.
+the PO total, the received value, a clean match, balanced GL entries, vendor
+exposure rising by exactly the invoice amount on approval and falling back
+once the invoice is paid.
 
 The live mode (``agentic.explore_with_agent``) lets the LLM drive the same
 journey with tools. Both modes produce the same ``Step`` records, and both
@@ -169,21 +170,34 @@ class Explorer:
                 f"open AP {before} -> {after}",
             )
 
-        # 7. pay the invoice — disburse and clear the AP liability
-        if self.catalog.has("pay_invoice"):
-            ex = await wf.pay(inv_id, po_value)
-            entry = pick(ex.body, "gl_entry", "journal_entry", "gl")
-            fails = [] if ex.ok else ["payment rejected"]
-            if ex.ok:
-                status = pick(ex.body, "status")
-                if status != "paid":
-                    fails.append(f"invoice status after payment is {status!r}, expected 'paid'")
-                fails += gl_problems(entry) if entry else ["no GL entry produced"]
+        # 6. pay the invoice — disburse and clear the AP liability
+        if not self.catalog.has("pay_invoice"):
+            return
+        ex = await wf.pay(inv_id, po_value)
+        entry = pick(ex.body, "gl_entry", "journal_entry", "gl")
+        fails = [] if ex.ok else ["payment rejected"]
+        if ex.ok:
+            status = pick(ex.body, "status")
+            if status != "paid":
+                fails.append(f"invoice status after payment is {status!r}, expected 'paid'")
+            fails += gl_problems(entry) if entry else ["no GL entry produced"]
+        self._must(
+            self._add("pay invoice", "2xx, status paid, balanced disbursement GL entry", ex, fails)
+        )
+
+        # 7. paying the invoice must take open AP back to where it started
+        if before is not None:
+            ex = await wf.exposure(vendor_id)
+            cleared = dec(pick(ex.body, "open_ap", "exposure", "total", "amount"))
+            fails = (
+                [] if cleared == before else [f"open AP {cleared} after payment, expected {before}"]
+            )
             self._add(
-                "pay invoice",
-                "2xx, status paid, balanced disbursement GL entry",
+                "exposure after payment",
+                f"open AP back to {before}",
                 ex,
                 fails,
+                f"open AP {after} -> {cleared}",
             )
 
     async def _pick_lines(self) -> list[Line]:

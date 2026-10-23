@@ -14,7 +14,7 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 107 offline tests, no API key needed
+uv run pytest                                  # 109 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
