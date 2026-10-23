@@ -190,3 +190,13 @@ def test_stale_segments_rule_out_normal(feed):
     fcs = [forecast_segment(feed.history(s.id), s, 60) for s in segs]
     anomalies = [a for s in segs for a in detect(feed.history(s.id), s.id)]
     assert network_status(fcs, anomalies, ["S1"]) == NetworkStatus.DEGRADED  # never lowers
+
+
+def test_interval_calibration_uses_same_time_of_day(feed):
+    import numpy as np
+
+    from trafficflow.core.forecast import _calibration_errors, _minute_distance
+
+    assert list(_minute_distance(np.array([10, 1430, 720]), 0)) == [10, 10, 720]
+    errs, mods = _calibration_errors(feed.history("S1"), 3)
+    assert all(len(e) == len(m) > 0 for e, m in zip(errs, mods, strict=True))

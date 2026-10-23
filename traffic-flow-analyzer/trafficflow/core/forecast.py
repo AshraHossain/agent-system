@@ -3,10 +3,11 @@
 profile(slot, daytype) = median of the same slot on previous days of the same type
 model(h)               = profile(t+h) + phi**h * last_residual
 forecast(h)            = w**h * last_reading + (1 - w**h) * model(h)
-interval               = leave-one-day-out conformal quantiles of the same forecast's errors
+interval               = leave-one-day-out conformal quantiles of the same forecast's errors,
+                         from origins within two hours of the current time of day
 
-LAST_WEIGHT and INTERVAL_TAIL were chosen on the first half of the PeMSD7 origins only;
-results are reported on the second half (`trafficflow evaluate --split`).
+LAST_WEIGHT, INTERVAL_TAIL and CALIBRATION_WINDOW_MINUTES were chosen on the first half of the
+PeMSD7 origins only; results are reported on the second half (`trafficflow evaluate --split`).
 """
 
 from __future__ import annotations
@@ -22,8 +23,9 @@ from trafficflow.core.simulate import STEP_MINUTES
 
 PHI = 0.92  # per-step persistence of the recent deviation
 LAST_WEIGHT = 0.9  # weight on the latest reading decays as LAST_WEIGHT**h
-INTERVAL_TAIL = 0.035  # per tail; ~90% coverage on the training half (0.05 gave ~85%)
+INTERVAL_TAIL = 0.05  # per tail; ~90% coverage on the training half with the window below
 CALIBRATION_DAYS = 6
+CALIBRATION_WINDOW_MINUTES = 120  # calibrate on origins within this much of the time of day
 Z90 = 1.645
 MIN_POINTS = 2 * 288
 MIN_SAMPLES_FOR_EMPIRICAL = 30
@@ -59,29 +61,52 @@ def _blend(base, last_residual, last_reading, h):
     return w * last_reading + (1 - w) * (base + PHI**h * last_residual)
 
 
-def _calibration_errors(history: pd.Series, steps: int) -> list[np.ndarray]:
+def _minute_distance(a: np.ndarray, b: int) -> np.ndarray:
+    d = np.abs(a - b) % 1440
+    return np.minimum(d, 1440 - d)
+
+
+def _calibration_errors(
+    history: pd.Series, steps: int
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Errors of the same forecast on each recent complete day, with that day left out of the
-    profile, so calibration mirrors forecasting a day the profile has not seen."""
+    profile, so calibration mirrors forecasting a day the profile has not seen. Also returns
+    each error's origin minute-of-day."""
     dates = history.index.normalize()
     errs: list[list[np.ndarray]] = [[] for _ in range(steps)]
+    mods: list[list[np.ndarray]] = [[] for _ in range(steps)]
     for day in pd.unique(dates)[:-1][-CALIBRATION_DAYS:]:
         mask = dates == day
         profile = seasonal_profile(history[~mask])
+        idx = history.index[mask]
         vals = history[mask].to_numpy()
-        base = profile.reindex(_key(history.index[mask])).to_numpy()
+        base = profile.reindex(_key(idx)).to_numpy()
         res = vals - base
+        minute = (idx.hour * 60 + idx.minute).to_numpy()
         for h in range(1, min(steps, len(vals) - 1) + 1):
             e = vals[h:] - _blend(base[h:], res[:-h], vals[:-h], h)
-            errs[h - 1].append(e[~np.isnan(e)])
-    return [np.concatenate(e) if e else np.empty(0) for e in errs]
+            ok = ~np.isnan(e)
+            errs[h - 1].append(e[ok])
+            mods[h - 1].append(minute[:-h][ok])
+
+    def cat(parts: list[np.ndarray]) -> np.ndarray:
+        return np.concatenate(parts) if parts else np.empty(0)
+
+    return [cat(e) for e in errs], [cat(m) for m in mods]
 
 
 def _interval_offsets(history: pd.Series, steps: int) -> tuple[np.ndarray, np.ndarray]:
-    """Per-step (lower, upper) offsets from the point forecast; MAD fallback when sparse."""
-    errs = _calibration_errors(history, steps)
+    """Per-step (lower, upper) offsets from the point forecast, calibrated on errors from the
+    same time of day when there are enough of them; MAD fallback when sparse."""
+    errs, mods = _calibration_errors(history, steps)
+    last = history.index[-1]
+    now_minute = last.hour * 60 + last.minute
     sigma = max(robust_sigma(residuals(history, seasonal_profile(history))), 0.01)
     lo, hi = np.empty(steps), np.empty(steps)
-    for h, e in enumerate(errs):
+    for h, (e, m) in enumerate(zip(errs, mods, strict=True)):
+        near = e[_minute_distance(m, now_minute) <= CALIBRATION_WINDOW_MINUTES]
+        if len(near) >= MIN_SAMPLES_FOR_EMPIRICAL:
+            e = near
         if len(e) >= MIN_SAMPLES_FOR_EMPIRICAL:
             lo[h], hi[h] = np.quantile(e, INTERVAL_TAIL), np.quantile(e, 1 - INTERVAL_TAIL)
         else:

@@ -24,7 +24,8 @@
 - [x] Held-out (`--split`) 38-sensor results recorded in the results doc
 - [x] Short horizon: blend toward the latest reading (`LAST_WEIGHT=0.9`, tuned on the train
       half); held-out 15-min MAE 4.69 vs persistence 4.92 (was 5.87)
-- [x] Interval: leave-one-day-out conformal, tail 0.035 (train half); held-out coverage ~90%
+- [x] Interval: leave-one-day-out conformal from the same time of day (±2 h, tail 0.05, both
+      chosen on the train half); held-out coverage ~90% in peak and off-peak, 21-35 km/h wide
 - [x] Stale segments rule out NORMAL status; reports list `stale_segments`
 - [x] Timezone-aware feed option; history-gap warnings; `get_current_conditions` reports
       `age_minutes` and `stale` (> 15 min, `core/freshness.py`)
@@ -43,8 +44,8 @@
 - [ ] Terms/key review before enabling the TomTom or HERE adapters against the real APIs
 
 ## Open
-- [ ] Interval is calibrated but wide (22-41 km/h); narrowing it needs a better point model
-      or conditioning on time of day (peak under-covers slightly, off-peak over-covers)
+- [ ] Interval is calibrated but still wide (21-35 km/h); narrowing it further needs a
+      better point model (errors are heavy-tailed)
 - [ ] Record the all-228-sensor held-out run (`evaluate --all-sensors --split`)
 - [ ] Weekend evaluation: PeMSD7 is weekday-only, so it needs another dataset
 - [ ] Real coordinates for replayed sensors on the map (PeMSD7 ships none)
