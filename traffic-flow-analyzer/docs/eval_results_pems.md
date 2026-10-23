@@ -1,8 +1,36 @@
 # Evaluation on real data: PeMSD7 replay
 
 Out-of-sample rolling-origin evaluation of the forecaster on real recorded speeds, against
-three baselines. **Summary: the model beats persistence only at the 60-minute horizon; it is
-worse at 15 minutes, ties at 30, and its "90%" interval covers only about 59-66% of outcomes.**
+three baselines. **Current summary (held-out split, after interval calibration): the model
+beats persistence at 30 and 60 minutes and loses at 15 minutes; the "90%" interval now covers
+86-89% of outcomes, but it is about 2.5-3.5x wider than before.** See
+[Current results](#current-results-held-out-split-after-calibration). The sections after it
+are the original pre-calibration run, kept for comparison.
+
+## Current results: held-out split, after calibration
+
+`--split` keeps only the second half of the origins (278 of 555), so nothing reported here
+was seen while the interval was calibrated. 38 sensors; same setup as below otherwise.
+
+```bash
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --sensors 38 --split
+```
+
+| Horizon | Model MAE | Persistence | Seasonal naive | Historical avg | Coverage | Width (km/h) |
+|---|---|---|---|---|---|---|
+| 15 min | 5.87 | **4.92** | 9.75 | 8.41 | 0.860 | 24.1 |
+| 30 min | **7.05** | 7.23 | 9.99 | 8.59 | 0.869 | 31.8 |
+| 60 min | **7.66** | 11.02 | 9.88 | 8.46 | 0.888 | 40.5 |
+
+* Coverage rose from ~61% to 86-89% largely by **widening** the band (mean width 10-12 km/h
+  → 24-40 km/h). It is closer to honest, but too wide to be useful at 60 minutes; a
+  per-step conformal correction is the next candidate (see [TASK.md](../TASK.md)).
+* Point forecasts are essentially unchanged by the calibration fix, as expected: it only
+  touches the interval.
+* The all-228-sensor held-out run has not been recorded yet.
+
+## Original pre-calibration run (all origins)
+
 The earlier simulated-data result (model MAE 1.52 vs persistence 3.12 km/h at 60 min) does
 not transfer to real data in the same way.
 

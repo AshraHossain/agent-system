@@ -4,41 +4,47 @@
 - [x] Contracts, simulator, seasonal forecaster, anomaly detection, rule-based status, backtest
 - [x] Read-only tools, PydanticAI agents (Forecast, Incident, Brief Writer, Ask), mock models
 - [x] Citation verifier; fixed parallel pipeline
-- [x] Gradio + Plotly dashboard, CLI, CI, 21 offline tests
+- [x] Gradio + Plotly dashboard, CLI, CI, offline tests
 - [x] Docs: PLAN, ARCHITECTURE, backlog, ADRs
 - [x] `ReplayFeed` + `fetch-data` for PeMSD7 (public, SHA-256 pinned); dashboard/demo `--replay`
 - [x] Non-circular evaluation on real data with persistence / seasonal-naive / historical-average
       baselines and interval coverage ([results](docs/eval_results_pems.md))
+- [x] Interval calibration: train-half profile in `_empirical_quantiles` (coverage ~61% → ~86%)
+- [x] Train/test split: `evaluate --split` reports held-out origins only; CI benchmark uses it
+- [x] Incident floor: `max(min_drop_kmh, min_drop_frac * free_flow_kmh)` in `detect()`
+- [x] Verifier checks numbers in findings, summary and recommendations against evidence
+- [x] Multiple forecasters (seasonal-residual, moving average, persistence; ETS optional) with
+      rule-based selection: `core/selection.py` backtests candidates on the segment's own past
+      (lowest MAE wins); `compare_models` tool exposes it to the Forecast and Ask agents, which
+      only explain the choice
+- [x] Labels-hidden agent evaluation (`run-eval`, `eval/cases.yaml`) plus a test that records
+      every agent message during an eval run and asserts no label appears
+- [x] `serve --csv` with `--poll-seconds`; live feed adapters (mock / TomTom / HERE) with a poller
+- [x] Mock writer dedupes repeated findings and recommendations
+- [x] Held-out (`--split`) 38-sensor results recorded in the results doc
+- [x] Timezone-aware feed option; history-gap warnings; `get_current_conditions` reports
+      `age_minutes` and `stale` (> 15 min, `core/freshness.py`)
+- [x] Browser smoke test in CI drives the dashboard (briefing, Ask, History), not just loads it
+- [x] Ask tab keeps the last exchanges as context
+- [x] Dockerfile(s), Compose file, deployment note in README; coverage floor (70%) in CI
+- [x] Briefing history persisted in SQLite (`serve --reports var/reports.db`)
+- [x] Map tab (fixed demo coordinates for the simulated segments)
+- [x] Sub-project linked from the root README and `CLAUDE.md`
 
-## High priority
-- [x] **Calibrate the interval**: fixed calibration leakage in `_empirical_quantiles` — now
-      builds a train-half-only seasonal profile so the calibration window is genuinely
-      out-of-sample; coverage should rise from ~59-66% toward 90%
-- [x] **Short-horizon forecast**: added `--split` flag to `evaluate` CLI and CI benchmark so
-      MAE is measured only on the second-half (held-out) origins; CI now reports honest numbers
-- [x] **Incident false alarms on real data**: `detect()` now applies a practical-significance
-      floor of `max(min_drop_kmh, min_drop_frac * free_flow_kmh)`; `detect_incidents` tool and
-      `pipeline.py` pass `free_flow_kmh` from the segment metadata
-- [x] Verifier: `verify_brief` now checks numeric claims in `brief.recommendations` against
-      the union of all recorded evidence (same heuristic as summary)
-- [ ] Run a live-model validation (many repetitions): schema-valid rate, citation pass rate.
-      Needs an API key from the owner
+## Needs the owner
+- [ ] **Live-model validation** (many repetitions): schema-valid rate, citation pass rate.
+      Needs an API key; run `TRAFFICFLOW_MODEL=<provider:model> uv run trafficflow validate`
+- [ ] Verify PeMS data-use terms before any redistribution, and confirm the mph / reconstructed
+      timestamp assumptions in [ADR-0004](docs/adr/0004-pemsd7-data-assumptions.md)
+- [ ] Terms/key review before enabling the TomTom or HERE adapters against the real APIs
 
-## Medium priority
-- [ ] More than one forecaster (e.g. an AR / gradient-boosted model on lagged speeds), with a `compare_models` tool that backtests candidates per
-      segment; the best is chosen by rule and the agent only explains it
-- [ ] Agent evaluation set with labelled cases, plus a test that agents never see the labels
-- [ ] `serve` option for `CsvFeed`; a true live poller (replay and simulation only advance a clock)
-- [ ] Mock writer: dedupe repeated recommendations for the same segment (seen on replay data)
-- [ ] Evaluate on all 228 sensors, other periods, and weekends (data is weekday-only)
-- [ ] Verify PeMS data terms before any redistribution; confirm the mph / timestamp assumptions
-- [ ] Timezone-aware timestamps; handle stale or missing data explicitly
-- [ ] Browser smoke test of the dashboard in CI (currently only built, not driven)
-- [ ] Memory for the Ask tab across turns
-
-## Low priority
-- [ ] Dockerfile and deployment note; coverage floor in CI
-- [ ] Persist reports for a history/trend panel
-- [ ] Map view (needs segment coordinates)
-- [ ] Optional live traffic API adapter behind the `Feed` protocol (needs key and terms review)
-- [ ] Link the sub-project from the root README / `CLAUDE.md`
+## Open
+- [ ] Short horizon: the model still loses to persistence at 15 min on PeMSD7 (held-out MAE
+      ~5.9 vs ~4.9). Candidate: blend toward the last reading for the first steps, tuned on the
+      train half only
+- [ ] Interval still under-covers (86-89% vs nominal 90%) and is now wide (24-40 km/h);
+      consider a per-step conformal correction
+- [ ] Record the all-228-sensor held-out run (`evaluate --all-sensors --split`)
+- [ ] Weekend evaluation: PeMSD7 is weekday-only, so it needs another dataset
+- [ ] Real coordinates for replayed sensors on the map (PeMSD7 ships none)
+- [ ] Stale data does not yet affect the rule-based network status (only reported by the tool)

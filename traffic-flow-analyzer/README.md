@@ -23,7 +23,8 @@ uv run trafficflow serve        # http://127.0.0.1:7860
 
 Dashboard: speed history with forecast and 90% interval, a segment x time congestion heatmap
 (observed + forecast), a status table, a "Live" mode that advances simulated time, an AI
-briefing tab, and an Ask tab.
+briefing tab, an Ask tab, a Map tab and a History tab. Briefings are kept in SQLite
+(`serve --reports var/reports.db`, the default) so the history survives restarts.
 
 ## Docker / Deployment
 

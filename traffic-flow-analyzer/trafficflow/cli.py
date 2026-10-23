@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     s.add_argument("--api-key", default="", help="API key for the chosen provider")
     s.add_argument("--sensors", type=int, default=8, help="sensors shown when replaying")
+    s.add_argument("--reports", default="var/reports.db", help="SQLite file for briefing history")
     s.add_argument(
         "--poll-seconds",
         type=int,
@@ -243,5 +244,9 @@ def main(argv: list[str] | None = None) -> int:
             def factory():
                 return live_feed
 
-        build_app(feed_factory=factory).launch(server_name=a.host, server_port=a.port)
+        from trafficflow.reports import ReportStore
+
+        build_app(feed_factory=factory, report_store=ReportStore(a.reports)).launch(
+            server_name=a.host, server_port=a.port
+        )
     return 0
