@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -130,6 +131,7 @@ async def _run(args: argparse.Namespace) -> int:
             improvise=args.improvise,
             only=[s for s in args.only.split(",") if s] or None,
             classifier=args.classifier,
+            run_tag=secrets.token_hex(2),
         )
     finally:
         await client.aclose()
@@ -216,9 +218,10 @@ def _print_report(report: dict[str, Any], path: Path) -> None:
         mark = "✔" if s["verdict"] == "as_expected" else "✘"
         print(f"  {mark} {s['index']:>2}. {s['name']:<28} {s['observed']}")
     print("\nADVERSARIAL")
+    width = max((len(r["attack"]) for r in report["adversarial"]), default=0)
     for r in report["adversarial"]:
         sev = f" [{r['severity']}]" if r.get("severity") else ""
-        print(f"  {ICON[r['status']]} {r['attack']:<30} {r['observed'][:90]}{sev}")
+        print(f"  {ICON[r['status']]} {r['attack']:<{width}} {r['observed'][:90]}{sev}")
     print(f"\nSUMMARY: {report['summary']}")
     if changes := report.get("api_changes"):
         from .qa.spec_diff import describe
@@ -240,11 +243,13 @@ async def _score(args: argparse.Namespace) -> int:
         f"\nDetection rate: {result['detection_rate']}   "
         f"false positives on clean API: {result['false_positives_on_clean_api'] or 'none'}\n"
     )
+    width = max((len(row["caught_by"]) for row in result["bugs"]), default=0)
     for row in result["bugs"]:
         mark = "✔" if row["detected"] else "✘"
         extra = f"  (+{', '.join(row['also_breached'])})" if row["also_breached"] else ""
         print(
-            f"  {mark} {row['bug']:<26} -> {row['caught_by']:<30} happy={row['happy_path']}{extra}"
+            f"  {mark} {row['bug']:<26} -> {row['caught_by']:<{width}} "
+            f"happy={row['happy_path']}{extra}"
         )
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, indent=2))
@@ -266,6 +271,7 @@ async def _stress(args: argparse.Namespace) -> int:
             seed=args.seed,
             concurrency=args.concurrency,
             shrink=args.shrink,
+            run_tag=secrets.token_hex(2),
         )
     finally:
         await client.aclose()
@@ -379,12 +385,13 @@ def _dspy(args: argparse.Namespace) -> int:
 def _attacks() -> int:
     from .qa.adversary import ATTACKS
 
+    width = max(len(a.id) for a in ATTACKS)
     print("ATTACKS")
     for a in ATTACKS:
-        print(f"  {a.id:<30} {a.rule:<28} [{a.severity}] {a.title}")
+        print(f"  {a.id:<{width}} {a.rule:<28} [{a.severity}] {a.title}")
     print("\nPLANTABLE BUGS (practice API)")
     for b in BUGS.values():
-        print(f"  {b.name:<26} caught by {b.caught_by:<30} {b.description}")
+        print(f"  {b.name:<26} caught by {b.caught_by:<{width}} {b.description}")
     return 0
 
 

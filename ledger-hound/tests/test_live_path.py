@@ -140,6 +140,20 @@ async def test_full_investigation_with_mock_brain(clean):
     }
 
 
+async def test_repeat_runs_against_one_server_need_a_run_tag(clean):
+    """The explorer reuses an existing vendor, so a fixed invoice number collides with
+    the previous run's against a long-lived server. The CLI passes a fresh tag per run."""
+    client, _ = clean
+    first = await investigate(client, MockBrain(), target="t", run_tag="a1")
+    second = await investigate(client, MockBrain(), target="t", run_tag="b2")
+    assert first["happy_path"]["status"] == second["happy_path"]["status"] == "PASS"
+    assert second["counts"]["BREACHED"] == 0 and second["meta"]["run_tag"] == "b2"
+
+    again = await investigate(client, MockBrain(), target="t", run_tag="b2")
+    failed = [s["name"] for s in again["happy_path"]["steps"] if s["verdict"] != "as_expected"]
+    assert failed == ["create invoice"], "a reused tag repeats the invoice number"
+
+
 async def test_live_brain_narrates_stress_and_falls_back_on_bad_json():
     facts = {
         "scenarios": 4,

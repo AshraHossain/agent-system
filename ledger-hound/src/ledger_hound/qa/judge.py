@@ -26,6 +26,7 @@ from .explorer import Explorer
 from .http import ApiClient
 from .models import AttackResult
 from .spec_diff import surface
+from .workflow import run_scoped
 
 STATUS_RANK = {"BREACHED": 0, "ERROR": 1, "HELD": 2, "SKIPPED": 3}
 
@@ -39,6 +40,7 @@ async def investigate(
     improvise: int = 0,
     only: list[str] | None = None,
     classifier: str | None = None,
+    run_tag: str = "",
 ) -> dict[str, Any]:
     notes: list[str] = []
     catalog = await discover(client)
@@ -63,12 +65,12 @@ async def investigate(
     elif agent_explore:
         notes.append("--agent-explore needs a live model; used scripted path")
     if happy is None:
-        happy = await Explorer(client, catalog).run()
+        happy = await Explorer(client, catalog, run_scoped("explore", run_tag)).run()
         happy["mode"] = "scripted"
     for step, text in zip(happy["steps"], await brain.annotate(happy["steps"]), strict=False):
         step["interpretation"] = text
 
-    adversary = Adversary(client, catalog)
+    adversary = Adversary(client, catalog, run_scoped("adv", run_tag))
     results = await adversary.run(only=plan["order"])
     by_id = {r.attack: r for r in results}
     results = [by_id[i] for i in plan["order"] if i in by_id]
@@ -112,6 +114,7 @@ async def investigate(
             "tool": "ledger-hound",
             "version": __version__,
             "target": target,
+            "run_tag": run_tag or None,
             "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "brain": brain.name,
             "discovery": catalog.source,
