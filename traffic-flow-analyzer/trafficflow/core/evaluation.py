@@ -1,8 +1,9 @@
 """Rolling-origin evaluation of the forecaster against baselines, with interval coverage.
 
 Error is measured at the forecast step exactly `h` minutes ahead (the convention in the
-traffic-forecasting literature). Constants of the forecaster were set before looking at any
-real data; nothing here tunes them."""
+traffic-forecasting literature). Nothing here tunes the forecaster; the constants chosen on
+PeMSD7 (LAST_WEIGHT, INTERVAL_TAIL) used the first half of the origins only, so report the
+second half (`trafficflow evaluate --split`)."""
 
 from __future__ import annotations
 
