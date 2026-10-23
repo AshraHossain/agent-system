@@ -75,6 +75,16 @@ def verify_brief(
             unsupported_claims += 1
             issues.append(f"summary: numeric claim '{num}' not found in any evidence")
 
+    # Check numbers in each recommendation against the union of all evidence.
+    for j, rec in enumerate(brief.recommendations, 1):
+        for num in _nums_in_text(rec):
+            total_claims += 1
+            if all_ev_nums and num not in all_ev_nums:
+                unsupported_claims += 1
+                issues.append(
+                    f"recommendation {j}: numeric claim '{num}' not found in any evidence"
+                )
+
     # Tag issues list so the caller can decide severity.
     if total_claims > 0 and unsupported_claims > total_claims / 2:
         issues.append(f"HARD_FAIL: {unsupported_claims}/{total_claims} numeric claims unsupported")
@@ -102,7 +112,11 @@ async def run_report(
     issues = verify_brief(brief, deps.evidence, set(segs))
     # status is computed from deterministic core outputs, independent of the LLM text
     forecasts = [forecast_segment(feed.history(i, 7), s, horizon_minutes) for i, s in segs.items()]
-    anomalies = [a for i in segs for a in detect(feed.history(i, 7), i)]
+    anomalies = [
+        a
+        for i, s in segs.items()
+        for a in detect(feed.history(i, 7), i, free_flow_kmh=s.free_flow_kmh)
+    ]
     return TrafficReport(
         as_of=feed.now,
         horizon_minutes=horizon_minutes,

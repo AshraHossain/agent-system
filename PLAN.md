@@ -135,3 +135,17 @@ come from one framework, and our control flow is a fixed pipeline.
 * Prompt injection is mitigated, not solved.
 * Data are synthetic; thresholds are illustrative, not calibrated on real
   networks.
+
+---
+
+## 7. PlateWatch — why PydanticAI here (`platewatch/`)
+
+PlateWatch is a separate, much smaller system: detect plates in images, read and tag them, store
+them in a searchable vector index. It uses **PydanticAI** rather than ADK because it needs one
+tool-using agent with a typed result and dependency injection (`RunContext[PlateDeps]`), not a
+multi-agent workflow tree, sessions or a dev UI. The same principles carry over: computation and
+thresholds are framework-free code in `core/`, agent output is a Pydantic contract, tools are
+read-only and take no paths from the model, and the offline suite uses a deterministic scripted
+model/backend. Honest limits: Hugging Face model accuracy is unmeasured (live test needs real
+photos), the embedder is lexical, and search is a brute-force scan. Details:
+[docs/platewatch.md](docs/platewatch.md).

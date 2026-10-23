@@ -1,0 +1,75 @@
+services:
+  # -----------------------------------------------------------------------
+  # Gradio dashboard  →  http://localhost:7860
+  # -----------------------------------------------------------------------
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trafficflow-dashboard
+    ports:
+      - "7860:7860"
+    environment:
+      - TRAFFICFLOW_MODEL=${TRAFFICFLOW_MODEL:-mock}
+      - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
+      - HERE_API_KEY=${HERE_API_KEY:-}
+    command: >
+      uv run trafficflow serve
+        --host 0.0.0.0
+        --port 7860
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7860/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # -----------------------------------------------------------------------
+  # FastAPI REST + SSE layer  →  http://localhost:8000
+  # -----------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: trafficflow-api
+    ports:
+      - "8000:8000"
+    environment:
+      - TRAFFICFLOW_MODEL=${TRAFFICFLOW_MODEL:-mock}
+      - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
+      - HERE_API_KEY=${HERE_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/segments')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # -----------------------------------------------------------------------
+  # Alert monitor (logs to stdout; mount a volume for persistent SQLite db)
+  # -----------------------------------------------------------------------
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: trafficflow-api
+    volumes:
+      - alerts_data:/app/var
+    environment:
+      - TRAFFICFLOW_MODEL=${TRAFFICFLOW_MODEL:-mock}
+      - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
+      - HERE_API_KEY=${HERE_API_KEY:-}
+    command: >
+      uv run trafficflow monitor
+        --provider mock
+        --level heavy
+        --poll-seconds 30
+    restart: unless-stopped
+    depends_on:
+      - api
+
+volumes:
+  alerts_data:
+    driver: local

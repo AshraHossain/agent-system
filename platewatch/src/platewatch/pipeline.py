@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import threading
 from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
@@ -15,6 +17,8 @@ from platewatch.vision.protocols import Detector, Reader
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MAX_PIXELS = 25_000_000  # reject decompression bombs
 MAX_PLATES_PER_IMAGE = 20
+# Per-image wall-clock budget.  Set to 0 to disable.  Override via env.
+IMAGE_TIMEOUT: float = float(os.getenv("PLATEWATCH_IMAGE_TIMEOUT", "30"))
 
 
 class PlatePipeline:
@@ -35,7 +39,10 @@ class PlatePipeline:
             box = det.box
             if box.x_max > image.width or box.y_max > image.height:
                 continue  # detector returned a box outside the image
-            raw, ocr_conf = self.reader.read(image, box)
+            try:
+                raw, ocr_conf = self.reader.read(image, box)
+            except Exception:  # noqa: S112
+                continue  # bad crop; skip this detection, keep the rest
             plate = normalize_plate(raw)
             if not plate:
                 continue
@@ -57,6 +64,29 @@ class PlatePipeline:
             )
         return records
 
+    def _process_with_timeout(self, path: Path, source: str) -> list[PlateRecord]:
+        """Run process_file with a wall-clock timeout (skips the thread overhead when disabled)."""
+        if IMAGE_TIMEOUT <= 0:
+            return self.process_file(path, source)
+        result: list[list[PlateRecord] | None] = [None]
+        exc_box: list[BaseException | None] = [None]
+
+        def _run() -> None:
+            try:
+                result[0] = self.process_file(path, source)
+            except BaseException as e:
+                exc_box[0] = e
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=IMAGE_TIMEOUT)
+        if t.is_alive():
+            # Thread is still running; the daemon flag lets the process exit cleanly.
+            raise TimeoutError(f"processing timed out after {IMAGE_TIMEOUT}s")
+        if exc_box[0] is not None:
+            raise exc_box[0]
+        return result[0]  # type: ignore[return-value]
+
     def scan_inbox(self, inbox: Path) -> ScanSummary:
         """Process images in ``inbox`` not seen before (by content hash). Idempotent."""
         files = sorted(
@@ -70,8 +100,8 @@ class PlatePipeline:
             if self.store.has_image(sha):
                 continue
             try:
-                records = self.process_file(path, source)
-            except (UnidentifiedImageError, OSError, ValueError) as exc:
+                records = self._process_with_timeout(path, source)
+            except (UnidentifiedImageError, OSError, ValueError, TimeoutError) as exc:
                 failed += 1
                 failures.append(f"{source}: {type(exc).__name__}")
                 continue

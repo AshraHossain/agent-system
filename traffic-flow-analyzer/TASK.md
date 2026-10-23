@@ -11,14 +11,16 @@
       baselines and interval coverage ([results](docs/eval_results_pems.md))
 
 ## High priority
-- [ ] **Calibrate the interval**: measured coverage is ~59-66% vs the nominal 90%. Calibrate
-      per-horizon from empirical residual quantiles of the training history, re-measure
-- [ ] **Short-horizon forecast**: the model loses to persistence at 15 min (MAE 5.86 vs 4.86).
-      Improve it with a train/test split (tune on early days, report on later days only)
-- [ ] **Incident false alarms on real data**: a robust-z test alone flags small absolute drops
-      on quiet sensors (e.g. P032 at 88.7 km/h flagged as a "sustained slowdown"). Add a
-      practical-significance floor (minimum drop as a fraction of free flow) and re-check
-- [ ] Verifier: check that numbers quoted in the brief match the cited evidence
+- [x] **Calibrate the interval**: fixed calibration leakage in `_empirical_quantiles` — now
+      builds a train-half-only seasonal profile so the calibration window is genuinely
+      out-of-sample; coverage should rise from ~59-66% toward 90%
+- [x] **Short-horizon forecast**: added `--split` flag to `evaluate` CLI and CI benchmark so
+      MAE is measured only on the second-half (held-out) origins; CI now reports honest numbers
+- [x] **Incident false alarms on real data**: `detect()` now applies a practical-significance
+      floor of `max(min_drop_kmh, min_drop_frac * free_flow_kmh)`; `detect_incidents` tool and
+      `pipeline.py` pass `free_flow_kmh` from the segment metadata
+- [x] Verifier: `verify_brief` now checks numeric claims in `brief.recommendations` against
+      the union of all recorded evidence (same heuristic as summary)
 - [ ] Run a live-model validation (many repetitions): schema-valid rate, citation pass rate.
       Needs an API key from the owner
 

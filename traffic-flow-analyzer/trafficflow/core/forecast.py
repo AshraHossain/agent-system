@@ -50,8 +50,11 @@ def _empirical_quantiles(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return per-step (q05, q95) empirical residual quantiles over the training window.
 
-    Uses a rolling-origin approach: for each index i in the second half of history,
-    predict h steps ahead using the profile baseline and collect the residual.
+    Uses a rolling-origin approach: calibration residuals are computed against a
+    train-half-only seasonal profile so the second half of history is genuinely
+    out-of-sample.  This avoids calibration leakage that would otherwise make
+    intervals appear narrower than they really are.
+
     Falls back to the MAD-based half-width for any step with fewer than
     MIN_SAMPLES_FOR_EMPIRICAL samples.
     """
@@ -60,13 +63,15 @@ def _empirical_quantiles(
     vals = history.to_numpy()
     idx = history.index
 
-    # Precompute residuals once; use a rolling window of 3 for recent_level at each origin.
-    all_res = residuals(history, profile)
+    # Build the profile from the FIRST half only so the calibration window (second half)
+    # is out-of-sample with respect to the profile fit — prevents interval leakage.
+    train_profile = seasonal_profile(history.iloc[:cal_start])
+    all_res = residuals(history, train_profile)
     res_vals = all_res.to_numpy()
-    sigma_global = max(robust_sigma(all_res), 0.01)
+    sigma_global = max(robust_sigma(all_res.iloc[:cal_start]), 0.01)
 
     # Precompute profile lookup for every step in history by time-of-day key
-    all_base = profile.reindex(_key(idx)).to_numpy()  # shape (n,)
+    all_base = train_profile.reindex(_key(idx)).to_numpy()  # shape (n,)
 
     per_step_res: list[list[float]] = [[] for _ in range(steps)]
     for i in range(cal_start, n - steps):
@@ -123,8 +128,10 @@ def forecast_segment(
     q05, q95 = _empirical_quantiles(history, profile, steps)
     points = []
     for i, (ts, m) in enumerate(zip(future, mean, strict=True)):
-        lower = max(0.0, float(m) + q05[i])
-        upper = float(m) + q95[i]
+        # Clamp so the interval always contains the point forecast, even when
+        # empirical quantiles are biased (both positive or both negative).
+        lower = min(float(m), max(0.0, float(m) + q05[i]))
+        upper = max(float(m), float(m) + q95[i])
         idx = congestion_index(float(m), segment.free_flow_kmh)
         points.append(
             ForecastPoint(
@@ -140,6 +147,72 @@ def forecast_segment(
     return SegmentForecast(
         segment_id=segment.id,
         method="seasonal-median + decaying residual",
+        horizon_minutes=steps * STEP_MINUTES,
+        points=points,
+        peak_index=peak.congestion_index,
+        peak_ts=peak.ts,
+        peak_level=peak.level,
+    )
+
+
+def forecast_segment_ets(
+    history: pd.Series, segment: SegmentInfo, horizon_minutes: int = 60
+) -> SegmentForecast:
+    """Forecast using Holt-Winters Exponential Smoothing (additive trend + seasonality).
+
+    Requires ``statsmodels``; falls back to :func:`forecast_segment` when it is not installed.
+    Seasonal period is 288 steps (24 h × 12 steps/h at 5-min resolution).
+    """
+    try:
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+    except ImportError as exc:
+        raise ImportError("statsmodels is required: pip install statsmodels") from exc
+
+    if len(history) < MIN_POINTS:
+        raise ValueError(f"need at least {MIN_POINTS} readings, got {len(history)}")
+
+    steps = max(1, horizon_minutes // STEP_MINUTES)
+    last = history.index[-1]
+    future = pd.DatetimeIndex(
+        [last + timedelta(minutes=STEP_MINUTES * (i + 1)) for i in range(steps)]
+    )
+
+    # Fit on the full history; 288 = one full day at 5-min resolution
+    seasonal_periods = 288
+    fit = ExponentialSmoothing(
+        history,
+        trend="add",
+        seasonal="add",
+        seasonal_periods=seasonal_periods,
+        initialization_method="estimated",
+    ).fit(optimized=True)
+
+    raw_forecast = fit.forecast(steps)
+    mean = np.clip(raw_forecast.to_numpy(), 3, segment.free_flow_kmh * 1.05)
+
+    # Confidence interval: residual sigma from in-sample fit
+    resid = history.to_numpy() - fit.fittedvalues.to_numpy()
+    sigma = max(float(1.4826 * np.median(np.abs(resid - np.median(resid)))), 0.01)
+
+    points = []
+    for i, (ts, m) in enumerate(zip(future, mean, strict=True)):
+        widen = np.sqrt(1 + 0.05 * (i + 1))
+        half = Z90 * sigma * widen
+        idx = congestion_index(float(m), segment.free_flow_kmh)
+        points.append(
+            ForecastPoint(
+                ts=ts.to_pydatetime(),
+                speed_kmh=round(float(m), 2),
+                lower_kmh=round(max(0.0, float(m) - half), 2),
+                upper_kmh=round(float(m) + half, 2),
+                congestion_index=round(idx, 3),
+                level=level_for(idx),
+            )
+        )
+    peak = max(points, key=lambda p: p.congestion_index)
+    return SegmentForecast(
+        segment_id=segment.id,
+        method="holt-winters-ets",
         horizon_minutes=steps * STEP_MINUTES,
         points=points,
         peak_index=peak.congestion_index,
