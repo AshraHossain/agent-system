@@ -14,7 +14,7 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 109 offline tests, no API key needed
+uv run pytest                                  # 115 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
@@ -70,7 +70,7 @@ vendor ─► PO ─► submit ─► receive ─► invoice ─► match ─►
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
 | `qa/score.py` | Detection rate against the planted bugs |
-| `qa/stress.py` | Seeded random POs with an independent Decimal oracle; failure rate per rule and variant |
+| `qa/stress.py` | Seeded random POs pushed through to payment against an independent Decimal oracle; failure rate per rule and variant |
 | `qa/spec_diff.py` | API surface (operations, roles, request fields) and its diff against the previous run |
 | `qa/labels.py` | Labelled dataset for the classifier, built from the planted bugs (no LLM) |
 | `qa/dspy_opt.py` | DSPy violation classifier: optimize, evaluate, second opinion (optional extra) |
@@ -82,9 +82,11 @@ generates randomized POs: 1-3 lines, float-trap prices, and full, partial or
 zero receipts. Each gets an invoice variant: `exact`, `under`, `over_qty`,
 `over_cent` or `price_up_qty_down`. For every scenario, Python first computes
 what a correct AP system must do. The scenario is then pushed through
-create → match → approve, and every gap is a violation. The output is the
-failure rate overall, per rule and per variant, written to `var/stress/`. The
-same seed always gives the same scenarios.
+create → match → approve → pay, and every gap is a violation. Payment is
+attempted even on invoices that were stopped at match, and must be refused;
+an approved invoice paid in full must leave the vendor with no open AP. The
+output is the failure rate overall, per rule and per variant, written to
+`var/stress/`. The same seed always gives the same scenarios.
 
 `--concurrency K` keeps K scenarios in flight at once. Each scenario has its
 own vendor, PO and transcript, so concurrency changes the load, not the
@@ -96,11 +98,11 @@ verdicts at any K.
 | Practice API | Failure rate (50 scenarios, seed 7) |
 | --- | --- |
 | clean | 0% |
-| `overpay_ordered` | 36% |
+| `overpay_ordered` / `exposure_not_cleared` | 36% |
 | `float_money` | 30% |
-| `no_price_check` / `unmatched_approve` | 22% |
-| `silent_partial` | 18% |
-| `dup_case`, `race_approve`, `uom_ignored`, ... | 0%: random volume can't find these; the targeted attacks do |
+| `no_price_check` / `unmatched_approve` / `pay_unapproved` | 22% |
+| `silent_partial` / `approve_skips_gl` | 18% |
+| `dup_case`, `race_approve`, `double_pay`, `overpay_disbursement`, ... | 0%: random volume can't find these; the targeted attacks do |
 
 ## Unit of measure
 
@@ -173,7 +175,7 @@ an API response is a financial-integrity violation. It's an optional extra:
 
 ```bash
 uv sync --extra dspy
-uv run ledger-hound dspy dataset                          # 112 labelled rows, no LLM needed
+uv run ledger-hound dspy dataset                          # 118 labelled rows, no LLM needed
 uv run ledger-hound dspy optimize --optimizer bootstrap   # needs BYNARA_API_KEY
 uv run ledger-hound run --classifier var/dspy/classifier.json   # second opinion in the report
 ```

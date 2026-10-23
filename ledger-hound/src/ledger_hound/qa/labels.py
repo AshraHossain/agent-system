@@ -52,7 +52,8 @@ RULE_TEXT: dict[str, str] = {
     "any": (
         "All P2P financial controls: invoice total <= received value; 3-way match before approval; "
         "partial receipts flagged at match; invoice prices equal PO prices; balanced GL at cent "
-        "precision; vendor exposure equals amounts posted; valid invoices must not be refused."
+        "precision; vendor exposure equals amounts posted; only approved invoices may be paid, "
+        "and paying an invoice in full clears its open AP; valid invoices must not be refused."
     ),
 }
 
@@ -97,14 +98,21 @@ def from_scenario(res: dict[str, Any], bugs: str) -> dict[str, Any]:
         "rule": RULE_TEXT["any"],
         "attempt": (
             f"PO for {po}; received {got}; vendor invoices {inv} "
-            f"({res['variant']}), then match and approve are attempted."
+            f"({res['variant']}), then match, approve and payment are attempted."
         ),
         "exchanges": render_exchanges(res["exchanges"]),
         "violation": bool(res["violations"]),
     }
 
 
-STRESS_BUGS = ("overpay_ordered", "float_money", "silent_partial", "no_price_check")
+STRESS_BUGS = (
+    "overpay_ordered",
+    "float_money",
+    "silent_partial",
+    "no_price_check",
+    "pay_unapproved",
+    "exposure_not_cleared",
+)
 
 
 async def build_dataset(

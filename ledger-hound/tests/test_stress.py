@@ -60,6 +60,16 @@ async def test_clean_api_has_zero_violations():
     assert sum(row["scenarios"] for row in result["by_variant"].values()) == 50
 
 
+async def test_clean_api_pays_approved_invoices_and_refuses_the_rest():
+    result = await _stress(frozenset())
+    tried = [r["observed"] for r in result["results"] if "pay_status" in r["observed"]]
+    paid = [o for o in tried if o["reached_gl"]]
+    stopped = [o for o in tried if not o["reached_gl"]]
+    assert paid and stopped
+    assert all(o["pay_status"] == 200 and o["open_ap_after_pay"] == "0.00" for o in paid)
+    assert all(o["pay_status"] == 409 for o in stopped)
+
+
 @pytest.mark.parametrize(
     ("bug", "rule"),
     [
@@ -67,6 +77,10 @@ async def test_clean_api_has_zero_violations():
         ("silent_partial", "partial_receipt_flag"),
         ("no_price_check", "price_variance"),
         ("float_money", "gl_balance"),
+        ("pay_unapproved", "payment_gate"),
+        ("exposure_not_cleared", "exposure_integrity"),
+        # paying a liability that approve never booked drives open AP negative
+        ("approve_skips_gl", "exposure_integrity"),
     ],
 )
 async def test_bug_shows_up_as_failure_rate(bug, rule):
@@ -75,9 +89,10 @@ async def test_bug_shows_up_as_failure_rate(bug, rule):
     assert 0 < result["failure_rate"] < 1
 
 
-async def test_random_volume_cannot_find_targeted_bugs():
-    """Duplicate-number bugs need a targeted probe; stress alone stays green. Both are needed."""
-    result = await _stress(frozenset({"dup_case"}), n=20)
+@pytest.mark.parametrize("bug", ["dup_case", "double_pay", "overpay_disbursement"])
+async def test_random_volume_cannot_find_targeted_bugs(bug):
+    """These need a targeted probe (a repeat or an inflated payment); stress alone stays green."""
+    result = await _stress(frozenset({bug}), n=20)
     assert result["failed"] == 0
 
 

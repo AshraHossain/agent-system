@@ -8,9 +8,11 @@ over by a unit, over by a cent, or price-inflated with lower quantity.
 The method is differential testing. For every scenario, Python first works
 out what a correct AP system must do (the ``Expectation``), using Decimal and
 nothing from the API. Then the scenario is pushed through the API as far as
-it will go (create -> match -> approve), and every gap between expected and
-observed is recorded as a violation. Results are aggregated into a failure
-rate overall, per rule, and per invoice variant.
+it will go (create -> match -> approve -> pay), and every gap between expected
+and observed is recorded as a violation. Payment is attempted even on invoices
+that were stopped, as an attacker would; a paid invoice must leave no open AP.
+Results are aggregated into a failure rate overall, per rule, and per invoice
+variant.
 
 Every scenario is generated from a seeded RNG, so ``--seed 7`` reproduces the
 same 50 scenarios on any machine. That makes a failure report actionable.
@@ -231,7 +233,36 @@ async def _run_scenario(wf: Workflow, s: Scenario) -> ScenarioResult:
         res.violate("false_rejection", "valid invoice never reached the GL")
     if reached_gl:
         await _check_books(wf, res, a.body, inv, vendor, e)
+    if wf.catalog.has("pay_invoice"):
+        await _check_payment(wf, res, inv, vendor, e, reached_gl)
     return res
+
+
+async def _check_payment(
+    wf: Workflow, res: ScenarioResult, inv: Any, vendor: Any, e: Expectation, approved: bool
+) -> None:
+    """Pay the invoice in full; only an approved one may be paid, and paying clears AP."""
+    ex = await wf.pay(inv, e.invoice_amount)
+    res.observed["pay_status"] = ex.status
+    if ex.status >= 500 or ex.status == 0:
+        res.violate("server_error", f"pay invoice: HTTP {ex.status}")
+        return
+    if not approved:
+        if ex.ok:
+            res.violate("payment_gate", "invoice that was never approved was paid")
+        return
+    if not ex.ok:
+        res.violate("false_rejection", f"payment of approved invoice refused: {ex.body}")
+        return
+    entry = pick(ex.body, "gl_entry", "journal_entry", "gl")
+    for problem in gl_problems(entry) if entry else ["payment posted no GL entry"]:
+        res.violate("gl_balance", f"disbursement: {problem}")
+    if wf.catalog.has("vendor_exposure"):
+        # Each scenario has its own vendor, so a fully paid invoice leaves exactly zero.
+        open_ap = dec(await wf.open_ap(vendor))
+        res.observed["open_ap_after_pay"] = str(open_ap)
+        if open_ap != 0:
+            res.violate("exposure_integrity", f"open AP {open_ap} after paying the invoice in full")
 
 
 async def _check_books(
