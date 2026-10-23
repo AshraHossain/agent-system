@@ -500,6 +500,117 @@ async def price_variance(p: Probe) -> Outcome:
 
 
 @attack(
+    "price_tolerance_overbill",
+    "price_variance",
+    "Invoice at 10% above PO price (tests whether any tolerance is too wide)",
+    "match flags the 10% price variance; invoice never reaches the GL",
+    "high",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def price_tolerance_overbill(p: Probe) -> Outcome:
+    # PO at PRICE/unit, receive TEN units, invoice 9 units at 10% above PO price.
+    # 9 × (PRICE×1.1) = 9 × 11.00 = 99.00 ≤ 100.00 received; passes the overpayment gate.
+    # Exact-match check should flag the price variance; a loose tolerance lets it through.
+    invoice_price = Decimal("11.00")  # PRICE * 1.10
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line(Decimal("9"), invoice_price))
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice refused at entry with HTTP {ex.status}")
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    if downstream["reached_gl"]:
+        return breached(
+            f"price 10% over PO ({PRICE} -> {invoice_price}) passed match and was approved",
+            po_price=str(PRICE),
+            invoice_price=str(invoice_price),
+            downstream=downstream,
+        )
+    return held(f"stopped at {downstream['blocked_at']}", downstream=downstream)
+
+
+@attack(
+    "rematch_after_backorder",
+    "state_machine",
+    "Re-match a matched_with_exceptions invoice after the backorder fills",
+    "second match call returns 409; partial-receipt exception is preserved",
+    "medium",
+    "create_invoice",
+    "match_invoice",
+    "receive_po",
+)
+async def rematch_after_backorder(p: Probe) -> Outcome:
+    # Partial receipt (6 of 10) → invoice for 6 → first match gives matched_with_exceptions.
+    # Backorder fills (receive remaining 4). Vendor calls match again to clear the exception.
+    # Clean API: 409 (invoice is already matched_with_exceptions).
+    # Bug: second match succeeds and silently clears the partial-receipt exception.
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line(), receive=[(p.sku(), Decimal("6"))])
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line(Decimal("6")))
+    if not ex.ok:
+        return "ERROR", f"invoice creation failed: HTTP {ex.status}", {"body": ex.body}
+    inv_id = entity_id(ex, "invoice_id")
+    m1 = await p.wf.match(inv_id)
+    if not m1.ok:
+        return "ERROR", f"first match failed: HTTP {m1.status}", {"body": m1.body}
+    if m1.body.get("status") != "matched_with_exceptions":
+        return "SKIPPED", f"expected matched_with_exceptions, got {m1.body.get('status')}", {}
+    # Fill the backorder
+    p.wf.require("fill backorder", await p.wf.receive(po, [(p.sku(), Decimal("4"))]))
+    m2 = await p.wf.match(inv_id)
+    if m2.status >= 500 or m2.status == 0:
+        return crashed(m2)
+    if m2.ok and m2.body.get("status") == "matched":
+        return breached(
+            "re-match after backorder cleared partial-receipt exception",
+            first_match=m1.body,
+            second_match=m2.body,
+        )
+    return held(f"re-match refused with HTTP {m2.status}", first_match=m1.body)
+
+
+@attack(
+    "invoice_extra_sku",
+    "match_gate",
+    "Invoice a line for a SKU not on the PO (freight / tax charge injection)",
+    "invoice refused: the extra SKU is not on the purchase order",
+    "high",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def invoice_extra_sku(p: Probe) -> Outcome:
+    # PO for sku(0); invoice for sku(0) + sku(1) — sku(1) simulates an off-PO freight line.
+    if len(p.skus) < 2:
+        return "SKIPPED", "catalogue has fewer than 2 SKUs; cannot build an off-PO line", {}
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line(i=0))
+    # Invoice 9 of sku(0) + 1 of sku(1) — total 100 = received, overpayment cap passes.
+    # The clean API rejects it because sku(1) is not on the PO.
+    main_line: Line = (p.sku(0), Decimal("9"), PRICE)
+    extra_line: Line = (p.sku(1), Decimal("1"), PRICE)
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), [main_line, extra_line])
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(
+            f"extra-SKU invoice rejected at creation (HTTP {ex.status})",
+            extra_sku=p.sku(1),
+        )
+    # Invoice creation accepted an off-PO SKU — the unauthorized charge is now in
+    # the system as a liability, regardless of whether match later catches it.
+    return breached(
+        f"invoice with off-PO line for {p.sku(1)} accepted at creation (HTTP {ex.status})",
+        po_sku=p.sku(0),
+        extra_sku=p.sku(1),
+        invoice_id=entity_id(ex, "invoice_id"),
+    )
+
+
+@attack(
     "receive_before_submit",
     "state_machine",
     "Receive goods on a draft (unsubmitted) PO",
@@ -604,6 +715,264 @@ async def fractional_discrete_qty(p: Probe) -> Outcome:
     if accepted:
         return breached(f"accepted: {', '.join(accepted)}", **evidence)
     return held(f"all 3 fractional {uoms[sku]} probes refused", **evidence)
+
+
+@attack(
+    "wrong_uom_conversion_factor",
+    "uom_consistency",
+    "Invoice 150 LB at half the per-LB price; wrong factor passes both qty and price checks",
+    "match fails: 150/50=3 BOX > 2 received; price×50 also ≠ PO price",
+    "high",
+    "list_items",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def wrong_uom_conversion_factor(p: Probe) -> Outcome:
+    uoms = await _uoms(p)
+    box_items = [i for i, s in enumerate(p.skus) if uoms.get(s) == "BOX"]
+    if not box_items:
+        return "SKIPPED", "no BOX item in the catalogue", {}
+    if not p.wf.catalog.line_field("create_invoice", "uom"):
+        return "SKIPPED", "invoice lines take no unit of measure", {}
+    i = box_items[0]
+    sku = p.sku(i)
+    v = await p.wf.fresh_vendor()
+    # PO at PRICE/BOX; receive 2 BOX (= 100 LB at 50 LB/BOX)
+    po = await p.wf.received_po(v, p.line(qty=Decimal("2"), i=i))
+    # price_lb = PRICE/100: with wrong factor (100) money(price_lb×100)=PRICE ✓ and 150/100=1.5<2 ✓
+    # with correct factor (50): money(price_lb×50)=PRICE/2≠PRICE and 150/50=3>2, both fail ✓
+    price_lb = PRICE / Decimal("100")
+    ex = await p.wf.create_invoice(
+        v, po, p.wf.unique("INV"), [(sku, Decimal("150"), price_lb)], uoms=["LB"]
+    )
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice in LB refused at creation: HTTP {ex.status}", sku=sku)
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    evidence = {
+        "sku": sku,
+        "invoiced_lb": "150",
+        "price_per_lb": str(price_lb),
+        "received_box": "2",
+    }
+    if downstream["reached_gl"]:
+        return breached(
+            "150 LB at half price slipped through with wrong conversion factor",
+            **evidence,
+            downstream=downstream,
+        )
+    return held(f"stopped at {downstream['blocked_at']}", **evidence, downstream=downstream)
+
+
+@attack(
+    "invoice_inactive_vendor",
+    "inactive_vendor_gate",
+    "Invoice against a PO after the vendor is deactivated",
+    "invoice refused once vendor is deactivated",
+    "high",
+    "create_invoice",
+    "update_vendor",
+)
+async def invoice_inactive_vendor(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    p.wf.require("deactivate vendor", await p.wf.set_vendor_active(v, False))
+    ex = await p.wf.create_invoice(v, po, p.wf.unique("INV"), p.line())
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if not ex.ok:
+        return held(f"invoice refused for inactive vendor (HTTP {ex.status})", vendor_id=str(v))
+    downstream = await p.push_through(entity_id(ex, "invoice_id"))
+    where = (
+        "and reached the GL"
+        if downstream["reached_gl"]
+        else f"(stopped later at {downstream['blocked_at']})"
+    )
+    return breached(
+        f"invoice accepted for inactive vendor (HTTP {ex.status}) {where}",
+        vendor_id=str(v),
+        downstream=downstream,
+    )
+
+
+@attack(
+    "partial_match_no_gl",
+    "gl_balance",
+    "Approve a partial-receipt invoice and verify GL is posted",
+    "GL entry created even when receipt is partial",
+    "critical",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+)
+async def partial_match_no_gl(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line(), receive=[(p.sku(), Decimal("6"))])
+    inv_id = await p.wf.invoice(v, po, p.line(qty=Decimal("6")))
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    ex = p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    gl = ex.body.get("gl_entry") if isinstance(ex.body, dict) else None
+    if gl is None and p.wf.catalog.has("gl_entries"):
+        gl_ex = await p.wf.gl_for(inv_id)
+        if gl_ex.ok and isinstance(gl_ex.body, list) and gl_ex.body:
+            gl = gl_ex.body[0]
+    if gl is None:
+        return breached(
+            "approve returned 200 but no GL entry was created for partial-match invoice",
+            invoice_id=str(inv_id),
+        )
+    return held("GL entry present for partial-match invoice", invoice_id=str(inv_id))
+
+
+@attack(
+    "pay_unapproved_invoice",
+    "payment_gate",
+    "Pay an invoice that has never been approved",
+    "payment refused until invoice is approved",
+    "critical",
+    "create_invoice",
+    "pay_invoice",
+)
+async def pay_unapproved_invoice(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    inv_id = await p.wf.invoice(v, po, p.line())
+    ex = await p.wf.pay(inv_id, PRICE * TEN)
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        return breached(
+            f"payment accepted for unapproved invoice (HTTP {ex.status})",
+            invoice_id=str(inv_id),
+        )
+    return held(
+        f"payment refused for unapproved invoice (HTTP {ex.status})", invoice_id=str(inv_id)
+    )
+
+
+@attack(
+    "double_payment",
+    "exposure_integrity",
+    "Pay an already-paid invoice a second time",
+    "second payment refused",
+    "critical",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+    "pay_invoice",
+)
+async def double_payment(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    inv_id = await p.wf.invoice(v, po, p.line())
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    amt = PRICE * TEN
+    p.wf.require("first payment", await p.wf.pay(inv_id, amt))
+    ex = await p.wf.pay(inv_id, amt)
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        cash_credits = 0
+        if p.wf.catalog.has("gl_entries"):
+            gl_ex = await p.wf.gl_for(inv_id)
+            if gl_ex.ok and isinstance(gl_ex.body, list):
+                for entry in gl_ex.body:
+                    for ln in entry.get("lines", []):
+                        if "1000" in str(ln.get("account", "")) and dec(ln.get("credit", 0)) > 0:
+                            cash_credits += 1
+        return breached(
+            f"second payment accepted (HTTP {ex.status}); {cash_credits} cash entries in GL",
+            invoice_id=str(inv_id),
+            cash_gl_credits=cash_credits,
+        )
+    return held(f"second payment refused (HTTP {ex.status})", invoice_id=str(inv_id))
+
+
+@attack(
+    "payment_exceeds_invoice",
+    "overpayment_protection",
+    "Pay more than the invoice amount",
+    "payment refused if it exceeds the invoice",
+    "critical",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+    "pay_invoice",
+)
+async def payment_exceeds_invoice(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    po = await p.wf.received_po(v, p.line())
+    inv_id = await p.wf.invoice(v, po, p.line())
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    overpayment = PRICE * TEN * Decimal("2")
+    ex = await p.wf.pay(inv_id, overpayment)
+    if ex.status >= 500 or ex.status == 0:
+        return crashed(ex)
+    if ex.ok:
+        return breached(
+            f"payment of {overpayment} accepted for invoice worth {PRICE * TEN}",
+            invoice_id=str(inv_id),
+            paid=str(overpayment),
+            invoiced=str(PRICE * TEN),
+        )
+    return held(f"overpayment refused (HTTP {ex.status})", invoice_id=str(inv_id))
+
+
+@attack(
+    "exposure_not_cleared_after_payment",
+    "exposure_integrity",
+    "Pay an invoice and verify vendor exposure drops to zero",
+    "open AP decreases by invoice amount after payment",
+    "critical",
+    "vendor_exposure",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+    "pay_invoice",
+)
+async def exposure_not_cleared_after_payment(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    lines = p.line()
+    po = await p.wf.received_po(v, lines)
+    inv_id = await p.wf.invoice(v, po, lines)
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    before_ex = await p.wf.exposure(v)
+    if not before_ex.ok:
+        return crashed(before_ex)
+    before = dec(pick(before_ex.body, "open_ap", "exposure", "total", "amount"))
+    inv_amount = PRICE * TEN
+    p.wf.require("pay invoice", await p.wf.pay(inv_id, inv_amount))
+    after_ex = await p.wf.exposure(v)
+    if not after_ex.ok:
+        return crashed(after_ex)
+    after = dec(pick(after_ex.body, "open_ap", "exposure", "total", "amount"))
+    if after is None or before is None:
+        return crashed(after_ex)
+    if after >= before:
+        return breached(
+            f"open AP unchanged after payment: {before} -> {after}",
+            before=str(before),
+            after=str(after),
+            invoice_id=str(inv_id),
+        )
+    expected = before - inv_amount
+    if after != expected:
+        return breached(
+            f"open AP decreased but not fully cleared: {before} -> {after} (expected {expected})",
+            before=str(before),
+            after=str(after),
+            expected=str(expected),
+            invoice_id=str(inv_id),
+        )
+    return held(
+        f"open AP cleared correctly after payment: {before} -> {after}",
+        invoice_id=str(inv_id),
+    )
 
 
 # ------------------------------------------------------------------- runner

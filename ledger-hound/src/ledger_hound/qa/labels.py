@@ -48,10 +48,12 @@ RULE_TEXT: dict[str, str] = {
     "price_variance": "An invoice priced above the PO unit price must not pass matching or reach the GL.",
     "state_machine": "Goods cannot be received on a PO that has not been submitted.",
     "uom_consistency": "Invoice lines must be matched in the PO line's unit of measure, and discrete units (EA, BOX, SHEET, ROLL) must be whole quantities.",
+    "payment_gate": "An invoice must be in approved status before a payment disbursement can be posted.",
     "any": (
         "All P2P financial controls: invoice total <= received value; 3-way match before approval; "
         "partial receipts flagged at match; invoice prices equal PO prices; balanced GL at cent "
-        "precision; vendor exposure equals amounts posted; valid invoices must not be refused."
+        "precision; vendor exposure equals amounts posted; only approved invoices may be paid, "
+        "and paying an invoice in full clears its open AP; valid invoices must not be refused."
     ),
 }
 
@@ -96,14 +98,21 @@ def from_scenario(res: dict[str, Any], bugs: str) -> dict[str, Any]:
         "rule": RULE_TEXT["any"],
         "attempt": (
             f"PO for {po}; received {got}; vendor invoices {inv} "
-            f"({res['variant']}), then match and approve are attempted."
+            f"({res['variant']}), then match, approve and payment are attempted."
         ),
         "exchanges": render_exchanges(res["exchanges"]),
         "violation": bool(res["violations"]),
     }
 
 
-STRESS_BUGS = ("overpay_ordered", "float_money", "silent_partial", "no_price_check")
+STRESS_BUGS = (
+    "overpay_ordered",
+    "float_money",
+    "silent_partial",
+    "no_price_check",
+    "pay_unapproved",
+    "exposure_not_cleared",
+)
 
 
 async def build_dataset(

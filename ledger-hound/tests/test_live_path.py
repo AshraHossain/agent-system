@@ -11,8 +11,11 @@ import json
 
 from conftest import live_brain, text, tool
 
+from ledger_hound.p2p_api.app import create_app
 from ledger_hound.qa.agentic import explore_with_agent
 from ledger_hound.qa.brain import MockBrain, extract_json
+from ledger_hound.qa.discovery import discover
+from ledger_hound.qa.http import ApiClient
 from ledger_hound.qa.judge import investigate
 
 
@@ -43,10 +46,10 @@ async def test_invalid_json_retries_then_falls_back_to_mock():
     assert brain.notes and "fell back to mock" in brain.notes[0]
 
 
-async def test_agent_explorer_drives_api_and_oracle_grades_it(clean):
-    client, catalog = clean
+def _scripted_agent_walk():
+    """A fake LLM that walks the whole flow on vendor 1, through payment."""
     line = {"sku": "2X4-8-SPF", "qty": "10", "unit_price": "4.98"}
-    brain, seen = live_brain(
+    return live_brain(
         [
             tool("list_operations"),
             tool("call_api", method="DELETE", path="/vendors/1", body_json=""),  # guard test
@@ -74,18 +77,42 @@ async def test_agent_explorer_drives_api_and_oracle_grades_it(clean):
             ),
             tool("call_api", method="POST", path="/invoices/5/match", body_json=""),
             tool("call_api", method="POST", path="/invoices/5/approve", body_json=""),
+            tool(
+                "call_api",
+                method="POST",
+                path="/invoices/5/pay",
+                body_json=json.dumps({"amount": "49.80"}),
+            ),
             text('{"vendor_id": 1, "po_id": 4, "invoice_id": 5, "notes": "done"}'),
         ]
     )
+
+
+async def test_agent_explorer_drives_api_and_oracle_grades_it(clean):
+    client, catalog = clean
+    brain, seen = _scripted_agent_walk()
     result = await explore_with_agent(client, catalog, brain)
 
-    assert result["status"] == "PASS", result["steps"][-3:]
+    assert result["status"] == "PASS", result["steps"][-4:]
     assert result["mode"] == "agent"
     tool_results = [m["content"] for m in seen[2]["messages"] if m.get("role") == "tool"]
     assert any("not a discovered operation" in t for t in tool_results)
     assert not any(ex.method == "DELETE" for ex in client.log), "guard must block the call"
     names = [s["name"] for s in result["steps"]]
-    assert names[-3:] == ["verify PO", "verify invoice", "verify GL"]
+    assert names[-4:] == ["verify PO", "verify invoice", "verify GL", "verify exposure"]
+
+
+async def test_agent_explorer_catches_exposure_not_cleared():
+    """The agent's walk looks fine call by call; the oracle rebuilds open AP from the GL."""
+    client = ApiClient.for_app(create_app(frozenset({"exposure_not_cleared"})))
+    try:
+        brain, _ = _scripted_agent_walk()
+        result = await explore_with_agent(client, await discover(client), brain)
+    finally:
+        await client.aclose()
+    assert result["status"] == "FAIL"
+    failed = [s["name"] for s in result["steps"] if s["verdict"] != "as_expected"]
+    assert failed == ["verify exposure"]
 
 
 async def test_agent_explorer_lie_is_caught(clean):
@@ -111,3 +138,39 @@ async def test_full_investigation_with_mock_brain(clean):
         "gl_balance",
         "duplicate_invoice_detection",
     }
+
+
+async def test_live_brain_narrates_stress_and_falls_back_on_bad_json():
+    facts = {
+        "scenarios": 4,
+        "failed": 1,
+        "failure_rate": 0.25,
+        "by_rule": {"payment_gate": 1},
+        "by_variant": {"exact": {"scenarios": 3, "failed": 0}, "x": {"scenarios": 1, "failed": 1}},
+        "examples": [],
+        "shrunk": [],
+    }
+    brain, _ = live_brain([text('{"narrative": "Unapproved invoices are paid."}')])
+    assert await brain.narrate_stress(facts) == "Unapproved invoices are paid."
+
+    brain, _ = live_brain([text("nope"), text("still nope")])
+    assert (await brain.narrate_stress(facts)).startswith("1 of 4 scenarios violated")
+    assert "narrate_stress: fell back to mock" in brain.notes[0]
+
+
+async def test_live_brain_explain_diff_returns_string():
+    from conftest import live_brain, text
+
+    brain, _ = live_brain([text('{"explanation": "The submit endpoint was removed."}')])
+    result = await brain.explain_diff(
+        {
+            "unchanged": False,
+            "operations_removed": ["POST /purchase-orders/{po_id}/submit"],
+            "operations_added": [],
+            "role_changes": [{"role": "submit_po", "before": "POST /...", "after": None}],
+            "changed": {},
+            "breaking": ["operation removed: POST /purchase-orders/{po_id}/submit"],
+            "source": None,
+        }
+    )
+    assert isinstance(result, str) and result

@@ -112,6 +112,79 @@ BUGS: dict[str, Bug] = {
             "fractional_discrete_qty",
             "Fractional quantities are accepted for discrete units (2.5 EA, 0.5 BOX).",
         ),
+        Bug(
+            "wrong_uom_factor",
+            "uom_consistency",
+            "wrong_uom_conversion_factor",
+            "Unit conversion uses 2× the correct factor; qty is understated so overbilling passes.",
+        ),
+        Bug(
+            "relaxed_price_tolerance",
+            "price_variance",
+            "price_tolerance_overbill",
+            "Match uses a 10% price tolerance instead of exact match;"
+            " small price hikes slip through.",
+        ),
+        Bug(
+            "rematch_allowed",
+            "state_machine",
+            "rematch_after_backorder",
+            "Match does not check invoice status; already-matched invoices can be re-matched,"
+            " silently clearing partial-receipt exceptions.",
+        ),
+        Bug(
+            "extra_sku_allowed",
+            "match_gate",
+            "invoice_extra_sku",
+            "Invoice creation does not verify that all line SKUs are on the PO;"
+            " freight or tax lines not in the order can be invoiced and paid.",
+        ),
+        Bug(
+            "receive_draft_po",
+            "state_machine",
+            "receive_before_submit",
+            "Receipt endpoint accepts goods against a PO that has not been submitted.",
+        ),
+        Bug(
+            "inactive_vendor_invoice",
+            "inactive_vendor_gate",
+            "invoice_inactive_vendor",
+            "Invoice creation does not verify that the vendor is still active;"
+            " invoices can be raised for deactivated vendors.",
+        ),
+        Bug(
+            "approve_skips_gl",
+            "gl_balance",
+            "partial_match_no_gl",
+            "Approve skips GL posting for matched_with_exceptions invoices;"
+            " partial-receipt approvals create no ledger entry.",
+        ),
+        Bug(
+            "pay_unapproved",
+            "payment_gate",
+            "pay_unapproved_invoice",
+            "Payment endpoint does not require the invoice to be in approved status.",
+        ),
+        Bug(
+            "double_pay",
+            "exposure_integrity",
+            "double_payment",
+            "Paying an already-paid invoice posts a second disbursement GL entry.",
+        ),
+        Bug(
+            "overpay_disbursement",
+            "overpayment_protection",
+            "payment_exceeds_invoice",
+            "Payment amount is not verified against the invoice amount;"
+            " overpayment posts to the GL.",
+        ),
+        Bug(
+            "exposure_not_cleared",
+            "exposure_integrity",
+            "exposure_not_cleared_after_payment",
+            "Vendor exposure sums only AP credits and never subtracts the debits"
+            " posted at payment, so open AP stays positive after the invoice is paid.",
+        ),
     ]
 }
 

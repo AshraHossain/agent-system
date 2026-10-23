@@ -43,6 +43,24 @@ async def test_overpayment_breach_carries_numbers():
     await client.aclose()
 
 
+async def test_happy_path_ends_with_exposure_cleared():
+    client = ApiClient.for_app(create_app(frozenset()))
+    happy = await Explorer(client, await discover(client)).run()
+    await client.aclose()
+    last = happy["steps"][-1]
+    assert [s["name"] for s in happy["steps"][-2:]] == ["pay invoice", "exposure after payment"]
+    assert last["verdict"] == "as_expected", last
+
+
+async def test_exposure_not_cleared_also_fails_happy_path():
+    client = ApiClient.for_app(create_app(frozenset({"exposure_not_cleared"})))
+    happy = await Explorer(client, await discover(client)).run()
+    await client.aclose()
+    assert happy["status"] == "FAIL"
+    failed = [s["name"] for s in happy["steps"] if s["verdict"] != "as_expected"]
+    assert failed == ["exposure after payment"]
+
+
 async def test_float_bug_also_fails_happy_path():
     # 10 x 4.98 in float is 49.800000000000004 > 49.80 received: a real finding, not planned.
     happy, _ = await _statuses(frozenset({"float_money"}))

@@ -32,6 +32,9 @@ from .bugs import parse_bugs
 CENT = Decimal("0.01")
 # Units that cannot be split: half a stud or a third of a box is a data error.
 DISCRETE_UOMS = frozenset({"EA", "SHEET", "BOX", "ROLL"})
+# Convertible unit pairs: (invoice_uom, po_uom) -> factor such that 1 po_uom = factor invoice_uom.
+# 50 LB = 1 BOX (nails are sold in 50-lb boxes; invoices may arrive in either unit).
+UOM_CONVERT: dict[tuple[str, str], Decimal] = {("LB", "BOX"): Decimal("50")}
 
 
 def money(value: Decimal) -> Decimal:
@@ -175,6 +178,10 @@ class InvoiceIn(BaseModel):
     lines: list[InvoiceLineIn] = Field(min_length=1)
 
 
+class PaymentIn(BaseModel):
+    amount: Decimal
+
+
 # --------------------------------------------------------------------- the app
 
 
@@ -185,6 +192,8 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     seed(store)
     approve_lock = asyncio.Lock()
     float_money = "float_money" in bugs
+    # 10% tolerance lets a small price hike slip through match
+    price_tolerance = Decimal("0.10") if "relaxed_price_tolerance" in bugs else Decimal("0")
 
     app = FastAPI(
         title="P2P API (practice)",
@@ -227,6 +236,14 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     def require_whole(sku: str, qty: Decimal) -> None:
         if "fractional_uom" not in bugs and uom_of(sku) in DISCRETE_UOMS and qty % 1:
             raise HTTPException(422, f"qty {qty} of {sku} must be whole ({uom_of(sku)})")
+
+    def uom_factor(from_uom: str, to_uom: str) -> Decimal | None:
+        """Return the conversion factor (1 to_uom = factor from_uom), or None if unknown.
+        Under wrong_uom_factor the factor is doubled, understating the converted quantity."""
+        factor = UOM_CONVERT.get((from_uom, to_uom))
+        if factor is None:
+            return None
+        return factor * 2 if "wrong_uom_factor" in bugs else factor
 
     def ordered_value(po: PurchaseOrder) -> Decimal:
         return sum((money(ln.qty * ln.unit_price) for ln in po.lines), Decimal("0"))
@@ -350,7 +367,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     @app.post("/purchase-orders/{po_id}/receive")
     async def receive_po(po_id: int, body: ReceiveIn) -> dict[str, Any]:
         po = po_or_404(po_id)
-        if po.status not in {"submitted", "partially_received"}:
+        if po.status not in {"submitted", "partially_received"} and "receive_draft_po" not in bugs:
             raise HTTPException(409, f"cannot receive against a {po.status} purchase order")
         by_sku = {ln.sku: ln for ln in po.lines}
         for rl in body.lines:
@@ -376,7 +393,9 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
 
     @app.post("/invoices", status_code=201)
     async def create_invoice(body: InvoiceIn) -> dict[str, Any]:
-        vendor_or_404(body.vendor_id)
+        vendor = vendor_or_404(body.vendor_id)
+        if not vendor.active and "inactive_vendor_invoice" not in bugs:
+            raise HTTPException(422, f"vendor {body.vendor_id} is inactive")
         po = po_or_404(body.po_id)
         if po.vendor_id != body.vendor_id and "cross_vendor" not in bugs:
             raise HTTPException(422, "invoice vendor does not match purchase order vendor")
@@ -397,7 +416,7 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
         po_skus = {ln.sku for ln in po.lines}
         lines: list[InvoiceLine] = []
         for ln in body.lines:
-            if ln.sku not in po_skus:
+            if ln.sku not in po_skus and "extra_sku_allowed" not in bugs:
                 raise HTTPException(422, f"sku {ln.sku} is not on purchase order {po.id}")
             require_positive("qty", ln.qty)
             require_positive("unit_price", ln.unit_price)
@@ -441,19 +460,37 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     @app.post("/invoices/{invoice_id}/match")
     async def match_invoice(invoice_id: int) -> dict[str, Any]:
         inv = invoice_or_404(invoice_id)
-        if inv.status != "pending":
+        if inv.status != "pending" and "rematch_allowed" not in bugs:
             raise HTTPException(409, f"invoice is already {inv.status}")
         po = store.pos[inv.po_id]
         by_sku = {ln.sku: ln for ln in po.lines}
         failures: list[str] = []
         for ln in inv.lines:
-            po_line = by_sku[ln.sku]
-            if ln.qty > po_line.received_qty:
+            po_line = by_sku.get(ln.sku)
+            if po_line is None:
                 failures.append(f"qty_exceeds_receipt:{ln.sku}")
-            if "no_price_check" not in bugs and ln.unit_price != po_line.unit_price:
-                failures.append(f"price_variance:{ln.sku}")
-            if "uom_ignored" not in bugs and ln.uom != uom_of(ln.sku):
-                failures.append(f"uom_mismatch:{ln.sku}")
+                continue
+            inv_qty = ln.qty
+            conv_factor: Decimal | None = None
+            if ln.uom != uom_of(ln.sku) and "uom_ignored" not in bugs:
+                conv_factor = uom_factor(ln.uom, uom_of(ln.sku))
+                if conv_factor is None:
+                    failures.append(f"uom_mismatch:{ln.sku}")
+                else:
+                    inv_qty = ln.qty / conv_factor
+            if inv_qty > po_line.received_qty:
+                failures.append(f"qty_exceeds_receipt:{ln.sku}")
+            if "no_price_check" not in bugs:
+                if conv_factor is not None:
+                    # invoice price is per invoice unit; scale to the PO unit before comparing
+                    scaled = money(ln.unit_price * conv_factor)
+                    variance = abs(scaled - po_line.unit_price) / po_line.unit_price
+                    if variance > price_tolerance:
+                        failures.append(f"price_variance:{ln.sku}")
+                else:
+                    variance = abs(ln.unit_price - po_line.unit_price) / po_line.unit_price
+                    if variance > price_tolerance:
+                        failures.append(f"price_variance:{ln.sku}")
         if failures:
             inv.status, inv.exceptions = "match_failed", failures
         elif not all(ln.received_qty >= ln.qty for ln in po.lines) and (
@@ -477,6 +514,9 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
             if inv.status not in approvable:
                 raise HTTPException(409, f"cannot approve an invoice that is {inv.status}")
             await asyncio.sleep(0.01)  # simulated ledger write latency
+            if "approve_skips_gl" in bugs and inv.status == "matched_with_exceptions":
+                inv.status = "approved"
+                return {"invoice_id": inv.id, "status": inv.status, "gl_entry": None}
             if float_money:
                 debits = [
                     {
@@ -521,6 +561,42 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
         async with approve_lock:
             return await check_and_post()
 
+    @app.post("/invoices/{invoice_id}/pay")
+    async def pay_invoice(invoice_id: int, body: PaymentIn) -> dict[str, Any]:
+        inv = invoice_or_404(invoice_id)
+        payable = {"approved"}
+        if "pay_unapproved" in bugs:
+            payable |= {"pending", "match_failed", "matched", "matched_with_exceptions"}
+        if "double_pay" in bugs:
+            payable.add("paid")
+        if inv.status not in payable:
+            raise HTTPException(409, f"cannot pay an invoice that is {inv.status}")
+        require_positive("amount", body.amount)
+        amt = money(body.amount)
+        inv_amount = inv.amount if isinstance(inv.amount, Decimal) else Decimal(str(inv.amount))
+        if "overpay_disbursement" not in bugs and amt > money(inv_amount):
+            raise HTTPException(422, f"payment {amt} exceeds invoice amount {money(inv_amount)}")
+        entry = GLEntry(
+            id=store.next_id(),
+            invoice_id=inv.id,
+            vendor_id=inv.vendor_id,
+            lines=[
+                {
+                    "account": "2000 Accounts Payable",
+                    "debit": amt,
+                    "credit": Decimal("0.00"),
+                },
+                {
+                    "account": "1000 Cash/Bank",
+                    "debit": Decimal("0.00"),
+                    "credit": amt,
+                },
+            ],
+        )
+        store.gl.append(entry)
+        inv.status = "paid"
+        return {"invoice_id": inv.id, "status": inv.status, "gl_entry": gl_json(entry)}
+
     # -- ledger and exposure -------------------------------------------------
 
     @app.get("/gl/entries")
@@ -531,15 +607,27 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     async def vendor_exposure(vendor_id: int) -> dict[str, Any]:
         vendor_or_404(vendor_id)
         entries = [e for e in store.gl if e.vendor_id == vendor_id]
-        open_ap = sum(
-            (
-                Decimal(str(ln["credit"]))
-                for e in entries
-                for ln in e.lines
-                if ln["account"].startswith("2000")
-            ),
-            Decimal("0"),
-        )
+        if "exposure_not_cleared" in bugs:
+            # Bug: only credits summed; debits (from payment) are ignored.
+            open_ap = sum(
+                (
+                    Decimal(str(ln["credit"]))
+                    for e in entries
+                    for ln in e.lines
+                    if ln["account"].startswith("2000")
+                ),
+                Decimal("0"),
+            )
+        else:
+            open_ap = sum(
+                (
+                    Decimal(str(ln["credit"])) - Decimal(str(ln["debit"]))
+                    for e in entries
+                    for ln in e.lines
+                    if ln["account"].startswith("2000")
+                ),
+                Decimal("0"),
+            )
         return {
             "vendor_id": vendor_id,
             "open_ap": out(money(open_ap)),

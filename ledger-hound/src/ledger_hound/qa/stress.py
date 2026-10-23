@@ -8,9 +8,11 @@ over by a unit, over by a cent, or price-inflated with lower quantity.
 The method is differential testing. For every scenario, Python first works
 out what a correct AP system must do (the ``Expectation``), using Decimal and
 nothing from the API. Then the scenario is pushed through the API as far as
-it will go (create -> match -> approve), and every gap between expected and
-observed is recorded as a violation. Results are aggregated into a failure
-rate overall, per rule, and per invoice variant.
+it will go (create -> match -> approve -> pay), and every gap between expected
+and observed is recorded as a violation. Payment is attempted even on invoices
+that were stopped, as an attacker would; a paid invoice must leave no open AP.
+Results are aggregated into a failure rate overall, per rule, and per invoice
+variant.
 
 Every scenario is generated from a seeded RNG, so ``--seed 7`` reproduces the
 same 50 scenarios on any machine. That makes a failure report actionable.
@@ -21,7 +23,8 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterator
+from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal
 from typing import Any
 
@@ -231,7 +234,36 @@ async def _run_scenario(wf: Workflow, s: Scenario) -> ScenarioResult:
         res.violate("false_rejection", "valid invoice never reached the GL")
     if reached_gl:
         await _check_books(wf, res, a.body, inv, vendor, e)
+    if wf.catalog.has("pay_invoice"):
+        await _check_payment(wf, res, inv, vendor, e, reached_gl)
     return res
+
+
+async def _check_payment(
+    wf: Workflow, res: ScenarioResult, inv: Any, vendor: Any, e: Expectation, approved: bool
+) -> None:
+    """Pay the invoice in full; only an approved one may be paid, and paying clears AP."""
+    ex = await wf.pay(inv, e.invoice_amount)
+    res.observed["pay_status"] = ex.status
+    if ex.status >= 500 or ex.status == 0:
+        res.violate("server_error", f"pay invoice: HTTP {ex.status}")
+        return
+    if not approved:
+        if ex.ok:
+            res.violate("payment_gate", "invoice that was never approved was paid")
+        return
+    if not ex.ok:
+        res.violate("false_rejection", f"payment of approved invoice refused: {ex.body}")
+        return
+    entry = pick(ex.body, "gl_entry", "journal_entry", "gl")
+    for problem in gl_problems(entry) if entry else ["payment posted no GL entry"]:
+        res.violate("gl_balance", f"disbursement: {problem}")
+    if wf.catalog.has("vendor_exposure"):
+        # Each scenario has its own vendor, so a fully paid invoice leaves exactly zero.
+        open_ap = dec(await wf.open_ap(vendor))
+        res.observed["open_ap_after_pay"] = str(open_ap)
+        if open_ap != 0:
+            res.violate("exposure_integrity", f"open AP {open_ap} after paying the invoice in full")
 
 
 async def _check_books(
@@ -266,14 +298,117 @@ def _describe(s: Scenario) -> dict[str, Any]:
     }
 
 
+def scenario_text(d: dict[str, Any]) -> str:
+    """One line for humans and the narrator: ``PO 2 x A @ 0.57; received 2 x A; invoice ...``."""
+    po = ", ".join(f"{q} x {s} @ {p}" for s, q, p in d["po_lines"])
+    got = ", ".join(f"{q} x {s}" for s, q in d["received"]) or "nothing"
+    inv = ", ".join(f"{q} x {s} @ {p}" for s, q, p in d["invoice_lines"])
+    return f"PO {po}; received {got}; invoice {inv}"
+
+
+# ------------------------------------------------------------------ shrinking
+
+
+def _smaller(q: Decimal) -> list[Decimal]:
+    return sorted({max(Decimal(1), q // 2), q - 1} - {q}) if q > 1 else []
+
+
+def _candidates(s: Scenario) -> Iterator[Scenario]:
+    """Strictly smaller scenarios: one PO line fewer, or one quantity reduced.
+
+    Prices are left alone on purpose: a float-trap price is often the cause.
+    """
+    if len(s.po_lines) > 1:
+        for sku, _, _ in s.po_lines:
+            yield replace(
+                s,
+                po_lines=[ln for ln in s.po_lines if ln[0] != sku],
+                received=[r for r in s.received if r[0] != sku],
+                invoice_lines=[ln for ln in s.invoice_lines if ln[0] != sku],
+            )
+    for i, (sku, q, p) in enumerate(s.po_lines):
+        for new in _smaller(q):
+            po = [*s.po_lines]
+            po[i] = (sku, new, p)
+            received = [(k, min(r, new)) if k == sku else (k, r) for k, r in s.received]
+            yield replace(s, po_lines=po, received=received)
+    for i, (sku, q) in enumerate(s.received):
+        for new in _smaller(q):
+            got = [*s.received]
+            got[i] = (sku, new)
+            yield replace(s, received=got)
+    for i, (sku, q, p) in enumerate(s.invoice_lines):
+        for new in _smaller(q):
+            inv = [*s.invoice_lines]
+            inv[i] = (sku, new, p)
+            yield replace(s, invoice_lines=inv)
+
+
+def _size(s: Scenario) -> dict[str, int]:
+    return {"lines": len(s.po_lines), "units": int(sum(q for _, q, _ in s.po_lines))}
+
+
+async def shrink_scenario(
+    client: ApiClient, catalog: Catalog, s: Scenario, rule: str, budget: int = 100
+) -> dict[str, Any]:
+    """Find a smaller scenario that still breaks ``rule``, re-running each candidate on the API.
+
+    Greedy, like a property-based tester's shrink phase: keep taking the first
+    smaller candidate that still fails until none does or ``budget`` runs are used.
+    A failure that does not reproduce on the first re-run is reported as such:
+    that by itself points at shared state.
+    """
+    runs = 0
+
+    async def violation(c: Scenario) -> dict[str, str] | None:
+        nonlocal runs
+        runs += 1
+        res = await _run_scenario(Workflow(client.view(), catalog, f"shrink{s.id}r{runs}"), c)
+        return next((v for v in res.violations if v["rule"] == rule), None)
+
+    found = await violation(s)
+    if found is None:
+        return {"id": s.id, "rule": rule, "reproduced": False, "runs": runs}
+    best = s
+    progress = True
+    while progress and runs < budget:
+        progress = False
+        for cand in _candidates(best):
+            if runs >= budget:
+                break
+            if not cand.invoice_lines:
+                continue
+            if (hit := await violation(cand)) is not None:
+                best, found, progress = cand, hit, True
+                break
+    return {
+        "id": s.id,
+        "rule": rule,
+        "reproduced": True,
+        "runs": runs,
+        "detail": found["detail"],
+        "original": _describe(s),
+        "minimal": _describe(best),
+        "size": {"original": _size(s), "minimal": _size(best)},
+    }
+
+
 async def stress(
-    client: ApiClient, catalog: Catalog, n: int = 50, seed: int = 7, concurrency: int = 1
+    client: ApiClient,
+    catalog: Catalog,
+    n: int = 50,
+    seed: int = 7,
+    concurrency: int = 1,
+    shrink: int = 0,
 ) -> dict[str, Any]:
     """Run ``n`` scenarios, at most ``concurrency`` at a time.
 
     Each scenario gets its own vendor, PO and log, so running them side by side
     changes the load on the API, not the expected outcome: any difference from a
     sequential run is itself a finding (shared state or a missing lock).
+
+    ``shrink`` > 0 shrinks that many failing scenarios afterwards (outside the
+    load figures) and adds them under ``"shrunk"``.
     """
     if concurrency < 1:
         raise ValueError("concurrency must be >= 1")
@@ -292,8 +427,9 @@ async def stress(
             latencies.extend(x.elapsed_ms for x in own.log)
             return result
 
+    scenarios = generate(n, seed, skus)
     start = time.perf_counter()
-    results = list(await asyncio.gather(*(one(s) for s in generate(n, seed, skus))))
+    results = list(await asyncio.gather(*(one(s) for s in scenarios)))
     elapsed = time.perf_counter() - start
     out = aggregate(results, n, seed)
     latencies.sort()
@@ -305,7 +441,42 @@ async def stress(
         "latency_ms_p50": _pct(latencies, 0.50),
         "latency_ms_p95": _pct(latencies, 0.95),
     }
+    if shrink:
+        by_id = {s.id: s for s in scenarios}
+        failing = [r for r in results if r.violations]
+        # One scenario per distinct rule first, so a mixed run shows each failure mode.
+        firsts: dict[str, ScenarioResult] = {}
+        for r in failing:
+            firsts.setdefault(r.violations[0]["rule"], r)
+        first_ids = {r.id for r in firsts.values()}
+        picked = [*firsts.values(), *(r for r in failing if r.id not in first_ids)][:shrink]
+        out["shrunk"] = [
+            await shrink_scenario(client, catalog, by_id[r.id], r.violations[0]["rule"])
+            for r in picked
+        ]
     return out
+
+
+def digest(result: dict[str, Any]) -> dict[str, Any]:
+    """The facts a narrator needs, without the HTTP transcripts."""
+    examples = [
+        {"id": r["id"], "variant": r["variant"], **v, "scenario": scenario_text(r["scenario"])}
+        for r in result["results"]
+        for v in r["violations"]
+    ]
+    return {
+        "scenarios": result["scenarios"],
+        "failed": result["failed"],
+        "failure_rate": result["failure_rate"],
+        "by_rule": result["by_rule"],
+        "by_variant": result["by_variant"],
+        "examples": examples[:6],
+        "shrunk": [
+            {"rule": m["rule"], "minimal": scenario_text(m["minimal"]), "detail": m["detail"]}
+            for m in result.get("shrunk", [])
+            if m["reproduced"]
+        ],
+    }
 
 
 def _pct(values: list[float], q: float) -> float | None:

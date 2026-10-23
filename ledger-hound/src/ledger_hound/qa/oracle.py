@@ -80,6 +80,22 @@ def gl_totals(entry: dict[str, Any]) -> dict[str, str]:
     return {"debits": str(debit), "credits": str(credit)}
 
 
+def is_ap_account(account: Any) -> bool:
+    name = str(account or "").lower()
+    return name.startswith("2000") or "payable" in name
+
+
+def open_ap_from_gl(entries: list[dict[str, Any]]) -> Decimal:
+    """Net AP liability in these GL entries: AP credits (approvals) minus AP debits (payments)."""
+    net = Decimal("0")
+    for entry in entries:
+        for ln in pick(entry, "lines", "entries", "postings") or []:
+            if is_ap_account(pick(ln, "account", "account_name")):
+                net += dec(pick(ln, "credit", "cr")) or Decimal("0")
+                net -= dec(pick(ln, "debit", "dr")) or Decimal("0")
+    return money(net)
+
+
 PARTIAL_WORDS = ("partial", "short_receipt", "under_received", "not_fully_received")
 
 

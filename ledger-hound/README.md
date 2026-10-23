@@ -4,8 +4,8 @@ An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
 controls held and which were breached, with the evidence.
 
-It comes with a **practice P2P API** that has 15 switchable, realistic bugs,
-so the agent can be scored: *it catches 15/15 planted bugs, with 0 false
+It comes with a **practice P2P API** that has 26 switchable, realistic bugs,
+so the agent can be scored: *it catches 26/26 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
@@ -14,11 +14,11 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 67 offline tests, no API key needed
+uv run pytest                                  # 124 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
-uv run ledger-hound stress --local-bugs silent_partial   # 50 randomized POs -> failure rate
+uv run ledger-hound stress --local-bugs silent_partial --shrink 1   # 50 random POs -> failure rate
 uv run ledger-hound diff old.json new.json     # what changed in the API between two runs
 ```
 
@@ -50,8 +50,12 @@ uv run ledger-hound run --base-url http://localhost:8000 --agent-explore --impro
 
 ```
 discover ─► plan ─► explore ─► attack ─► explain ─► judge report
-openapi     LLM     scripted   18 lib     LLM        rules rollup
+openapi     LLM     scripted   28 lib     LLM        15 rules rollup
 +fallback   ranks   or agent   probes     impact     + summary
+
+explore walks the full P2P lifecycle, checking the books at every step:
+vendor ─► PO ─► submit ─► receive ─► invoice ─► match ─► approve ─► pay
+                                                         AP +amt    AP -amt
 ```
 
 | Module | Job |
@@ -60,13 +64,13 @@ openapi     LLM     scripted   18 lib     LLM        rules rollup
 | `qa/discovery.py` | Maps operations to roles; renames fields to match the API's schema |
 | `qa/workflow.py` | Business verbs (create PO, receive, invoice...) over discovered roles |
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
-| `qa/explorer.py` | Happy-path walk with a business check at every step |
-| `qa/adversary.py` | 18 attacks: the 6 brief rules plus 12 extra edge cases (incl. unit of measure) |
-| `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
+| `qa/explorer.py` | Happy-path walk, approve through pay, with a business check at every step |
+| `qa/adversary.py` | 28 attacks: the 6 brief rules plus 22 extra edge cases (incl. UoM, price-variance tolerance, backorder re-match, freight/tax injection and payment disbursement) |
+| `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize, explain API diffs, narrate stress results) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
 | `qa/score.py` | Detection rate against the planted bugs |
-| `qa/stress.py` | Seeded random POs with an independent Decimal oracle; failure rate per rule and variant |
+| `qa/stress.py` | Seeded random POs pushed through to payment against an independent Decimal oracle; failure rate per rule and variant; shrinking of failures |
 | `qa/spec_diff.py` | API surface (operations, roles, request fields) and its diff against the previous run |
 | `qa/labels.py` | Labelled dataset for the classifier, built from the planted bugs (no LLM) |
 | `qa/dspy_opt.py` | DSPy violation classifier: optimize, evaluate, second opinion (optional extra) |
@@ -78,9 +82,11 @@ generates randomized POs: 1-3 lines, float-trap prices, and full, partial or
 zero receipts. Each gets an invoice variant: `exact`, `under`, `over_qty`,
 `over_cent` or `price_up_qty_down`. For every scenario, Python first computes
 what a correct AP system must do. The scenario is then pushed through
-create → match → approve, and every gap is a violation. The output is the
-failure rate overall, per rule and per variant, written to `var/stress/`. The
-same seed always gives the same scenarios.
+create → match → approve → pay, and every gap is a violation. Payment is
+attempted even on invoices that were stopped at match, and must be refused;
+an approved invoice paid in full must leave the vendor with no open AP. The
+output is the failure rate overall, per rule and per variant, written to
+`var/stress/`. The same seed always gives the same scenarios.
 
 `--concurrency K` keeps K scenarios in flight at once. Each scenario has its
 own vendor, PO and transcript, so concurrency changes the load, not the
@@ -89,24 +95,71 @@ state or a missing lock. The report adds a `load` block (elapsed time,
 scenarios/s, HTTP calls, p50/p95 latency); the practice API gives identical
 verdicts at any K.
 
+`--shrink N` reduces up to N failing scenarios (one per violated rule first)
+to the smallest version that still breaks the same rule. Each candidate (one
+PO line fewer, or one quantity lower; prices are kept, since a float-trap
+price is often the cause) is re-run against the API. `--shrink 1` on
+`pay_unapproved` ends at *PO 2 units, receive 2, invoice 1 at double the
+price*, the smallest invoice that is created but stopped at match. A failure
+that does not reproduce on re-run is reported as such, which points at shared
+state. `--explain` adds a short narrative of where failures cluster by rule
+and variant (LLM with `BYNARA_API_KEY`, deterministic mock otherwise).
+
 | Practice API | Failure rate (50 scenarios, seed 7) |
 | --- | --- |
 | clean | 0% |
-| `overpay_ordered` | 36% |
+| `overpay_ordered` / `exposure_not_cleared` | 36% |
 | `float_money` | 30% |
-| `no_price_check` / `unmatched_approve` | 22% |
-| `silent_partial` | 18% |
-| `dup_case`, `race_approve`, `uom_ignored`, ... | 0%: random volume can't find these; the targeted attacks do |
+| `no_price_check` / `unmatched_approve` / `pay_unapproved` | 22% |
+| `silent_partial` / `approve_skips_gl` | 18% |
+| `dup_case`, `race_approve`, `double_pay`, `overpay_disbursement`, ... | 0%: random volume can't find these; the targeted attacks do |
 
 ## Unit of measure
 
 Catalogue items carry a unit (`EA`, `SHEET`, `BOX`, `ROLL`) and invoice lines
 may declare one. The clean API matches an invoice line only in the PO line's
 unit (case and spaces ignored) and refuses fractional quantities of discrete
-units. Two bugs break this: `uom_ignored` (10 LB matched against 10 EA) and
-`fractional_uom` (2.5 EA accepted). The attacks `invoice_uom_mismatch` and
-`fractional_discrete_qty` catch them, and skip on an API whose invoice lines
-or catalogue carry no unit.
+units. **Unit conversion** is also supported: 50 LB = 1 BOX, so a correctly
+converted invoice (100 LB at 1.7998/LB against a 2-BOX PO at 89.99/BOX)
+passes match. Three bugs break unit handling: `uom_ignored` (10 LB matched
+against 10 EA), `fractional_uom` (2.5 EA accepted), and `wrong_uom_factor`
+(the conversion table uses 2× the real factor, letting a 150 LB overbill slip
+through both the quantity and price checks). The attacks `invoice_uom_mismatch`,
+`fractional_discrete_qty`, and `wrong_uom_conversion_factor` catch them, and
+skip on an API whose invoice lines or catalogue carry no unit.
+
+## Backorder re-match
+
+When a partial shipment arrives, the match endpoint flags the invoice as
+`matched_with_exceptions` (partial receipt) instead of `matched`. This exception
+is an audit trail: it shows the invoice was processed before full delivery. The
+`rematch_allowed` bug skips the status check in match, letting a vendor call
+match again after the backorder fills — the exception disappears from the final
+state with no record that it ever existed. The `rematch_after_backorder` attack
+catches it: partial receipt → first match gives `matched_with_exceptions` → fill
+the backorder → call match again. Clean API: 409. Bug: silently clears the exception.
+
+## Price variance tolerance
+
+The clean API requires an exact price match between the PO and the invoice (per
+the unit of measure, after conversion). Building-materials ERPs sometimes add a
+small tolerance to absorb daily commodity-price fluctuations. The
+`relaxed_price_tolerance` bug enables a 10% tolerance, letting an invoice
+priced up to 10% above the PO slip through match. The `price_tolerance_overbill`
+attack catches it: it invoices 9 units at 10% above the PO price (total stays
+within the received-goods cap, so only the match step can stop it).
+
+## Freight and tax line injection
+
+The clean API rejects any invoice line whose SKU is not on the referenced PO.
+Without this check, a vendor can append a freight surcharge, a setup fee, or a
+tax line to a legitimate invoice and have it accepted into the AP ledger — even
+though no PO line authorises the spend. The `extra_sku_allowed` bug disables
+the SKU-membership check at invoice creation. The `invoice_extra_sku` attack
+catches it: it creates a PO for one SKU, then submits a two-line invoice that
+also bills a second, unordered SKU. Clean API: 422 (extra SKU rejected). Bug:
+201 (invoice accepted with the off-PO line already in the system as a
+liability).
 
 ## API changes between runs
 
@@ -117,7 +170,13 @@ writes `api_changes`, listing breaking changes first (removed operation or
 field, lost role, changed type, newly required field). So a new breach can be
 read next to the endpoint change that came with it. `ledger-hound diff A B`
 compares any two reports or raw OpenAPI files and exits `1` on a breaking
-change. It is a structural diff; no LLM is involved.
+change.
+
+Pass `--explain` to `ledger-hound diff`, or run with a live brain, to get a
+plain-English paragraph explaining what changed and the likely impact on
+control coverage (e.g. a removed endpoint means a probe will skip; a new
+required field changes how attacks are constructed). Falls back to the mock
+brain without an API key.
 
 ## DSPy prompt optimization
 
@@ -126,7 +185,7 @@ an API response is a financial-integrity violation. It's an optional extra:
 
 ```bash
 uv sync --extra dspy
-uv run ledger-hound dspy dataset                          # 79 labelled rows, no LLM needed
+uv run ledger-hound dspy dataset                          # 118 labelled rows, no LLM needed
 uv run ledger-hound dspy optimize --optimizer bootstrap   # needs BYNARA_API_KEY
 uv run ledger-hound run --classifier var/dspy/classifier.json   # second opinion in the report
 ```

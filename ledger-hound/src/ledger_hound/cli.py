@@ -57,10 +57,23 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument(
         "--concurrency", type=int, default=1, metavar="K", help="scenarios in flight at once"
     )
+    st.add_argument(
+        "--shrink", type=int, default=0, metavar="N", help="shrink the first N failing scenarios"
+    )
+    st.add_argument(
+        "--explain",
+        action="store_true",
+        help="add a narrative of where failures cluster (LLM with BYNARA_API_KEY, else mock)",
+    )
 
     df = sub.add_parser("diff", help="compare the API surface of two reports or OpenAPI files")
     df.add_argument("old", help="earlier report JSON or OpenAPI JSON")
     df.add_argument("new", help="later report JSON or OpenAPI JSON")
+    df.add_argument(
+        "--explain",
+        action="store_true",
+        help="add a plain-English LLM explanation of the changes (needs BYNARA_API_KEY)",
+    )
 
     dp = sub.add_parser("dspy", help="optimize the violation-classifier prompt with DSPy")
     dsub = dp.add_subparsers(dest="dspy_cmd", required=True)
@@ -124,6 +137,8 @@ async def _run(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     report["api_changes"] = _api_changes(out_dir / "latest.json", report)
+    if report["api_changes"] and not report["api_changes"]["unchanged"]:
+        report["api_changes"]["explanation"] = await brain.explain_diff(report["api_changes"])
     path = out_dir / f"report-{datetime.now():%Y%m%d-%H%M%S}.json"
     text = json.dumps(report, indent=2, default=str)
     path.write_text(text)
@@ -169,6 +184,12 @@ def _diff(args: argparse.Namespace) -> int:
     d = diff(*surfaces)
     for line in describe(d):
         print(line)
+    if getattr(args, "explain", False) and not d["unchanged"]:
+        from .qa.brain import make_brain
+
+        brain = make_brain()
+        explanation = asyncio.run(brain.explain_diff(d))
+        print(f"\nExplanation: {explanation}")
     return 1 if d["breaking"] else 0
 
 
@@ -204,6 +225,8 @@ def _print_report(report: dict[str, Any], path: Path) -> None:
 
         since = changes["baseline"]["report_generated_at"]
         print(f"API CHANGES since {since}: " + "; ".join(describe(changes)))
+        if explanation := changes.get("explanation"):
+            print(f"  {explanation}")
     for note in meta["notes"]:
         print(f"note: {note}")
     print(f"\nreport: {path}")
@@ -232,12 +255,17 @@ async def _score(args: argparse.Namespace) -> int:
 
 async def _stress(args: argparse.Namespace) -> int:
     from .qa.discovery import discover
-    from .qa.stress import stress
+    from .qa.stress import digest, scenario_text, stress
 
     client, target = _target(args)
     try:
         result = await stress(
-            client, await discover(client), n=args.n, seed=args.seed, concurrency=args.concurrency
+            client,
+            await discover(client),
+            n=args.n,
+            seed=args.seed,
+            concurrency=args.concurrency,
+            shrink=args.shrink,
         )
     finally:
         await client.aclose()
@@ -245,6 +273,13 @@ async def _stress(args: argparse.Namespace) -> int:
         print(result["error"])
         return 2
     result["target"] = target
+    brain_notes: list[str] = []
+    if args.explain:
+        from .qa.brain import make_brain
+
+        brain = make_brain()
+        result["narrative"] = await brain.narrate_stress(digest(result))
+        brain_notes = brain.notes
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -273,6 +308,22 @@ async def _stress(args: argparse.Namespace) -> int:
         for r in [r for r in result["results"] if r["violations"]][:3]:
             v = r["violations"][0]
             print(f"    #{r['id']} {r['variant']}: [{v['rule']}] {v['detail'][:90]}")
+    if shrunk := result.get("shrunk"):
+        print("  shrunk (smallest scenario that still fails):")
+        for m in shrunk:
+            if not m["reproduced"]:
+                print(f"    #{m['id']} [{m['rule']}] did not reproduce: suspect shared state")
+                continue
+            a, b = (
+                f"{s['lines']} line{'s' * (s['lines'] != 1)}, {s['units']} units"
+                for s in (m["size"]["original"], m["size"]["minimal"])
+            )
+            print(f"    #{m['id']} [{m['rule']}] {a} -> {b} ({m['runs']} runs)")
+            print(f"      {scenario_text(m['minimal'])}")
+    if narrative := result.get("narrative"):
+        print(f"\nNARRATIVE: {narrative}")
+    for note in brain_notes:
+        print(f"note: {note}")
     print(f"\nstress report: {path}")
     return 1 if result["failed"] else 0
 
