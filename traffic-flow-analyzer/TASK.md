@@ -22,6 +22,8 @@
 - [x] `serve --csv` with `--poll-seconds`; live feed adapters (mock / TomTom / HERE) with a poller
 - [x] Mock writer dedupes repeated findings and recommendations
 - [x] Held-out (`--split`) results for 38 and all 228 sensors recorded in the results doc
+- [x] PEMS08 replay (`fetch-data --dataset pems08`, weekends included) and a working
+      `evaluate --period weekday|weekend|all`; weekend results recorded
 - [x] Short horizon: blend toward the latest reading (`LAST_WEIGHT=0.9`, tuned on the train
       half); held-out 15-min MAE 4.69 vs persistence 4.92 (was 5.87)
 - [x] Interval: leave-one-day-out conformal from the same time of day (±2 h, tail 0.05, both
@@ -39,12 +41,19 @@
 ## Needs the owner
 - [ ] **Live-model validation** (many repetitions): schema-valid rate, citation pass rate.
       Needs an API key; run `TRAFFICFLOW_MODEL=<provider:model> uv run trafficflow validate`
-- [ ] Verify PeMS data-use terms before any redistribution, and confirm the mph / reconstructed
-      timestamp assumptions in [ADR-0004](docs/adr/0004-pemsd7-data-assumptions.md)
+- [ ] Verify PeMS data-use terms (PeMSD7 and PEMS08) before any redistribution, and confirm
+      the mph / reconstructed-timestamp assumptions in
+      [ADR-0004](docs/adr/0004-pemsd7-data-assumptions.md) and
+      [ADR-0005](docs/adr/0005-pems08-data-assumptions.md)
 - [ ] Terms/key review before enabling the TomTom or HERE adapters against the real APIs
 
 ## Open
 - [ ] Interval is calibrated but still wide (21-35 km/h); narrowing it further needs a
       better point model (errors are heavy-tailed)
-- [ ] Weekend evaluation: PeMSD7 is weekday-only, so it needs another dataset
-- [ ] Real coordinates for replayed sensors on the map (PeMSD7 ships none)
+- [ ] Weekends: model only ties persistence on PEMS08 weekends (60 min 2.81 vs 2.80; slightly
+      worse at 15/30 min). Candidates: a longer history so the weekend profile has more days,
+      or a weekend-specific blend weight (tune on PEMS08's first half, report the second)
+- [ ] Record the PEMS08 weekday comparison (`evaluate var/data/pems08.npz --period weekday`)
+- [ ] Real coordinates for replayed sensors on the map (neither PeMSD7 nor PEMS08 ships
+      station IDs; METR-LA/PEMS-BAY have coordinates but their data is on Google Drive,
+      unreachable from the dev container)
