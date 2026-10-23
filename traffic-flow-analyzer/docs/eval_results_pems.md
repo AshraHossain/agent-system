@@ -57,30 +57,36 @@ The full network agrees with the 38-sensor subset to within 0.05 km/h MAE and 0.
 coverage, so the subset is representative. Peak hours are hardest (60 min: 8.26 vs 11.52 MAE,
 coverage 0.888); off-peak 60 min is 6.99 vs 9.84, coverage 0.904.
 
-## Weekends: PEMS08 (out-of-dataset)
+## Second network, weekdays and weekends: PEMS08 (out-of-dataset)
 
 PeMSD7 has no weekends, so weekends are evaluated on PEMS08 (Caltrans District 8, 170
 sensors, July-August 2016, every day; assumptions in
 [ADR-0005](adr/0005-pems08-data-assumptions.md)). No constant was tuned on PEMS08, so all
-origins are reported. 38 sensors, hourly origins 06:00-20:00 on weekend days after warm-up.
+origins are reported. 38 sensors, hourly origins 06:00-20:00 after a 7-day warm-up, split by day type.
 
 ```bash
 uv run trafficflow fetch-data --dataset pems08
 uv run trafficflow evaluate var/data/pems08.npz --sensors 38 --period weekend
+uv run trafficflow evaluate var/data/pems08.npz --sensors 38 --period weekday
 ```
 
-| Horizon | Model MAE | Persistence | Seasonal naive | Historical avg | Coverage | Width (km/h) |
+| Period / horizon | Model MAE | Persistence | Seasonal naive | Historical avg | Coverage | Width (km/h) |
 |---|---|---|---|---|---|---|
-| 15 min | 1.79 | **1.76** | 6.41 | 5.88 | 0.924 | 10.6 |
-| 30 min | 2.30 | **2.22** | 6.47 | 5.97 | 0.912 | 14.3 |
-| 60 min | 2.81 | 2.80 | 6.42 | 5.87 | 0.900 | 17.3 |
+| Weekend 15 min | 1.79 | **1.76** | 6.41 | 5.88 | 0.924 | 10.6 |
+| Weekend 30 min | 2.30 | **2.22** | 6.47 | 5.97 | 0.912 | 14.3 |
+| Weekend 60 min | 2.81 | 2.80 | 6.42 | 5.87 | 0.900 | 17.3 |
+| Weekday 15 min | **2.58** | 2.72 | 5.53 | 4.55 | 0.881 | 10.1 |
+| Weekday 30 min | **3.19** | 3.60 | 5.62 | 4.61 | 0.899 | 13.9 |
+| Weekday 60 min | **3.69** | 4.91 | 5.60 | 4.60 | 0.894 | 17.2 |
 
-240 origins. **On weekends the model does not beat persistence**: it is slightly worse at 15
+240 weekend and 585 weekday origins. **On PEMS08 weekdays the model beats persistence at
+every horizon** (60 min: 3.69 vs 4.91), confirming on a second network, unseen during
+tuning, what PeMSD7 showed. **On weekends it does not**: it is slightly worse at 15
 and 30 minutes and ties at 60. Weekend traffic on these freeways is smooth (errors are
 under half of PeMSD7's weekday errors), so the last reading is already a strong forecast, and a
 7-day history holds only two weekend days to build the seasonal profile from. The interval
-stays calibrated (slightly over-covering at short horizons). The PEMS08 weekday comparison
-has not been recorded yet.
+transfers reasonably: 0.88-0.92 coverage across both periods without any re-tuning,
+slightly under at 15 minutes on weekdays.
 
 ## Original pre-calibration run (all origins)
 
