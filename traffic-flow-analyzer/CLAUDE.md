@@ -22,6 +22,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run trafficflow demo                    # briefing in the terminal (mock model)
 uv run trafficflow backtest --horizon 60   # forecaster vs persistence
 uv run trafficflow fetch-data              # PeMSD7 real data -> var/data (not committed)
+uv run trafficflow fetch-data --dataset pems08   # PEMS08, includes weekends
 uv run trafficflow evaluate var/data/PeMSD7_V_228.csv
 uv run trafficflow serve                   # Gradio dashboard on :7860 (add --replay <csv>)
 TRAFFICFLOW_MODEL=<provider:model> uv run trafficflow demo   # live model (needs its API key)

@@ -7,9 +7,9 @@ import sys
 
 from trafficflow.agents.pipeline import run_report_sync
 from trafficflow.core.backtest import backtest
-from trafficflow.core.evaluation import evaluate
+from trafficflow.core.evaluation import evaluate, select_period
 from trafficflow.data.feed import CsvFeed, SyntheticFeed
-from trafficflow.data.replay import ReplayFeed, fetch_pemsd7, load_pemsd7
+from trafficflow.data.replay import ReplayFeed, fetch_pems08, fetch_pemsd7, load_replay
 
 
 def _make_live_feed(provider: str, api_key: str):
@@ -31,14 +31,20 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("demo", help="print a briefing (mock model unless TRAFFICFLOW_MODEL is set)")
     d.add_argument("--horizon", type=int, default=60)
     d.add_argument("--csv", help="wide CSV of speeds instead of the simulated feed")
-    d.add_argument("--replay", help="PeMSD7_V_228.csv: replay real recorded speeds")
+    d.add_argument("--replay", help="PeMSD7_V_228.csv or pems08.npz: replay recorded speeds")
     d.add_argument("--json", action="store_true")
     b = sub.add_parser("backtest", help="forecaster vs persistence on the simulated feed")
     b.add_argument("--horizon", type=int, default=60)
-    f = sub.add_parser("fetch-data", help="download the public PeMSD7 speed file (SHA-256 checked)")
+    f = sub.add_parser("fetch-data", help="download a public PeMS speed file (SHA-256 checked)")
     f.add_argument("--dest", default="var/data")
-    e = sub.add_parser("evaluate", help="full evaluation on replayed PeMSD7 data")
-    e.add_argument("path", help="PeMSD7_V_228.csv (see fetch-data)")
+    f.add_argument(
+        "--dataset",
+        choices=["pemsd7", "pems08"],
+        default="pemsd7",
+        help="pemsd7: 228 sensors, weekdays 2012; pems08: 170 sensors, every day 2016",
+    )
+    e = sub.add_parser("evaluate", help="full evaluation on replayed PeMS data")
+    e.add_argument("path", help="PeMSD7_V_228.csv or pems08.npz (see fetch-data)")
     eg = e.add_mutually_exclusive_group()
     eg.add_argument("--sensors", type=int, default=38, help="number of evenly-spaced sensors")
     eg.add_argument("--all-sensors", action="store_true", help="load all 228 sensors")
@@ -48,10 +54,9 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--train-window", type=int, default=0, help="history points per origin (0=all)")
     e.add_argument(
         "--period",
-        choices=["weekday", "all"],
+        choices=["weekday", "weekend", "all"],
         default="weekday",
-        help="'weekday' skips weekend gaps (default); 'all' is identical for PeMSD7 "
-        "(no weekend data) but is wired for future feeds that include weekends",
+        help="which origins to score; PeMSD7 has weekdays only, PEMS08 has every day",
     )
     e.add_argument(
         "--split",
@@ -79,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--port", type=int, default=7860)
     s.add_argument("--host", default="127.0.0.1")
     sg = s.add_mutually_exclusive_group()
-    sg.add_argument("--replay", help="PeMSD7_V_228.csv: replay real recorded speeds")
+    sg.add_argument("--replay", help="PeMSD7_V_228.csv or pems08.npz: replay recorded speeds")
     sg.add_argument("--csv", help="wide CSV of speeds (timestamp + one column per segment)")
     sg.add_argument("--live", action="store_true", help="use a live data feed adapter")
     s.add_argument(
@@ -126,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.cmd == "demo":
         if a.replay:
-            feed = ReplayFeed(load_pemsd7(a.replay, sensors=8))
+            feed = ReplayFeed(load_replay(a.replay, sensors=8))
             feed.advance(96)  # first origin is 00:00; move to 08:00
         else:
             feed = CsvFeed(a.csv) if a.csv else SyntheticFeed()
@@ -143,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "backtest":
         print(json.dumps(backtest(SyntheticFeed(), a.horizon), indent=2))
     elif a.cmd == "fetch-data":
-        print(fetch_pemsd7(a.dest))
+        print(fetch_pems08(a.dest) if a.dataset == "pems08" else fetch_pemsd7(a.dest))
     elif a.cmd == "validate":
         model = a.model or os.environ.get("TRAFFICFLOW_MODEL")
         if not model or model == "mock":
@@ -173,9 +178,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if summary["failed"] == 0 else 1
     elif a.cmd == "evaluate":
         n_sensors = None if a.all_sensors else a.sensors
-        feed = ReplayFeed(load_pemsd7(a.path, sensors=n_sensors))
+        feed = ReplayFeed(load_replay(a.path, sensors=n_sensors))
         times = [f"{h:02d}:00" for h in range(a.from_hour, a.to_hour + 1)]
-        origins = feed.origins(times, max_steps=max(a.horizons) // 5)
+        origins = select_period(feed.origins(times, max_steps=max(a.horizons) // 5), a.period)
         tw = a.train_window or None
         if getattr(a, "split", False):
             origins = origins[len(origins) // 2 :]
@@ -226,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
 
         factory = None
         if a.replay:
-            data = load_pemsd7(a.replay, sensors=a.sensors)
+            data = load_replay(a.replay, sensors=a.sensors)
 
             def factory() -> ReplayFeed:
                 return ReplayFeed(data, start=data.index[8 * 288])
