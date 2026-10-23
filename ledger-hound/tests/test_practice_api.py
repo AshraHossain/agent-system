@@ -613,3 +613,31 @@ async def test_overpay_disbursement_bug_accepted():
     ex = await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "99.99"})
     assert ex.status == 200, ex.body
     await client.aclose()
+
+
+# --- exposure cleared after payment -------------------------------------------
+
+
+async def test_exposure_clears_after_payment(clean):
+    client, _ = clean
+    inv_id = await _approved_invoice(client)
+    exposure_before = await client.call("GET", "/vendors/1/exposure")
+    assert float(exposure_before.body["open_ap"]) > 0
+
+    await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+
+    exposure_after = await client.call("GET", "/vendors/1/exposure")
+    assert exposure_after.body["open_ap"] == "0.00"
+
+
+async def test_exposure_not_cleared_bug_stays_positive():
+    from ledger_hound.p2p_api.app import create_app
+    from ledger_hound.qa.http import ApiClient
+
+    client = ApiClient.for_app(create_app(frozenset({"exposure_not_cleared"})))
+    inv_id = await _approved_invoice(client)
+    await client.call("POST", f"/invoices/{inv_id}/pay", {"amount": "19.92"})
+
+    exposure = await client.call("GET", "/vendors/1/exposure")
+    assert float(exposure.body["open_ap"]) > 0, "bug should leave AP positive after payment"
+    await client.aclose()

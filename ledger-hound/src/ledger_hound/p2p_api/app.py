@@ -607,15 +607,27 @@ def create_app(bugs: frozenset[str] | None = None) -> FastAPI:
     async def vendor_exposure(vendor_id: int) -> dict[str, Any]:
         vendor_or_404(vendor_id)
         entries = [e for e in store.gl if e.vendor_id == vendor_id]
-        open_ap = sum(
-            (
-                Decimal(str(ln["credit"]))
-                for e in entries
-                for ln in e.lines
-                if ln["account"].startswith("2000")
-            ),
-            Decimal("0"),
-        )
+        if "exposure_not_cleared" in bugs:
+            # Bug: only credits summed; debits (from payment) are ignored.
+            open_ap = sum(
+                (
+                    Decimal(str(ln["credit"]))
+                    for e in entries
+                    for ln in e.lines
+                    if ln["account"].startswith("2000")
+                ),
+                Decimal("0"),
+            )
+        else:
+            open_ap = sum(
+                (
+                    Decimal(str(ln["credit"])) - Decimal(str(ln["debit"]))
+                    for e in entries
+                    for ln in e.lines
+                    if ln["account"].startswith("2000")
+                ),
+                Decimal("0"),
+            )
         return {
             "vendor_id": vendor_id,
             "open_ap": out(money(open_ap)),

@@ -922,6 +922,59 @@ async def payment_exceeds_invoice(p: Probe) -> Outcome:
     return held(f"overpayment refused (HTTP {ex.status})", invoice_id=str(inv_id))
 
 
+@attack(
+    "exposure_not_cleared_after_payment",
+    "exposure_integrity",
+    "Pay an invoice and verify vendor exposure drops to zero",
+    "open AP decreases by invoice amount after payment",
+    "critical",
+    "vendor_exposure",
+    "create_invoice",
+    "match_invoice",
+    "approve_invoice",
+    "pay_invoice",
+)
+async def exposure_not_cleared_after_payment(p: Probe) -> Outcome:
+    v = await p.wf.fresh_vendor()
+    lines = p.line()
+    po = await p.wf.received_po(v, lines)
+    inv_id = await p.wf.invoice(v, po, lines)
+    p.wf.require("match invoice", await p.wf.match(inv_id))
+    p.wf.require("approve invoice", await p.wf.approve(inv_id))
+    before_ex = await p.wf.exposure(v)
+    if not before_ex.ok:
+        return crashed(before_ex)
+    before = dec(pick(before_ex.body, "open_ap", "exposure", "total", "amount"))
+    inv_amount = PRICE * TEN
+    p.wf.require("pay invoice", await p.wf.pay(inv_id, inv_amount))
+    after_ex = await p.wf.exposure(v)
+    if not after_ex.ok:
+        return crashed(after_ex)
+    after = dec(pick(after_ex.body, "open_ap", "exposure", "total", "amount"))
+    if after is None or before is None:
+        return crashed(after_ex)
+    if after >= before:
+        return breached(
+            f"open AP unchanged after payment: {before} -> {after}",
+            before=str(before),
+            after=str(after),
+            invoice_id=str(inv_id),
+        )
+    expected = before - inv_amount
+    if after != expected:
+        return breached(
+            f"open AP decreased but not fully cleared: {before} -> {after} (expected {expected})",
+            before=str(before),
+            after=str(after),
+            expected=str(expected),
+            invoice_id=str(inv_id),
+        )
+    return held(
+        f"open AP cleared correctly after payment: {before} -> {after}",
+        invoice_id=str(inv_id),
+    )
+
+
 # ------------------------------------------------------------------- runner
 
 

@@ -178,6 +178,13 @@ BUGS: dict[str, Bug] = {
             "Payment amount is not verified against the invoice amount;"
             " overpayment posts to the GL.",
         ),
+        Bug(
+            "exposure_not_cleared",
+            "exposure_integrity",
+            "exposure_not_cleared_after_payment",
+            "Vendor exposure sums only AP credits and never subtracts the debits"
+            " posted at payment, so open AP stays positive after the invoice is paid.",
+        ),
     ]
 }
 
