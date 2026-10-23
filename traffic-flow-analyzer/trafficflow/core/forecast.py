@@ -1,8 +1,12 @@
 """Interpretable time-series forecaster: seasonal profile + decaying level correction.
 
 profile(slot, daytype) = median of the same slot on previous days of the same type
-forecast(h)            = profile(t+h) + phi**h * recent_residual
-interval               = empirical 5th/95th percentile of per-step residuals (fallback: MAD)
+model(h)               = profile(t+h) + phi**h * last_residual
+forecast(h)            = w**h * last_reading + (1 - w**h) * model(h)
+interval               = leave-one-day-out conformal quantiles of the same forecast's errors
+
+LAST_WEIGHT and INTERVAL_TAIL were chosen on the first half of the PeMSD7 origins only;
+results are reported on the second half (`trafficflow evaluate --split`).
 """
 
 from __future__ import annotations
@@ -17,9 +21,13 @@ from trafficflow.core.congestion import congestion_index, level_for
 from trafficflow.core.simulate import STEP_MINUTES
 
 PHI = 0.92  # per-step persistence of the recent deviation
+LAST_WEIGHT = 0.9  # weight on the latest reading decays as LAST_WEIGHT**h
+INTERVAL_TAIL = 0.05  # probability mass in each tail of the calibrated interval
+CALIBRATION_DAYS = 6
 Z90 = 1.645
 MIN_POINTS = 2 * 288
 MIN_SAMPLES_FOR_EMPIRICAL = 30
+METHOD = "seasonal-median + decaying residual, blended toward the last reading"
 
 
 def _daytype(index: pd.DatetimeIndex) -> np.ndarray:
@@ -45,70 +53,51 @@ def robust_sigma(values: pd.Series) -> float:
     return float(1.4826 * np.median(np.abs(v - np.median(v)))) if len(v) else 0.0
 
 
-def _empirical_quantiles(
-    history: pd.Series, profile: pd.Series, steps: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return per-step (q05, q95) empirical residual quantiles over the training window.
+def _blend(base, last_residual, last_reading, h):
+    """The point forecast `h` steps ahead; arguments may be arrays of equal shape."""
+    w = LAST_WEIGHT**h
+    return w * last_reading + (1 - w) * (base + PHI**h * last_residual)
 
-    Uses a rolling-origin approach: calibration residuals are computed against a
-    train-half-only seasonal profile so the second half of history is genuinely
-    out-of-sample.  This avoids calibration leakage that would otherwise make
-    intervals appear narrower than they really are.
 
-    Falls back to the MAD-based half-width for any step with fewer than
-    MIN_SAMPLES_FOR_EMPIRICAL samples.
-    """
-    n = len(history)
-    cal_start = n // 2
-    vals = history.to_numpy()
-    idx = history.index
+def _calibration_errors(history: pd.Series, steps: int) -> list[np.ndarray]:
+    """Errors of the same forecast on each recent complete day, with that day left out of the
+    profile, so calibration mirrors forecasting a day the profile has not seen."""
+    dates = history.index.normalize()
+    errs: list[list[np.ndarray]] = [[] for _ in range(steps)]
+    for day in pd.unique(dates)[:-1][-CALIBRATION_DAYS:]:
+        mask = dates == day
+        profile = seasonal_profile(history[~mask])
+        vals = history[mask].to_numpy()
+        base = profile.reindex(_key(history.index[mask])).to_numpy()
+        res = vals - base
+        for h in range(1, min(steps, len(vals) - 1) + 1):
+            e = vals[h:] - _blend(base[h:], res[:-h], vals[:-h], h)
+            errs[h - 1].append(e[~np.isnan(e)])
+    return [np.concatenate(e) if e else np.empty(0) for e in errs]
 
-    # Build the profile from the FIRST half only so the calibration window (second half)
-    # is out-of-sample with respect to the profile fit — prevents interval leakage.
-    train_profile = seasonal_profile(history.iloc[:cal_start])
-    all_res = residuals(history, train_profile)
-    res_vals = all_res.to_numpy()
-    sigma_global = max(robust_sigma(all_res.iloc[:cal_start]), 0.01)
 
-    # Precompute profile lookup for every step in history by time-of-day key
-    all_base = train_profile.reindex(_key(idx)).to_numpy()  # shape (n,)
-
-    per_step_res: list[list[float]] = [[] for _ in range(steps)]
-    for i in range(cal_start, n - steps):
-        # recent_level: mean of up to 3 residuals ending at i
-        start3 = max(0, i - 2)
-        recent_level = float(np.nanmean(res_vals[start3 : i + 1]))
-        for h in range(1, steps + 1):
-            target_i = i + h
-            base_val = all_base[target_i]
-            if np.isnan(base_val):
-                continue
-            pred = base_val + (PHI**h) * recent_level
-            per_step_res[h - 1].append(vals[target_i] - pred)
-
-    q05 = np.empty(steps)
-    q95 = np.empty(steps)
-    for h in range(steps):
-        samples = per_step_res[h]
-        widen = np.sqrt(1 + 0.05 * (h + 1))
-        if len(samples) >= MIN_SAMPLES_FOR_EMPIRICAL:
-            q05[h] = float(np.percentile(samples, 5)) * widen
-            q95[h] = float(np.percentile(samples, 95)) * widen
+def _interval_offsets(history: pd.Series, steps: int) -> tuple[np.ndarray, np.ndarray]:
+    """Per-step (lower, upper) offsets from the point forecast; MAD fallback when sparse."""
+    errs = _calibration_errors(history, steps)
+    sigma = max(robust_sigma(residuals(history, seasonal_profile(history))), 0.01)
+    lo, hi = np.empty(steps), np.empty(steps)
+    for h, e in enumerate(errs):
+        if len(e) >= MIN_SAMPLES_FOR_EMPIRICAL:
+            lo[h], hi[h] = np.quantile(e, INTERVAL_TAIL), np.quantile(e, 1 - INTERVAL_TAIL)
         else:
-            half = Z90 * sigma_global * widen
-            q05[h] = -half
-            q95[h] = half
-    return q05, q95
+            half = Z90 * sigma * np.sqrt(1 + 0.05 * (h + 1))
+            lo[h], hi[h] = -half, half
+    return lo, hi
 
 
 def forecast_segment(
     history: pd.Series, segment: SegmentInfo, horizon_minutes: int = 60
 ) -> SegmentForecast:
+    history = history.dropna()
     if len(history) < MIN_POINTS:
         raise ValueError(f"need at least {MIN_POINTS} readings, got {len(history)}")
     profile = seasonal_profile(history)
     res = residuals(history, profile)
-    recent = float(res.iloc[-3:].mean())  # smooth the last 15 minutes
     steps = max(1, horizon_minutes // STEP_MINUTES)
     last = history.index[-1]
     future = pd.DatetimeIndex(
@@ -124,14 +113,15 @@ def forecast_segment(
         if np.isnan(base).any():
             raise ValueError("history does not cover every time-of-day needed for the horizon")
     hh = np.arange(1, steps + 1)
-    mean = np.clip(base + (PHI**hh) * recent, 3, segment.free_flow_kmh * 1.05)
-    q05, q95 = _empirical_quantiles(history, profile, steps)
+    mean = _blend(base, float(res.iloc[-1]), float(history.iloc[-1]), hh)
+    mean = np.clip(mean, 3, segment.free_flow_kmh * 1.05)
+    lo, hi = _interval_offsets(history, steps)
     points = []
     for i, (ts, m) in enumerate(zip(future, mean, strict=True)):
         # Clamp so the interval always contains the point forecast, even when
-        # empirical quantiles are biased (both positive or both negative).
-        lower = min(float(m), max(0.0, float(m) + q05[i]))
-        upper = max(float(m), float(m) + q95[i])
+        # the calibration errors are biased (both offsets of the same sign).
+        lower = min(float(m), max(0.0, float(m) + lo[i]))
+        upper = max(float(m), float(m) + hi[i])
         idx = congestion_index(float(m), segment.free_flow_kmh)
         points.append(
             ForecastPoint(
@@ -146,7 +136,7 @@ def forecast_segment(
     peak = max(points, key=lambda p: p.congestion_index)
     return SegmentForecast(
         segment_id=segment.id,
-        method="seasonal-median + decaying residual",
+        method=METHOD,
         horizon_minutes=steps * STEP_MINUTES,
         points=points,
         peak_index=peak.congestion_index,
