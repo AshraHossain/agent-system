@@ -53,6 +53,11 @@ def main(argv: list[str] | None = None) -> int:
         help="'weekday' skips weekend gaps (default); 'all' is identical for PeMSD7 "
         "(no weekend data) but is wired for future feeds that include weekends",
     )
+    e.add_argument(
+        "--split",
+        action="store_true",
+        help="evaluate only on origins from the second half of the time range (train/test split)",
+    )
     v = sub.add_parser(
         "validate", help="run pipeline with a real model and print the report as JSON"
     )
@@ -171,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
         times = [f"{h:02d}:00" for h in range(a.from_hour, a.to_hour + 1)]
         origins = feed.origins(times, max_steps=max(a.horizons) // 5)
         tw = a.train_window or None
+        if getattr(a, "split", False):
+            origins = origins[len(origins) // 2 :]
         print(json.dumps(evaluate(feed, origins, a.horizons, train_window=tw), indent=2))
     elif a.cmd == "monitor":
         from trafficflow.alerts.monitor import AlertConfig, AlertMonitor, AlertRule
