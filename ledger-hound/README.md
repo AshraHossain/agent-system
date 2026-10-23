@@ -4,8 +4,8 @@ An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
 controls held and which were breached, with the evidence.
 
-It comes with a **practice P2P API** that has 19 switchable, realistic bugs,
-so the agent can be scored: *it catches 19/19 planted bugs, with 0 false
+It comes with a **practice P2P API** that has 26 switchable, realistic bugs,
+so the agent can be scored: *it catches 26/26 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
@@ -14,7 +14,7 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 67 offline tests, no API key needed
+uv run pytest                                  # 107 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
@@ -50,8 +50,12 @@ uv run ledger-hound run --base-url http://localhost:8000 --agent-explore --impro
 
 ```
 discover ─► plan ─► explore ─► attack ─► explain ─► judge report
-openapi     LLM     scripted   18 lib     LLM        rules rollup
+openapi     LLM     scripted   28 lib     LLM        15 rules rollup
 +fallback   ranks   or agent   probes     impact     + summary
+
+explore walks the full P2P lifecycle, checking the books at every step:
+vendor ─► PO ─► submit ─► receive ─► invoice ─► match ─► approve ─► pay
+                                                         AP +amt    AP -amt
 ```
 
 | Module | Job |
@@ -60,8 +64,8 @@ openapi     LLM     scripted   18 lib     LLM        rules rollup
 | `qa/discovery.py` | Maps operations to roles; renames fields to match the API's schema |
 | `qa/workflow.py` | Business verbs (create PO, receive, invoice...) over discovered roles |
 | `qa/oracle.py` | Decimal money checks: GL balance, sub-cent drift, partial flags |
-| `qa/explorer.py` | Happy-path walk with a business check at every step |
-| `qa/adversary.py` | 22 attacks: the 6 brief rules plus 16 extra edge cases (incl. UoM, price-variance tolerance, backorder re-match and freight/tax injection) |
+| `qa/explorer.py` | Happy-path walk, approve through pay, with a business check at every step |
+| `qa/adversary.py` | 28 attacks: the 6 brief rules plus 22 extra edge cases (incl. UoM, price-variance tolerance, backorder re-match, freight/tax injection and payment disbursement) |
 | `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
@@ -169,7 +173,7 @@ an API response is a financial-integrity violation. It's an optional extra:
 
 ```bash
 uv sync --extra dspy
-uv run ledger-hound dspy dataset                          # 79 labelled rows, no LLM needed
+uv run ledger-hound dspy dataset                          # 112 labelled rows, no LLM needed
 uv run ledger-hound dspy optimize --optimizer bootstrap   # needs BYNARA_API_KEY
 uv run ledger-hound run --classifier var/dspy/classifier.json   # second opinion in the report
 ```
