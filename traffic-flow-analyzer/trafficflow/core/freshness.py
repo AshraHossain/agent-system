@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
+
+import pandas as pd
 
 STALE_AFTER_MINUTES = 15  # three missed 5-minute readings
 
@@ -20,3 +23,13 @@ def data_age_minutes(last_reading: datetime, now: datetime) -> float:
 
 def is_stale(last_reading: datetime, now: datetime) -> bool:
     return data_age_minutes(last_reading, now) > STALE_AFTER_MINUTES
+
+
+def stale_segments(histories: Mapping[str, pd.Series], now: datetime) -> list[str]:
+    """Segment ids whose latest non-missing reading is stale (or that have none)."""
+    out = []
+    for sid, hist in histories.items():
+        valid = hist.dropna()
+        if valid.empty or is_stale(valid.index[-1].to_pydatetime(), now):
+            out.append(sid)
+    return out

@@ -117,3 +117,4 @@ class TrafficReport(BaseModel):
     evidence: dict[str, dict]
     issues: list[str] = Field(default_factory=list)
     used_model: str
+    stale_segments: list[str] = Field(default_factory=list)

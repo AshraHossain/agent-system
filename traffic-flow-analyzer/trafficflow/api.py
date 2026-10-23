@@ -110,6 +110,7 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
     from trafficflow.core.anomaly import detect
     from trafficflow.core.congestion import congestion_index, level_for
     from trafficflow.core.forecast import forecast_segment
+    from trafficflow.core.freshness import stale_segments
     from trafficflow.core.status import network_status
 
     app = FastAPI(
@@ -129,9 +130,14 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
     def get_status():
         segs = {s.id: s for s in feed.segments()}
         try:
-            forecasts = [forecast_segment(feed.history(sid, 7), s, 60) for sid, s in segs.items()]
-            anomalies = [a for sid in segs for a in detect(feed.history(sid, 7), sid)]
-            ns = network_status(forecasts, anomalies)
+            hists = {sid: feed.history(sid, 7) for sid in segs}
+            forecasts = [forecast_segment(hists[sid], s, 60) for sid, s in segs.items()]
+            anomalies = [
+                a
+                for sid, s in segs.items()
+                for a in detect(hists[sid], sid, free_flow_kmh=s.free_flow_kmh)
+            ]
+            ns = network_status(forecasts, anomalies, stale_segments(hists, feed.now))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

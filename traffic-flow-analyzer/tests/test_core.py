@@ -171,3 +171,22 @@ def test_freshness_flags_stale_readings():
     assert not is_stale(fresh, now)
     assert is_stale(old, now)
     assert data_age_minutes(now + timedelta(minutes=1), now) == 0.0
+
+
+def test_stale_segments_rule_out_normal(feed):
+    from datetime import timedelta
+
+    from trafficflow.core.freshness import stale_segments
+
+    hists = {s.id: feed.history(s.id) for s in feed.segments()}
+    assert stale_segments(hists, feed.now) == []
+    later = feed.now + timedelta(minutes=30)
+    assert stale_segments(hists, later) == sorted(hists)
+    assert stale_segments({"X": pd.Series(dtype=float)}, feed.now) == ["X"]
+
+    assert network_status([], [], ["S1"]) == NetworkStatus.WATCH
+    feed.advance(12)
+    segs = feed.segments()
+    fcs = [forecast_segment(feed.history(s.id), s, 60) for s in segs]
+    anomalies = [a for s in segs for a in detect(feed.history(s.id), s.id)]
+    assert network_status(fcs, anomalies, ["S1"]) == NetworkStatus.DEGRADED  # never lowers

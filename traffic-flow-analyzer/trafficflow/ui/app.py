@@ -113,6 +113,8 @@ def build_app(
             lines = [f"### {r.brief.headline}", r.brief.summary, "", "**Findings**"]
             lines += [f"- {x.claim} _({', '.join(x.evidence_ids)})_" for x in r.brief.findings]
             lines += ["", "**Recommendations**"] + [f"- {x}" for x in r.brief.recommendations]
+            if r.stale_segments:
+                lines += ["", "⏱️ **Stale data:** " + ", ".join(r.stale_segments)]
             if r.issues:
                 lines += ["", "⚠️ **Verification issues:** " + "; ".join(r.issues)]
             store.save(r, "\n".join(lines))
