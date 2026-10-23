@@ -14,7 +14,7 @@ alarms on the clean API.*
 
 ```bash
 uv sync
-uv run pytest                                  # 124 offline tests, no API key needed
+uv run pytest                                  # 130 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
 uv run ledger-hound score                      # detection rate across all planted bugs
@@ -31,7 +31,24 @@ uv run ledger-hound run --base-url http://localhost:8000                     # t
 
 Reports go to `var/reports/report-<timestamp>.json` (plus `latest.json`). The
 exit code is `1` when any control is breached or the happy path fails, so a
-CI job or a scheduler can alert on it.
+CI job or a scheduler can alert on it. Each run mixes a random tag into the
+names it creates (vendors, invoice numbers) and records it in the report, so
+repeated runs against the same long-lived server don't collide.
+
+### Blind practice
+
+```bash
+uv run ledger-hound api --bugs random:4 --port 8000   # 4 hidden bugs; prints only the answer-key path
+uv run ledger-hound run --base-url http://localhost:8000
+uv run ledger-hound grade var/practice/answer-<ts>.json var/reports/latest.json
+```
+
+`random:N` picks N bugs with a seeded RNG (`--seed` to repeat a round) and
+never prints them. `grade` scores any report against the key by rule: Ledger
+Hound's own, or a hand-built agent's that follows the brief's shape (a list of
+`{rule, status}`, bare or under `adversarial`). It then reveals the bugs.
+Other breached rules are listed but not penalised, since one bug often breaks
+a second rule downstream.
 
 ## Live LLM mode
 
@@ -69,7 +86,7 @@ vendor ─► PO ─► submit ─► receive ─► invoice ─► match ─►
 | `qa/brain.py` | LLM jobs (plan, annotate, explain, summarize, explain API diffs, narrate stress results) with a mock fallback |
 | `qa/agentic.py` | Tool-using agents (explorer, improviser) with a guarded `call_api` tool |
 | `qa/judge.py` | Runs the whole investigation and builds the report |
-| `qa/score.py` | Detection rate against the planted bugs |
+| `qa/score.py` | Detection rate against the planted bugs; grading against a blind-practice answer key |
 | `qa/stress.py` | Seeded random POs pushed through to payment against an independent Decimal oracle; failure rate per rule and variant; shrinking of failures |
 | `qa/spec_diff.py` | API surface (operations, roles, request fields) and its diff against the previous run |
 | `qa/labels.py` | Labelled dataset for the classifier, built from the planted bugs (no LLM) |

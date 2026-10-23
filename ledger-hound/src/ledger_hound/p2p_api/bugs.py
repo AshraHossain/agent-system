@@ -8,6 +8,7 @@ reports BREACHED while the bug is on, and HELD while it is off.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
 
@@ -200,3 +201,10 @@ def parse_bugs(spec: str | None) -> frozenset[str]:
     if unknown:
         raise ValueError(f"unknown bug(s): {', '.join(sorted(unknown))}")
     return frozenset(names)
+
+
+def pick_random(n: int, seed: int) -> frozenset[str]:
+    """``n`` distinct bugs chosen by a seeded RNG, for blind practice."""
+    if not 1 <= n <= len(BUGS):
+        raise ValueError(f"random:N needs 1 <= N <= {len(BUGS)}, got {n}")
+    return frozenset(random.Random(seed).sample(sorted(BUGS), n))
