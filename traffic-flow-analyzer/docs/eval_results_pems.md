@@ -3,8 +3,9 @@
 Out-of-sample rolling-origin evaluation of the forecaster on real recorded speeds, against
 three baselines. **Current summary (held-out split): the model beats persistence at every
 horizon (15 min: 4.69 vs 4.92 km/h MAE) and its "90%" interval covers 89.8-90.1% of
-outcomes, at 21-35 km/h wide.** See [Current results](#current-results-held-out-split). The sections after it are
-earlier runs, kept for comparison.
+outcomes, at 21-35 km/h wide; all 228 sensors agree.** See
+[Current results](#current-results-held-out-split). The sections after it are earlier runs,
+kept for comparison.
 
 ## Current results: held-out split
 
@@ -39,7 +40,22 @@ By period (MAE model / persistence; coverage): peak 15 min 4.88 / 5.12, 0.900; o
 * **Previous held-out runs:** before the blend and the new interval, model 5.87 / 7.05 / 7.66
   MAE, coverage 0.86-0.89 at 24-41 km/h; with the blend and an all-hours interval (tail
   0.035), coverage 0.897-0.902 at 22-41 km/h.
-* The all-228-sensor held-out run has not been recorded yet.
+
+### All 228 sensors (held-out)
+
+```bash
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --all-sensors --split   # ~45 min, one core
+```
+
+| Horizon | Model MAE | Persistence | Seasonal naive | Historical avg | Coverage | Width (km/h) |
+|---|---|---|---|---|---|---|
+| 15 min | **4.68** | 4.91 | 9.75 | 8.51 | 0.897 | 21.4 |
+| 30 min | **6.34** | 7.23 | 9.83 | 8.56 | 0.896 | 29.3 |
+| 60 min | **7.67** | 10.73 | 9.81 | 8.53 | 0.895 | 34.9 |
+
+The full network agrees with the 38-sensor subset to within 0.05 km/h MAE and 0.5 points of
+coverage, so the subset is representative. Peak hours are hardest (60 min: 8.26 vs 11.52 MAE,
+coverage 0.888); off-peak 60 min is 6.99 vs 9.84, coverage 0.904.
 
 ## Original pre-calibration run (all origins)
 
@@ -123,7 +139,7 @@ uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --sensors 38   # ~2.5 min
 To evaluate on all 228 sensors instead of the default 38:
 
 ```bash
-uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --all-sensors   # ~30s on a laptop
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --all-sensors   # ~1.5 h, one core
 ```
 
 Results will vary substantially by sensor — high-variance urban sensors show larger MAE
@@ -143,4 +159,4 @@ that include weekend observations.
 Suggested workflow:
 1. Quick sanity check: `--sensors 8` (~5 s).
 2. Representative run: `--sensors 38` (~2.5 min, as used for the table above).
-3. Full picture: `--all-sensors` (~30 s per commit if parallelised, but single-threaded here).
+3. Full picture: `--all-sensors --split` (~45 min single-threaded; results above).
