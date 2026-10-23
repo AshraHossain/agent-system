@@ -21,7 +21,7 @@
       every agent message during an eval run and asserts no label appears
 - [x] `serve --csv` with `--poll-seconds`; live feed adapters (mock / TomTom / HERE) with a poller
 - [x] Mock writer dedupes repeated findings and recommendations
-- [x] Evaluation on all 228 sensors (held-out split) recorded in the results doc
+- [x] Held-out (`--split`) 38-sensor results recorded in the results doc
 - [x] Timezone-aware feed option; history-gap warnings; `get_current_conditions` reports
       `age_minutes` and `stale` (> 15 min, `core/freshness.py`)
 - [x] Browser smoke test in CI drives the dashboard (briefing, Ask, History), not just loads it
@@ -42,7 +42,9 @@
 - [ ] Short horizon: the model still loses to persistence at 15 min on PeMSD7 (held-out MAE
       ~5.9 vs ~4.9). Candidate: blend toward the last reading for the first steps, tuned on the
       train half only
-- [ ] Interval still under-covers (~86% vs nominal 90%); consider conformal widening per step
+- [ ] Interval still under-covers (86-89% vs nominal 90%) and is now wide (24-40 km/h);
+      consider a per-step conformal correction
+- [ ] Record the all-228-sensor held-out run (`evaluate --all-sensors --split`)
 - [ ] Weekend evaluation: PeMSD7 is weekday-only, so it needs another dataset
 - [ ] Real coordinates for replayed sensors on the map (PeMSD7 ships none)
 - [ ] Stale data does not yet affect the rule-based network status (only reported by the tool)
