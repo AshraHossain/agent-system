@@ -50,6 +50,26 @@ CATEGORY_TARGETS: dict[HypothesisCategory, set[str] | None] = {
     _C.UNKNOWN: None,
 }
 
+# Wording that presents an inferred cause as settled fact. A read-only investigation
+# ranks hypotheses; it never proves one. A general lexicon of certainty markers (it
+# includes the verifier matrix's phrase, so the matrix alone does not measure it); see
+# docs/eval_results_verifier.md for what it cannot catch ("The firewall caused this").
+CERTAINTY_RE = re.compile(
+    r"\b(?:without (?:any |a )?(?:doubt|question)|beyond (?:any |all |a |reasonable )*doubt"
+    r"|no (?:doubt|question)(?: that| about it)?|there is no (?:doubt|question)|undoubtedly"
+    r"|doubtless|unquestionably|indisputably|undeniably|incontrovertibly|unambiguously"
+    r"|conclusively|definitively|definitely|certainly|categorically|absolutely|surely"
+    r"|for (?:certain|sure)|with (?:complete |total |full |absolute )?certainty"
+    r"|(?:is|was|has been|have been|are|were) (?:now )?(?:confirmed|proven|proved)"
+    r"|(?:confirmed|proven|proved) (?:to be|that|as)|it is (?:clear|certain|evident|obvious) that"
+    r"|clearly (?:caused|the cause|due to|responsible)|(?:the )?(?:definitive|sole|undisputed) "
+    r"(?:root )?cause|root cause (?:is|was)\b)",
+    re.IGNORECASE,
+)
+NEGATION_RE = re.compile(
+    r"\b(?:not|no|never|cannot|can't|isn't|wasn't|aren't|nor|yet to)\W+(?:\w+\W+){0,2}$", re.I
+)
+
 NO_IMPACT_RE = re.compile(
     r"\bno (?:services?|customers?|users?|applications?) (?:are|is|were|was) "
     r"(?:affected|impacted)\b|\bno (?:customer |service |user )?impact\b"
@@ -456,6 +476,14 @@ def _compare_with_rules(hyps: list[Hypothesis], rules: list[Hypothesis] | None, 
     )
 
 
+def _certainty_marker(text: str) -> str | None:
+    """First certainty phrase in ``text`` that is not negated ("not confirmed")."""
+    for m in CERTAINTY_RE.finditer(text):
+        if not NEGATION_RE.search(text[max(0, m.start() - 40) : m.start()]):
+            return m.group(0)
+    return None
+
+
 def _summary_problems(draft: ReportDraft, hyps: list[Hypothesis]) -> list[tuple[str, str, str]]:
     """The summary must agree with the draft's own structured findings.
 
@@ -476,6 +504,15 @@ def _summary_problems(draft: ReportDraft, hyps: list[Hypothesis]) -> list[tuple[
         )
     if draft.affected_services and not any(s.lower() in text for s in draft.affected_services):
         out.append(("warning", "summary_incomplete", "summary names none of the affected services"))
+    if marker := _certainty_marker(
+        " ".join([draft.summary, *(f.statement for f in draft.key_facts)])
+    ):
+        top = hyps[0].confidence if hyps else None
+        if top == "strong":
+            sev, why = "warning", "even strong evidence ranks a hypothesis; it does not prove it"
+        else:
+            sev, why = "error", f"the leading hypothesis is only {top or 'absent'}"
+        out.append((sev, "overstated_certainty", f"draft states certainty ('{marker}'): {why}"))
     if hyps and hyps[0].component_id.lower() not in text:
         out.append(
             (

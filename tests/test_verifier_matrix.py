@@ -56,10 +56,14 @@ def test_closed_blind_spots_stay_closed(matrix):
     assert rows["swapped_ranking", "C05"]["signals"] == ["ranking_differs_from_rules:warning"]
 
 
-def test_remaining_blind_spot_is_reported_not_hidden(matrix):
-    """Paraphrased overconfidence needs a language judgement: the live reviewer's job.
-    Pinned so that closing it shows up as a deliberate test change."""
-    assert matrix["mutations"]["paraphrased_certainty"]["missed"] == 2
+def test_certainty_wording_is_caught_by_the_lexicon(matrix):
+    """Closed by the overstated_certainty lexicon. Both slice cases lead with a `strong`
+    hypothesis, so it is a warning there. The mutation's phrase is in the lexicon, so
+    this is not independent evidence; plain assertions stay the live reviewer's job."""
+    m = matrix["mutations"]["paraphrased_certainty"]
+    assert m["missed"] == 0 and m["flagged"] == 2
+    rows = {(r["mutation"], r["case"]): r for r in matrix["rows"]}
+    assert rows["paraphrased_certainty", "C03"]["signals"] == ["overstated_certainty:warning"]
 
 
 def test_inapplicable_mutations_are_marked_not_scored(matrix):

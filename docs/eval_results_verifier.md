@@ -4,7 +4,35 @@ Generated with `uv run opspilot eval --verifier-matrix` (offline, mock provider,
 24 cases: C01–C14 and H01–H10). Method:
 [evaluation.md](evaluation.md#verifier-detection-matrix-opspilotevalverifier_matrixpy).
 
-## After the fixes (current)
+## Certainty lexicon (current)
+
+`overstated_certainty` flags certainty wording in the summary or a key fact
+("without any doubt", "the root cause is", "it is clear that", "definitely",
+"has been proven", ...), skipping negated uses ("not confirmed", "cannot be
+proven"). It is an **error** unless the leading hypothesis is `strong`, and a
+**warning** when it is: strong evidence ranks a hypothesis, it does not prove
+it.
+
+| Measure | Before | Now |
+|---|---|---|
+| Designed-for defects caught | 162 / 162 | **162 / 162** |
+| False positives on harmless edits | 0 / 45 | **0 / 45** |
+| Semantic errors caught | 69 / 93 | **93 / 93** |
+
+`paraphrased_certainty`: 24/24 flagged (8 errors, 16 warnings: 16 cases lead
+with a `strong` hypothesis). No other mutation and no clean case raises the
+new code.
+
+**Read this number with care.** The matrix has one certainty phrase, and that
+phrase is in the lexicon, so 24/24 is expected by construction. The broader
+check is the hand-written set in `tests/test_verification.py` (8 certainty
+sentences flagged, 5 hedged or technical ones such as "100% utilization" and
+"session was established" not flagged), and it has the same author. A
+plain assertion with no marker word ("The firewall caused this outage.")
+still passes, and the test pins it as a known miss. Judging tone and
+sufficiency remains the live reviewer's job (TASK.md).
+
+## After the first fixes
 
 Four deterministic checks were added to `core/verification.py` for the gaps
 the first run found (`category_component_mismatch`, `confidence_above_rules`,
@@ -23,7 +51,7 @@ the first run found (`category_component_mismatch`, `confidence_above_rules`,
 | `inflated_confidence` | missed 6/6 | flagged 6/6 | `confidence_above_rules` (error) |
 | `swapped_ranking` | missed 2/2 | flagged 2/2 | `ranking_differs_from_rules` (warning: both cases swap two equally `strong` hypotheses, a tie the analyst may break) |
 | `blamed_neighbour` | missed 3/19 | flagged 19/19 | `category_component_mismatch` (error) |
-| `paraphrased_certainty` | missed 24/24 | missed 24/24 | still open: a language judgement for the live reviewer |
+| `paraphrased_certainty` | missed 24/24 | missed 24/24 | still open at that point; closed by the certainty lexicon above |
 | `dropped_service` | neutralized 21/21 | neutralized 21/21 | finalizer rebuilds the service list |
 
 None of the 24 unmodified cases raises any of the new codes. The remaining
