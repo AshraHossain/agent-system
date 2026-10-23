@@ -22,7 +22,7 @@ from .brain import LiveBrain, extract_json
 from .discovery import Catalog
 from .http import ApiClient
 from .models import AttackResult, Step, slim_all
-from .oracle import dec, gl_problems, pick
+from .oracle import dec, gl_problems, open_ap_from_gl, pick
 from .workflow import Workflow
 
 MAX_TOOL_OUTPUT = 3000
@@ -151,6 +151,20 @@ async def verify_end_state(client: ApiClient, catalog: Catalog, claim: dict[str,
             fails += gl_problems(entry)
         noun = "entries" if expected_entries > 1 else "entry"
         out.append(("verify GL", f"exactly {expected_entries} balanced {noun}", gl, fails))
+
+    vendor_id = claim.get("vendor_id")
+    if catalog.has("vendor_exposure", "gl_entries") and vendor_id is not None:
+        # The agent may have reused a vendor with other open invoices, so there is no
+        # "before" to compare with. Instead, rebuild open AP from the vendor's own GL lines.
+        gl = await wf.client.call("GET", catalog.path("gl_entries"))
+        entries = gl.body if gl.ok and isinstance(gl.body, list) else []
+        if entries and all(pick(e, "vendor_id", "supplier_id") is not None for e in entries):
+            mine = [e for e in entries if pick(e, "vendor_id", "supplier_id") == vendor_id]
+            expected = open_ap_from_gl(mine)
+            ex = await wf.exposure(vendor_id)
+            reported = dec(pick(ex.body, "open_ap", "exposure", "total", "amount"))
+            fails = [] if reported == expected else [f"open AP {reported} != {expected} in the GL"]
+            out.append(("verify exposure", f"open AP {expected}, as the GL nets out", ex, fails))
     return out
 
 

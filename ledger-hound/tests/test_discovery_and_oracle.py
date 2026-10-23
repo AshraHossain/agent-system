@@ -8,7 +8,13 @@ from pydantic import BaseModel
 
 from ledger_hound.qa.discovery import discover
 from ledger_hound.qa.http import ApiClient
-from ledger_hound.qa.oracle import gl_problems, has_sub_cent, match_is_clean, surfaces_partial
+from ledger_hound.qa.oracle import (
+    gl_problems,
+    has_sub_cent,
+    match_is_clean,
+    open_ap_from_gl,
+    surfaces_partial,
+)
 
 
 async def test_roles_from_openapi(clean):
@@ -97,3 +103,22 @@ def test_money_helpers():
     assert not surfaces_partial({"status": "matched", "exceptions": []})
     assert match_is_clean({"status": "matched", "exceptions": []})
     assert not match_is_clean({"status": "matched", "warnings": ["short"]})
+
+
+def test_open_ap_from_gl_nets_payments_against_approvals():
+    approve = {
+        "lines": [
+            {"account": "1400 Inventory/GRNI", "debit": "49.80", "credit": "0.00"},
+            {"account": "2000 Accounts Payable", "debit": "0.00", "credit": "49.80"},
+        ]
+    }
+    pay = {
+        "lines": [
+            {"account": "2000 Accounts Payable", "debit": "49.80", "credit": "0.00"},
+            {"account": "1000 Cash/Bank", "debit": "0.00", "credit": "49.80"},
+        ]
+    }
+    other = {"lines": [{"account": "Accounts Payable", "dr": "0", "cr": "10.10"}]}
+    assert str(open_ap_from_gl([approve])) == "49.80"
+    assert str(open_ap_from_gl([approve, pay])) == "0.00"
+    assert str(open_ap_from_gl([approve, pay, other])) == "10.10"
