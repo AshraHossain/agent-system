@@ -26,7 +26,8 @@
 ## Low priority
 - [x] OpenTelemetry exporter configuration example (`docs/observability.md`; export via `uv run --with`, not yet in the lockfile)
 - [x] Decide whether to ship the OTLP exporter as an `otel` extra: not until `google-adk` allows `opentelemetry-sdk>=1.43` (ADR-0012)
-- [x] Authentication for shared use: `opspilot serve` bearer token (`OPSPILOT_API_TOKEN`), refuses non-loopback without it; plain `adk api_server` stays loopback-only
+- [x] Authentication for shared use: `opspilot serve` bearer tokens (`OPSPILOT_API_TOKEN` and/or digests in `OPSPILOT_API_TOKEN_SHA256`, ADR-0013), refuses non-loopback without one; plain `adk api_server` stays loopback-only
+- [ ] Per-user identity (OIDC/JWT), roles, rate limiting and TLS options for the shared API; `adk web`/`adk api_server` and the Docker `CMD` remain unauthenticated
 
 ## PlateWatch backlog
 - [x] Detect/read/tag/store pipeline, vector search, PydanticAI agent, offline demo + tests (#15)

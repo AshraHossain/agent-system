@@ -1,7 +1,8 @@
 # Deployment
 
 OpsPilot is **local by default**. Nothing in this repository deploys it to a
-shared environment, and it should not be exposed beyond loopback without adding
+shared environment. To expose it beyond loopback, use `opspilot serve` with
+bearer tokens (see "Shared use" below); `adk web` and `adk api_server` have no
 authentication.
 
 ## Local (recommended)
@@ -26,27 +27,49 @@ uv run opspilot serve --port 8000
 curl -s http://127.0.0.1:8000/runs/<session_id> | jq '.status, .report.investigation_summary'
 ```
 
-It binds loopback by default. Set `OPSPILOT_API_TOKEN` (at least 32
-characters) to require `Authorization: Bearer <token>` on every route, ADK's
-included, over HTTP and websockets:
-
-```bash
-export OPSPILOT_API_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
-uv run opspilot serve --host 0.0.0.0 --port 8000
-curl -s -H "Authorization: Bearer $OPSPILOT_API_TOKEN" http://HOST:8000/runs/<session_id>
-```
-
-Binding anything but loopback without a token is refused; `--allow-unauthenticated`
-overrides that and prints a warning. Plain `adk web` / `adk api_server` cannot be
-wrapped this way, so keep them on loopback and use `opspilot serve` for any
-shared access. A single shared token is access control for a small team, not
-per-user identity; put a real identity proxy in front for anything wider.
+It binds loopback by default. Any other `--host` needs a token (next section).
 
 `adk_apps/opspilot_ai/agent.py` exposes both `root_agent` and an `App`
 (`app`) carrying the `BudgetPlugin`, so budgets and tool allowlists also apply
 under `adk web` / `adk api_server`. The dataset for dev-UI sessions is
 `OPSPILOT_DEFAULT_DATASET` (default `C02`) unless the session is created with
 `{"dataset_id": "C05"}` in its initial state.
+
+## Shared use: authentication
+
+`opspilot serve` can require a bearer token on everything it serves
+([ADR-0013](adr/0013-bearer-token-authentication.md)). Configure the token's
+SHA-256 digest (preferred) or the token itself:
+
+```bash
+uv run opspilot token                      # prints a token and its digest
+export OPSPILOT_API_TOKEN_SHA256=<digest>  # server side: the digest only
+# or: export OPSPILOT_API_TOKEN=<token>    # the token itself, at least 32 characters
+uv run opspilot serve --host 0.0.0.0
+
+curl -H "Authorization: Bearer $TOKEN" http://server:8000/runs/<session_id>
+```
+
+* Prefer the digest: give the **token** to clients and keep it out of the server's
+  config. Both variables may be set at once; any configured token is accepted.
+  Several digests (comma-separated) let you add a new token, move clients over,
+  then drop the old one. Restart the server to apply a change.
+* Everything is covered: ADK's `/run`, `/run_sse`, `/run_live` (websocket),
+  sessions, artifacts, `/version`, `/docs`, and `/runs/{run_id}`. The one exception
+  is `GET /health`, for load-balancer probes. A missing or wrong token gets `401`
+  (`403` for a websocket handshake).
+* `--host` anything but loopback is **refused without a token**. Behind a proxy that
+  already authenticates, `--allow-unauthenticated` overrides that, with a warning.
+* **TLS is not included.** Tokens cross the network in clear text, so put a
+  TLS-terminating proxy in front or stay on a private network.
+* **A token is full access**: it can start runs (spending model budget with a live
+  provider), read every report and delete sessions. There are no roles, per-token
+  identity or rate limits; failed attempts show as `401`s in the access log. Shared
+  tokens are access control for a small team; put an identity proxy in front for
+  anything wider.
+* Plain `adk web` / `adk api_server` cannot be wrapped this way, and the Docker
+  image's default command is `adk web`: keep them on loopback only, and use
+  `opspilot serve` for any shared access.
 
 ## Container
 
@@ -76,8 +99,8 @@ artifact), and a Docker build with an `adk api_server` smoke test.
 ## Beyond local (not implemented)
 
 `adk deploy cloud_run` / Agent Engine exist in ADK 2.11.0 but were not used or
-tested here. A shared deployment would additionally need: authentication in
-front of the API, a managed session database (`DatabaseSessionService` on
+tested here. A shared deployment would additionally need: per-user identity and
+TLS in front of the API (a shared bearer token is covered above), a managed session database (`DatabaseSessionService` on
 PostgreSQL/Cloud SQL or `VertexAiSessionService`), secret management (Secret
 Manager), real telemetry/topology integrations with read-only credentials,
 OpenTelemetry export to a managed backend (local export is covered in

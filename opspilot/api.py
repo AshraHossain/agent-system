@@ -1,32 +1,76 @@
 """Read-only run lookup served next to ADK's REST API (ADR-0010).
 
-With ``OPSPILOT_API_TOKEN`` set, every route (ADK's and ours, HTTP and
-websocket) requires ``Authorization: Bearer <token>``.
-
 `GET /runs/{run_id}` returns a persisted investigation's validated report. It
 reads sessions and never writes, starts or resumes anything. Runs are found
 under both names OpsPilot stores sessions as: the CLI/runner's own, and the one
 `adk api_server` uses (it names sessions after the `adk_apps/` directory).
+
+With a bearer token configured (``OPSPILOT_API_TOKEN`` and/or
+``OPSPILOT_API_TOKEN_SHA256``), every route except ``GET /health`` requires
+``Authorization: Bearer <token>`` (ADR-0013).
 """
 
 from __future__ import annotations
 
-import hmac
 import logging
+from collections.abc import Sequence
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi import Path as PathParam
-from fastapi.responses import JSONResponse
 from google.adk.sessions import BaseSessionService, Session
 from pydantic import BaseModel, ValidationError
 
 from opspilot.adk.runner import APP_NAME, USER_ID, session_service
 from opspilot.config import REPO_ROOT, Settings
 from opspilot.contracts.report import InvestigationReport, InvestigationStatus
+from opspilot.core.auth import hash_token, parse_bearer, verify_token
 
 ADK_APP_NAME = "opspilot_ai"
 RUN_ID_PATTERN = r"^[A-Za-z0-9_-]+$"
+PUBLIC_PATH = "/health"  # liveness probes cannot send tokens; it returns only {"status": "ok"}
 log = logging.getLogger("opspilot.api")
+
+
+class BearerTokenAuth:
+    """Require `Authorization: Bearer <token>` on every HTTP and websocket request.
+
+    Plain ASGI rather than `BaseHTTPMiddleware`: it must cover websockets (`/run_live`)
+    and must not buffer streaming responses (`/run_sse`). Accepts a token itself
+    and/or SHA-256 digests of tokens; compares digests in constant time. The only
+    exemption is `GET /health`.
+    """
+
+    def __init__(self, app, token: str | None = None, *, digests: Sequence[str] = ()):
+        self.app = app
+        plain = (hash_token(token),) if token else ()
+        self.digests = tuple(dict.fromkeys((*digests, *plain)))
+
+    async def __call__(self, scope, receive, send):
+        kind = scope["type"]
+        if kind not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+        if kind == "http" and scope["method"] == "GET" and scope["path"] == PUBLIC_PATH:
+            await self.app(scope, receive, send)
+            return
+        values = [v.decode("latin-1") for k, v in scope["headers"] if k.lower() == b"authorization"]
+        token = parse_bearer(values)
+        if token is not None and verify_token(token, self.digests):
+            await self.app(scope, receive, send)
+            return
+        if kind == "websocket":
+            # Closing before accept refuses the handshake (HTTP 403).
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        body = b'{"detail":"missing or invalid bearer token"}'
+        headers = [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+            (b"www-authenticate", b"Bearer"),
+            (b"cache-control", b"no-store"),
+        ]
+        await send({"type": "http.response.start", "status": 401, "headers": headers})
+        await send({"type": "http.response.body", "body": body})
 
 
 class RunView(BaseModel):
@@ -82,36 +126,12 @@ def runs_router(settings: Settings) -> APIRouter:
     return router
 
 
-class BearerTokenAuth:
-    """ASGI middleware: reject any HTTP or websocket request without the bearer token.
+def create_app(settings: Settings | None = None, *, bind_host: str | None = None) -> FastAPI:
+    """ADK's REST API for `adk_apps/` plus the run lookup, on one durable session store.
 
-    Pure ASGI rather than ``@app.middleware("http")`` so ADK's websocket routes are
-    covered too. The comparison is constant-time.
+    `bind_host` is the address the server will listen on; ADK uses it to reject
+    DNS-rebinding requests (a foreign `Host` header) on a loopback bind.
     """
-
-    def __init__(self, app, token: str):
-        self.app = app
-        self.expected = f"Bearer {token}".encode()
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] not in ("http", "websocket"):
-            return await self.app(scope, receive, send)
-        given = dict(scope.get("headers") or []).get(b"authorization", b"")
-        if hmac.compare_digest(given, self.expected):
-            return await self.app(scope, receive, send)
-        if scope["type"] == "websocket":
-            await send({"type": "websocket.close", "code": 1008})
-            return
-        response = JSONResponse(
-            {"detail": "missing or invalid bearer token"},
-            status_code=401,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-        await response(scope, receive, send)
-
-
-def create_app(settings: Settings | None = None) -> FastAPI:
-    """ADK's REST API for `adk_apps/` plus the run lookup, on one durable session store."""
     from google.adk.cli.fast_api import get_fast_api_app
 
     settings = settings or Settings.from_env()
@@ -119,8 +139,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         agents_dir=str(REPO_ROOT / "adk_apps"),
         session_service_uri=settings.session_db_url,
         web=False,
+        bind_host=bind_host,
     )
     app.include_router(runs_router(settings))
-    if settings.api_token:
-        app.add_middleware(BearerTokenAuth, token=settings.api_token)
+    if settings.token_digests:
+        app.add_middleware(BearerTokenAuth, digests=settings.token_digests)
     return app

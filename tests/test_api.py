@@ -140,7 +140,7 @@ def test_serve_command_runs_uvicorn_on_loopback_by_default(monkeypatch, capsys):
     import uvicorn
 
     sentinel, calls = object(), []
-    monkeypatch.setattr("opspilot.api.create_app", lambda settings: sentinel)
+    monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: sentinel)
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append((app, kw)))
     assert cli.main(["serve", "--port", "9001"]) == 0
     assert calls == [(sentinel, {"host": "127.0.0.1", "port": 9001})]
@@ -152,7 +152,8 @@ def test_serve_refuses_unauthenticated_beyond_loopback(monkeypatch, capsys):
 
     calls = []
     monkeypatch.delenv("OPSPILOT_API_TOKEN", raising=False)
-    monkeypatch.setattr("opspilot.api.create_app", lambda settings: object())
+    monkeypatch.delenv("OPSPILOT_API_TOKEN_SHA256", raising=False)
+    monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: object())
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append(kw))
     assert cli.main(["serve", "--host", "0.0.0.0"]) == 2
     assert "refusing" in capsys.readouterr().err and calls == []
@@ -162,7 +163,8 @@ def test_serve_beyond_loopback_with_explicit_opt_out_warns(monkeypatch, capsys):
     import uvicorn
 
     monkeypatch.delenv("OPSPILOT_API_TOKEN", raising=False)
-    monkeypatch.setattr("opspilot.api.create_app", lambda settings: object())
+    monkeypatch.delenv("OPSPILOT_API_TOKEN_SHA256", raising=False)
+    monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: object())
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
     assert cli.main(["serve", "--host", "0.0.0.0", "--allow-unauthenticated"]) == 0
     assert "no authentication" in capsys.readouterr().err
@@ -172,7 +174,7 @@ def test_serve_beyond_loopback_with_token(monkeypatch, capsys):
     import uvicorn
 
     monkeypatch.setenv("OPSPILOT_API_TOKEN", TOKEN)
-    monkeypatch.setattr("opspilot.api.create_app", lambda settings: object())
+    monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: object())
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
     assert cli.main(["serve", "--host", "0.0.0.0"]) == 0
     assert "bearer token required" in capsys.readouterr().err

@@ -11,11 +11,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from opspilot.config import REPO_ROOT, Settings
+from opspilot.core.auth import hash_token, new_token
 from opspilot.observability import TracingUnavailable, configure_logging, configure_tracing
 
 W = 100
 # Commands that run investigations in this process; ADK exports traces itself under `serve`.
 TRACED_COMMANDS = frozenset({"demo", "investigate", "resume", "eval"})
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
 def _h(title: str) -> None:
@@ -257,19 +259,35 @@ def _serve(args, settings: Settings) -> int:
 
     from opspilot.api import create_app
 
-    loopback = args.host in ("127.0.0.1", "localhost", "::1")
-    if not loopback and not settings.api_token:
+    digests = settings.token_digests
+    local = args.host in LOOPBACK_HOSTS
+    if not local and not digests:
         if not args.allow_unauthenticated:
             print(
                 f"refusing to serve on {args.host} without authentication: set "
-                "OPSPILOT_API_TOKEN, bind 127.0.0.1, or pass --allow-unauthenticated",
+                "OPSPILOT_API_TOKEN or OPSPILOT_API_TOKEN_SHA256 (create a token with "
+                "`opspilot token`), bind 127.0.0.1, or pass --allow-unauthenticated",
                 file=sys.stderr,
             )
             return 2
         print(f"warning: serving on {args.host} with no authentication", file=sys.stderr)
-    if settings.api_token:
-        print("auth: bearer token required (OPSPILOT_API_TOKEN)", file=sys.stderr)
-    uvicorn.run(create_app(settings), host=args.host, port=args.port)
+    if digests:
+        print(f"auth: bearer token required ({len(digests)} accepted)", file=sys.stderr)
+        if not local:
+            print(
+                f"note: bearer tokens travel in clear text; terminate TLS in front of {args.host}",
+                file=sys.stderr,
+            )
+    uvicorn.run(create_app(settings, bind_host=args.host), host=args.host, port=args.port)
+    return 0
+
+
+def _token() -> int:
+    token = new_token()
+    print(f"token (give it to the client; it cannot be recovered): {token}")
+    print(
+        f"export OPSPILOT_API_TOKEN_SHA256={hash_token(token)}   # server config: the digest only"
+    )
     return 0
 
 
@@ -298,8 +316,9 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument(
         "--allow-unauthenticated",
         action="store_true",
-        help="serve beyond loopback without OPSPILOT_API_TOKEN (not recommended)",
+        help="serve beyond loopback without a token (only behind an authenticating proxy)",
     )
+    sub.add_parser("token", help="create an API token and the digest to configure on the server")
     s = sub.add_parser("show", help="print a persisted final report")
     s.add_argument("session_id")
     e = sub.add_parser("eval", help="run the evaluation suite")
@@ -313,7 +332,11 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--split", choices=["main", "heldout"], default="main")
     e.add_argument("--out", default=str(REPO_ROOT / "var" / "eval"))
     args = p.parse_args(argv)
-    settings = Settings.from_env()
+    try:
+        settings = Settings.from_env()
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     if args.live or getattr(args, "live", False):
         settings = replace(settings, provider="gemini")
     if args.cmd in TRACED_COMMANDS or args.cmd == "serve":
@@ -330,6 +353,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "serve":
         return _serve(args, settings)
+    if args.cmd == "token":
+        return _token()
     handler = {
         "demo": _demo,
         "investigate": _investigate,
