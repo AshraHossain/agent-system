@@ -148,4 +148,4 @@ thresholds are framework-free code in `core/`, agent output is a Pydantic contra
 read-only and take no paths from the model, and the offline suite uses a deterministic scripted
 model/backend. Honest limits: Hugging Face model accuracy is unmeasured (live test needs real
 photos), the embedder is lexical, and search is a brute-force scan. Details:
-[docs/platewatch.md](docs/platewatch.md).
+[platewatch/README.md](platewatch/README.md).
