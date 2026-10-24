@@ -31,6 +31,12 @@ def entity_id(ex: Exchange, *extra: str) -> Any:
     return pick(ex.body, "id", *extra)
 
 
+def run_scoped(tag: str, run_tag: str) -> str:
+    """Workflow tag for one run. A run tag keeps generated names (vendor names,
+    invoice numbers) from colliding with a previous run against the same server."""
+    return f"{tag}-{run_tag}" if run_tag else tag
+
+
 class Workflow:
     def __init__(self, client: ApiClient, catalog: Catalog, tag: str = "lh"):
         self.client = client

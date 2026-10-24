@@ -127,6 +127,16 @@ async def test_concurrency_changes_load_not_outcome():
         assert row["exchanges"][0]["request"]["path"].endswith("/vendors")
 
 
+async def test_run_tag_scopes_generated_names():
+    client = ApiClient.for_app(create_app(frozenset()))
+    try:
+        result = await stress(client, await discover(client), n=3, seed=7, run_tag="zz9")
+    finally:
+        await client.aclose()
+    names = [r["exchanges"][0]["request"]["body"]["name"] for r in result["results"]]
+    assert len(names) == 3 and all("-zz9-" in n for n in names), names
+
+
 async def test_concurrency_must_be_positive():
     client = ApiClient.for_app(create_app(frozenset()))
     try:

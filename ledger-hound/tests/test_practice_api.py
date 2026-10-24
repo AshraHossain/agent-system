@@ -45,6 +45,31 @@ async def test_inactive_vendor_is_seeded(clean):
     assert any(v["active"] is False for v in vendors)
 
 
+def test_pick_random_is_seeded_and_bounded():
+    from ledger_hound.p2p_api.bugs import pick_random
+
+    assert pick_random(4, 11) == pick_random(4, 11)
+    assert len(pick_random(4, 11)) == 4 and pick_random(4, 11) <= BUGS.keys()
+    assert pick_random(len(BUGS), 1) == frozenset(BUGS)
+    for n in (0, len(BUGS) + 1):
+        with pytest.raises(ValueError, match="random:N"):
+            pick_random(n, 1)
+
+
+def test_hidden_bugs_writes_an_answer_key(tmp_path):
+    import json
+
+    from ledger_hound.cli import hidden_bugs
+
+    bugs, key = hidden_bugs("random:3", 42, tmp_path / "practice")
+    answer = json.loads(key.read_text())
+    assert answer["seed"] == 42 and answer["n"] == 3
+    assert {b["name"] for b in answer["bugs"]} == bugs
+    assert all(b["rule"] == BUGS[b["name"]].rule for b in answer["bugs"])
+    with pytest.raises(SystemExit, match="random:N"):
+        hidden_bugs("random:x", 1, tmp_path)
+
+
 def test_parse_bugs():
     assert parse_bugs("") == frozenset()
     assert parse_bugs("all") == frozenset(BUGS)

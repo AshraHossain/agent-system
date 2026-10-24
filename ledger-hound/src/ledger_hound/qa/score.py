@@ -55,3 +55,23 @@ async def score() -> dict[str, Any]:
         "clean_happy_path": clean_happy,
         "bugs": rows,
     }
+
+
+def grade(key: dict[str, Any], report: Any) -> dict[str, Any]:
+    """Grade a report against a blind-practice answer key, by rule.
+
+    Accepts a Ledger Hound report or any report in the brief's shape: a list of
+    ``{"rule", "status"}`` entries, bare or under ``"adversarial"``. A hidden bug
+    counts as caught when its rule is reported BREACHED. Other breached rules are
+    listed, not penalised: one bug often breaks a second rule downstream.
+    """
+    rows = report.get("adversarial", []) if isinstance(report, dict) else report
+    breached = {r.get("rule") for r in rows if str(r.get("status", "")).upper() == "BREACHED"}
+    hidden = key["bugs"]
+    caught = [b for b in hidden if b["rule"] in breached]
+    return {
+        "score": f"{len(caught)}/{len(hidden)}",
+        "caught": caught,
+        "missed": [b for b in hidden if b["rule"] not in breached],
+        "also_breached": sorted(breached - {b["rule"] for b in hidden}),
+    }

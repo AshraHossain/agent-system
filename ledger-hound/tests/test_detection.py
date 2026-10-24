@@ -65,3 +65,47 @@ async def test_float_bug_also_fails_happy_path():
     # 10 x 4.98 in float is 49.800000000000004 > 49.80 received: a real finding, not planned.
     happy, _ = await _statuses(frozenset({"float_money"}))
     assert happy == "FAIL"
+
+
+# --- blind practice -------------------------------------------------------------
+
+
+def test_grade_matches_hidden_bugs_by_rule():
+    from ledger_hound.qa.score import grade
+
+    key = {
+        "bugs": [
+            {"name": "dup_case", "rule": "duplicate_invoice_detection"},
+            {"name": "pay_unapproved", "rule": "payment_gate"},
+        ]
+    }
+    brief_shape = [
+        {"rule": "payment_gate", "status": "breached", "evidence": {}},
+        {"rule": "price_variance", "status": "BREACHED", "evidence": {}},
+        {"rule": "duplicate_invoice_detection", "status": "HELD", "evidence": {}},
+    ]
+    result = grade(key, brief_shape)
+    assert result["score"] == "1/2"
+    assert [b["name"] for b in result["caught"]] == ["pay_unapproved"]
+    assert [b["name"] for b in result["missed"]] == ["dup_case"]
+    assert result["also_breached"] == ["price_variance"]
+    assert grade(key, {"adversarial": brief_shape})["score"] == "1/2"
+
+
+async def test_blind_round_end_to_end(tmp_path):
+    """Hidden bugs on, agent runs without knowing them, the key grades the report."""
+    import json
+
+    from ledger_hound.cli import hidden_bugs
+    from ledger_hound.qa.brain import MockBrain
+    from ledger_hound.qa.judge import investigate
+    from ledger_hound.qa.score import grade
+
+    bugs, key = hidden_bugs("random:4", 7, tmp_path)
+    client = ApiClient.for_app(create_app(bugs))
+    try:
+        report = await investigate(client, MockBrain(), target="blind", run_tag="t")
+    finally:
+        await client.aclose()
+    result = grade(json.loads(key.read_text()), json.loads(json.dumps(report, default=str)))
+    assert result["score"] == "4/4", result["missed"]

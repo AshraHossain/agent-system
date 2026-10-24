@@ -32,7 +32,7 @@ from .discovery import Catalog
 from .http import ApiClient
 from .models import slim_all
 from .oracle import dec, gl_problems, gl_totals, match_is_clean, money, pick
-from .workflow import Line, SetupError, Workflow, entity_id
+from .workflow import Line, SetupError, Workflow, entity_id, run_scoped
 
 # Prices chosen to include float traps: 0.57*100, 0.10*3, 4.98*10 and 1.15*3 are
 # all off by a hair in binary floating point.
@@ -349,7 +349,12 @@ def _size(s: Scenario) -> dict[str, int]:
 
 
 async def shrink_scenario(
-    client: ApiClient, catalog: Catalog, s: Scenario, rule: str, budget: int = 100
+    client: ApiClient,
+    catalog: Catalog,
+    s: Scenario,
+    rule: str,
+    budget: int = 100,
+    run_tag: str = "",
 ) -> dict[str, Any]:
     """Find a smaller scenario that still breaks ``rule``, re-running each candidate on the API.
 
@@ -363,7 +368,8 @@ async def shrink_scenario(
     async def violation(c: Scenario) -> dict[str, str] | None:
         nonlocal runs
         runs += 1
-        res = await _run_scenario(Workflow(client.view(), catalog, f"shrink{s.id}r{runs}"), c)
+        tag = run_scoped(f"shrink{s.id}r{runs}", run_tag)
+        res = await _run_scenario(Workflow(client.view(), catalog, tag), c)
         return next((v for v in res.violations if v["rule"] == rule), None)
 
     found = await violation(s)
@@ -400,6 +406,7 @@ async def stress(
     seed: int = 7,
     concurrency: int = 1,
     shrink: int = 0,
+    run_tag: str = "",
 ) -> dict[str, Any]:
     """Run ``n`` scenarios, at most ``concurrency`` at a time.
 
@@ -423,7 +430,8 @@ async def stress(
     async def one(s: Scenario) -> ScenarioResult:
         async with gate:
             own = client.view()
-            result = await run_scenario(Workflow(own, catalog, f"stress{seed}s{s.id}"), s)
+            tag = run_scoped(f"stress{seed}s{s.id}", run_tag)
+            result = await run_scenario(Workflow(own, catalog, tag), s)
             latencies.extend(x.elapsed_ms for x in own.log)
             return result
 
@@ -451,7 +459,9 @@ async def stress(
         first_ids = {r.id for r in firsts.values()}
         picked = [*firsts.values(), *(r for r in failing if r.id not in first_ids)][:shrink]
         out["shrunk"] = [
-            await shrink_scenario(client, catalog, by_id[r.id], r.violations[0]["rule"])
+            await shrink_scenario(
+                client, catalog, by_id[r.id], r.violations[0]["rule"], run_tag=run_tag
+            )
             for r in picked
         ]
     return out

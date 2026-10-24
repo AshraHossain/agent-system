@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -28,9 +29,21 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     api = sub.add_parser("api", help="serve the practice P2P API")
-    api.add_argument("--bugs", default=None, help="comma list, 'all', or empty (see `attacks`)")
+    api.add_argument(
+        "--bugs",
+        default=None,
+        help="comma list, 'all', empty, or 'random:N' for N hidden bugs (blind practice)",
+    )
     api.add_argument("--host", default="127.0.0.1")
     api.add_argument("--port", type=int, default=8000)
+    api.add_argument("--seed", type=int, default=None, help="RNG seed for random:N")
+    api.add_argument(
+        "--answer-dir", default="var/practice", help="where random:N writes its answer key"
+    )
+
+    gr = sub.add_parser("grade", help="grade a report against a blind-practice answer key")
+    gr.add_argument("key", help="answer key written by `api --bugs random:N`")
+    gr.add_argument("report", help="report JSON: Ledger Hound's, or a list of {rule, status}")
 
     run = sub.add_parser("run", help="explore + attack + judge an API, write a JSON report")
     run.add_argument("--base-url", help="API under test; omit to use the in-process practice API")
@@ -99,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
         return _dspy(args)
     if args.cmd == "diff":
         return _diff(args)
+    if args.cmd == "grade":
+        return _grade(args)
     return _attacks()
 
 
@@ -107,12 +122,53 @@ def _serve(args: argparse.Namespace) -> int:
 
     from .p2p_api.app import create_app
 
-    bugs = parse_bugs(args.bugs) if args.bugs is not None else None
-    app = create_app(bugs)
-    bugs_on = sorted(app.state.bugs) or "none"
-    print(f"practice P2P API on http://{args.host}:{args.port}  bugs={bugs_on}")
+    if (args.bugs or "").strip().startswith("random:"):
+        bugs, key = hidden_bugs(args.bugs.strip(), args.seed, Path(args.answer_dir))
+        app = create_app(bugs)
+        shown: Any = f"hidden ({len(bugs)} of {len(BUGS)}); answer key: {key}"
+    else:
+        app = create_app(parse_bugs(args.bugs) if args.bugs is not None else None)
+        shown = sorted(app.state.bugs) or "none"
+    print(f"practice P2P API on http://{args.host}:{args.port}  bugs={shown}")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
+
+
+def hidden_bugs(spec: str, seed: int | None, answer_dir: Path) -> tuple[frozenset[str], Path]:
+    """Pick ``random:N`` bugs and write the answer key; the server never prints them."""
+    from .p2p_api.bugs import pick_random
+
+    try:
+        n = int(spec.split(":", 1)[1])
+    except ValueError:
+        raise SystemExit(f"--bugs {spec}: expected random:N with N a number") from None
+    seed = seed if seed is not None else secrets.randbelow(1_000_000)
+    bugs = pick_random(n, seed)
+    answer_dir.mkdir(parents=True, exist_ok=True)
+    key = answer_dir / f"answer-{datetime.now():%Y%m%d-%H%M%S}.json"
+    rows = [
+        {"name": b.name, "rule": b.rule, "caught_by": b.caught_by, "description": b.description}
+        for b in sorted((BUGS[name] for name in bugs), key=lambda b: b.name)
+    ]
+    key.write_text(json.dumps({"seed": seed, "n": n, "bugs": rows}, indent=2))
+    return bugs, key
+
+
+def _grade(args: argparse.Namespace) -> int:
+    from .qa.score import grade
+
+    key, report = (json.loads(Path(p).read_text()) for p in (args.key, args.report))
+    result = grade(key, report)
+    print(f"\nBlind practice: {result['score']} hidden bugs caught\n")
+    for mark, rows in (("✔", result["caught"]), ("✘", result["missed"])):
+        for b in rows:
+            print(f"  {mark} {b['name']:<26} {b['rule']:<28} {b['description']}")
+    if result["also_breached"]:
+        print(
+            f"\nalso breached (downstream effects or false alarms, check each): "
+            f"{', '.join(result['also_breached'])}"
+        )
+    return 0 if not result["missed"] else 1
 
 
 async def _run(args: argparse.Namespace) -> int:
@@ -130,6 +186,7 @@ async def _run(args: argparse.Namespace) -> int:
             improvise=args.improvise,
             only=[s for s in args.only.split(",") if s] or None,
             classifier=args.classifier,
+            run_tag=secrets.token_hex(2),
         )
     finally:
         await client.aclose()
@@ -216,9 +273,10 @@ def _print_report(report: dict[str, Any], path: Path) -> None:
         mark = "✔" if s["verdict"] == "as_expected" else "✘"
         print(f"  {mark} {s['index']:>2}. {s['name']:<28} {s['observed']}")
     print("\nADVERSARIAL")
+    width = max((len(r["attack"]) for r in report["adversarial"]), default=0)
     for r in report["adversarial"]:
         sev = f" [{r['severity']}]" if r.get("severity") else ""
-        print(f"  {ICON[r['status']]} {r['attack']:<30} {r['observed'][:90]}{sev}")
+        print(f"  {ICON[r['status']]} {r['attack']:<{width}} {r['observed'][:90]}{sev}")
     print(f"\nSUMMARY: {report['summary']}")
     if changes := report.get("api_changes"):
         from .qa.spec_diff import describe
@@ -240,11 +298,13 @@ async def _score(args: argparse.Namespace) -> int:
         f"\nDetection rate: {result['detection_rate']}   "
         f"false positives on clean API: {result['false_positives_on_clean_api'] or 'none'}\n"
     )
+    width = max((len(row["caught_by"]) for row in result["bugs"]), default=0)
     for row in result["bugs"]:
         mark = "✔" if row["detected"] else "✘"
         extra = f"  (+{', '.join(row['also_breached'])})" if row["also_breached"] else ""
         print(
-            f"  {mark} {row['bug']:<26} -> {row['caught_by']:<30} happy={row['happy_path']}{extra}"
+            f"  {mark} {row['bug']:<26} -> {row['caught_by']:<{width}} "
+            f"happy={row['happy_path']}{extra}"
         )
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(result, indent=2))
@@ -266,6 +326,7 @@ async def _stress(args: argparse.Namespace) -> int:
             seed=args.seed,
             concurrency=args.concurrency,
             shrink=args.shrink,
+            run_tag=secrets.token_hex(2),
         )
     finally:
         await client.aclose()
@@ -379,12 +440,13 @@ def _dspy(args: argparse.Namespace) -> int:
 def _attacks() -> int:
     from .qa.adversary import ATTACKS
 
+    width = max(len(a.id) for a in ATTACKS)
     print("ATTACKS")
     for a in ATTACKS:
-        print(f"  {a.id:<30} {a.rule:<28} [{a.severity}] {a.title}")
+        print(f"  {a.id:<{width}} {a.rule:<28} [{a.severity}] {a.title}")
     print("\nPLANTABLE BUGS (practice API)")
     for b in BUGS.values():
-        print(f"  {b.name:<26} caught by {b.caught_by:<30} {b.description}")
+        print(f"  {b.name:<26} caught by {b.caught_by:<{width}} {b.description}")
     return 0
 
 
