@@ -40,6 +40,17 @@ live model would investigate real incidents.
   *relevance* (hypothesis evidence must concern the component, its endpoints or
   explained services; key facts must name the entity of the evidence they
   cite). It still cannot judge whether the evidence is sufficient.
+* A verifier detection matrix ([eval_results_verifier.md](eval_results_verifier.md))
+  runs 16 planted defects on all 24 cases against each case's clean run:
+  designed-for defects 162/162 caught, 0/45 false positives on harmless edits,
+  but only 37/93 semantic errors caught. It names the gaps (false all-clear
+  summary, inflated confidence, swapped ranking, link blamed for a device
+  fault, paraphrased certainty), most with a deterministic fix. Four
+  deterministic checks then closed all but paraphrased certainty: semantic
+  errors caught rose to 69/93 with still 0/45 false positives. A certainty
+  lexicon (`overstated_certainty`) then brought it to 93/93, but the
+  mutation's phrase is in the lexicon, so that last step is not independent
+  evidence: plain assertions ("The firewall caused this") still pass.
 
 ## Weaknesses, in order of importance
 
@@ -118,5 +129,5 @@ live model would investigate real incidents.
    gain over the rule ranking, make it deterministic and use the LLM only for
    explanation.
 5. Before any shared deployment: per-user identity, roles and TLS (a shared
-   bearer token exists, ADR-0012), managed session DB, encryption at rest,
+   bearer token exists, ADR-0013), managed session DB, encryption at rest,
    secret manager, OTel export, real read-only data integrations.

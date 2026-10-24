@@ -1,4 +1,4 @@
-"""Bearer-token authentication for the shared-use API (ADR-0012)."""
+"""Bearer-token authentication for the shared-use API (ADR-0013)."""
 
 import json
 import os
@@ -19,14 +19,14 @@ from starlette.testclient import TestClient
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from opspilot import cli
-from opspilot.api import BearerAuthMiddleware, create_app
+from opspilot.api import BearerTokenAuth, create_app
 from opspilot.config import Settings
 from opspilot.core import auth
 from opspilot.core.auth import hash_token, new_token, parse_bearer, parse_digests, verify_token
 
 TOKEN = new_token()
 DIGEST = hash_token(TOKEN)
-UNAUTHORIZED = {"detail": "authentication required"}
+UNAUTHORIZED = {"detail": "missing or invalid bearer token"}
 
 
 # --- primitives ------------------------------------------------------------
@@ -136,7 +136,7 @@ def make_app(digests=(DIGEST,)):
         await websocket.send_text("hello")
         await websocket.close()
 
-    app.add_middleware(BearerAuthMiddleware, digests=digests)
+    app.add_middleware(BearerTokenAuth, digests=digests)
     return app
 
 
@@ -236,6 +236,18 @@ def test_a_websocket_with_a_valid_token_connects():
         assert ws.receive_text() == "hello"
 
 
+async def test_a_plain_token_and_digests_are_accepted_together():
+    plain, other = "p" * 40, new_token()
+    app = FastAPI()
+    app.add_api_route("/ping", lambda: {"ok": "get"})
+    app.add_middleware(BearerTokenAuth, plain, digests=(hash_token(other),))
+    async with client(app) as c:
+        for token in (plain, other):
+            response = await c.get("/ping", headers={"Authorization": f"Bearer {token}"})
+            assert response.status_code == 200, token
+        assert (await c.get("/ping", headers=BEARER)).status_code == 401
+
+
 # --- wired into the served app ------------------------------------------------------------
 
 
@@ -263,7 +275,7 @@ async def test_without_configured_digests_nothing_is_enforced(settings, tmp_path
         settings, session_db_url=f"sqlite+aiosqlite:///{tmp_path / 'sessions.db'}"
     )
     app = create_app(open_settings)
-    assert BearerAuthMiddleware not in [m.cls for m in app.user_middleware]
+    assert BearerTokenAuth not in [m.cls for m in app.user_middleware]
     async with client(app) as c:
         assert (await c.get("/list-apps")).status_code == 200
 
@@ -283,16 +295,37 @@ async def test_a_loopback_bind_rejects_rebound_host_headers(settings, tmp_path):
 
 def test_digests_come_from_the_environment(monkeypatch):
     monkeypatch.delenv("OPSPILOT_API_TOKEN_SHA256", raising=False)
-    assert Settings.from_env().api_token_digests == ()
+    monkeypatch.delenv("OPSPILOT_API_TOKEN", raising=False)
+    assert Settings.from_env().api_token_digests == () and Settings.from_env().token_digests == ()
     monkeypatch.setenv("OPSPILOT_API_TOKEN_SHA256", f"{DIGEST},{hash_token('b')}")
     assert Settings.from_env().api_token_digests == (DIGEST, hash_token("b"))
 
 
-def test_a_malformed_digest_stops_every_command_with_a_clear_error(monkeypatch, capsys):
-    monkeypatch.setenv("OPSPILOT_API_TOKEN_SHA256", "not-a-digest")
+def test_the_plain_token_and_the_digests_merge_without_duplicates(settings):
+    plain = "p" * 40
+    both = replace(settings, api_token=plain, api_token_digests=(DIGEST,))
+    assert both.token_digests == (DIGEST, hash_token(plain))
+    same = replace(settings, api_token=TOKEN, api_token_digests=(DIGEST,))
+    assert same.token_digests == (DIGEST,)
+    assert replace(settings, api_token=plain).token_digests == (hash_token(plain),)
+    assert plain not in repr(both)  # the plain token never shows up in logs or tracebacks
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "message"),
+    [
+        ("OPSPILOT_API_TOKEN_SHA256", "not-a-digest", "API token entry 1"),
+        ("OPSPILOT_API_TOKEN", "too-short", "OPSPILOT_API_TOKEN must be at least 32"),
+    ],
+)
+def test_bad_token_settings_stop_every_command_with_a_clear_error(
+    monkeypatch, capsys, variable, value, message
+):
+    monkeypatch.setenv(variable, value)
     assert cli.main(["list"]) == 2
     err = capsys.readouterr().err
-    assert err.startswith("error: API token entry 1") and "opspilot token" in err
+    assert err.startswith(f"error: {message}") and "opspilot token" in err
+    assert value not in err  # not echoed: it may be a secret
 
 
 def test_the_token_command_prints_a_token_and_its_digest(capsys):
@@ -319,6 +352,7 @@ def served(monkeypatch):
 
     monkeypatch.setattr("opspilot.api.create_app", fake_create_app)
     monkeypatch.delenv("OPSPILOT_API_TOKEN_SHA256", raising=False)
+    monkeypatch.delenv("OPSPILOT_API_TOKEN", raising=False)
     return calls
 
 
@@ -332,19 +366,28 @@ def test_loopback_needs_no_token_and_tells_adk_the_bind_host(served, capsys, hos
 def test_other_hosts_are_refused_without_tokens(served, capsys, host):
     assert cli.main(["serve", "--host", host]) == 2
     err = capsys.readouterr().err
-    assert "refusing to serve" in err and "opspilot token" in err and "--insecure-no-auth" in err
+    assert "refusing to serve" in err and "opspilot token" in err
+    assert "OPSPILOT_API_TOKEN " in err and "OPSPILOT_API_TOKEN_SHA256" in err
+    assert "--allow-unauthenticated" in err
     assert served == {"uvicorn": [], "create_app": []}
 
 
 def test_the_override_is_explicit_and_still_warns(served, capsys):
-    assert cli.main(["serve", "--host", "0.0.0.0", "--insecure-no-auth"]) == 0
+    assert cli.main(["serve", "--host", "0.0.0.0", "--allow-unauthenticated"]) == 0
     assert "no authentication" in capsys.readouterr().err and served["uvicorn"]
 
 
-def test_tokens_allow_other_hosts_with_a_tls_reminder(served, monkeypatch, capsys):
-    monkeypatch.setenv("OPSPILOT_API_TOKEN_SHA256", DIGEST)
+@pytest.mark.parametrize(
+    ("variable", "value"), [("OPSPILOT_API_TOKEN_SHA256", DIGEST), ("OPSPILOT_API_TOKEN", TOKEN)]
+)
+def test_either_token_form_allows_other_hosts_with_a_tls_reminder(
+    served, monkeypatch, capsys, variable, value
+):
+    monkeypatch.setenv(variable, value)
     assert cli.main(["serve", "--host", "0.0.0.0"]) == 0
-    assert "clear text" in capsys.readouterr().err and served["create_app"] == ["0.0.0.0"]
+    err = capsys.readouterr().err
+    assert "bearer token required (1 accepted)" in err and "clear text" in err
+    assert TOKEN not in err and served["create_app"] == ["0.0.0.0"]
 
 
 # --- end to end: the real server ------------------------------------------------------------

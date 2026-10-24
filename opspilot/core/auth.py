@@ -1,4 +1,4 @@
-"""Bearer-token authentication primitives for the shared-use API (ADR-0012).
+"""Bearer-token authentication primitives for the shared-use API (ADR-0013).
 
 Tokens are random secrets handed to clients; the server is configured with their
 SHA-256 digests only, so a leaked config, environment dump or process listing does

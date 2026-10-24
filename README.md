@@ -87,7 +87,22 @@ risk/impact assessment, confidence rationale (categorical, rule-derived),
 escalation, verification results and status (`investigated`, `inconclusive`,
 `requires_human_review`, `failed`).
 
-## Repository map
+## Other projects in this repository
+
+OpsPilot is the root project. The repository also holds independent projects;
+each has its own README, and none imports another.
+
+| Path | Project | Stack | CI |
+|---|---|---|---|
+| `ledger-hound/` | Agentic QA for a Purchase-to-Pay API: explorer, adversary and judge agents, stress test, DSPy classifier | OpenAI Agents SDK, FastAPI, DSPy | `ledger-hound.yml` |
+| `traffic-flow-analyzer/` | Congestion forecasting with an interactive dashboard | PydanticAI, Gradio | `trafficflow.yml` |
+| `platewatch/` | Licence-plate detection, tagging and vector search ([README](platewatch/README.md)) | PydanticAI, Hugging Face | `platewatch.yml` |
+
+`ledger-hound/`, `traffic-flow-analyzer/` and `platewatch/` are
+self-contained (own `pyproject.toml`, `uv.lock`, tests, CI workflow); run
+their commands from inside the folder. The root project is OpsPilot only.
+
+## Repository map (OpsPilot)
 
 | Path | Contents |
 |---|---|
@@ -100,6 +115,11 @@ escalation, verification results and status (`investigated`, `inconclusive`,
 | `tests/` | Offline test suite; `-m live` for Gemini |
 | `docs/` | Design docs, ADRs, review |
 
+## PlateWatch
+
+A separate PydanticAI module detects, tags and vector-searches vehicle licence plates:
+`uv run platewatch demo` (offline). See [docs/platewatch.md](docs/platewatch.md).
+
 ## Documentation
 
 [PLAN.md](PLAN.md) (why ADK, why each agent, LangGraph comparison) ·
@@ -109,6 +129,10 @@ escalation, verification results and status (`investigated`, `inconclusive`,
 [security](docs/security.md) · [sessions](docs/session_management.md) ·
 [models](docs/model_configuration.md) · [observability](docs/observability.md) · [deployment](docs/deployment.md) ·
 [ADRs](docs/adr/README.md) · [architecture review](docs/review.md)
+
+## Sub-projects
+
+- **traffic-flow-analyzer/** — PydanticAI-based congestion forecasting with Gradio dashboard. See [traffic-flow-analyzer/README.md](traffic-flow-analyzer/README.md).
 
 ## License
 

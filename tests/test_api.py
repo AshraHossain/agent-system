@@ -147,10 +147,79 @@ def test_serve_command_runs_uvicorn_on_loopback_by_default(monkeypatch, capsys):
     assert capsys.readouterr().err == ""
 
 
-def test_serve_warns_when_binding_beyond_loopback_without_auth(monkeypatch, capsys):
+def test_serve_refuses_unauthenticated_beyond_loopback(monkeypatch, capsys):
     import uvicorn
 
+    calls = []
+    monkeypatch.delenv("OPSPILOT_API_TOKEN", raising=False)
+    monkeypatch.delenv("OPSPILOT_API_TOKEN_SHA256", raising=False)
+    monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: object())
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append(kw))
+    assert cli.main(["serve", "--host", "0.0.0.0"]) == 2
+    assert "refusing" in capsys.readouterr().err and calls == []
+
+
+def test_serve_beyond_loopback_with_explicit_opt_out_warns(monkeypatch, capsys):
+    import uvicorn
+
+    monkeypatch.delenv("OPSPILOT_API_TOKEN", raising=False)
+    monkeypatch.delenv("OPSPILOT_API_TOKEN_SHA256", raising=False)
     monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: object())
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
-    assert cli.main(["serve", "--host", "0.0.0.0", "--insecure-no-auth"]) == 0
+    assert cli.main(["serve", "--host", "0.0.0.0", "--allow-unauthenticated"]) == 0
     assert "no authentication" in capsys.readouterr().err
+
+
+def test_serve_beyond_loopback_with_token(monkeypatch, capsys):
+    import uvicorn
+
+    monkeypatch.setenv("OPSPILOT_API_TOKEN", TOKEN)
+    monkeypatch.setattr("opspilot.api.create_app", lambda settings, bind_host=None: object())
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    assert cli.main(["serve", "--host", "0.0.0.0"]) == 0
+    assert "bearer token required" in capsys.readouterr().err
+
+
+# --- bearer token ----------------------------------------------------------------------
+
+TOKEN = "t" * 40
+
+
+async def test_token_protects_adk_routes_and_run_lookup(stored):
+    app = create_app(replace(stored, api_token=TOKEN))
+    async with _client(app) as c:
+        for path in ("/list-apps", "/runs/abc"):
+            missing = await c.get(path)
+            assert missing.status_code == 401 and missing.headers["www-authenticate"] == "Bearer"
+            wrong = await c.get(path, headers={"Authorization": "Bearer " + "x" * 40})
+            assert wrong.status_code == 401
+        ok = await c.get("/list-apps", headers={"Authorization": f"Bearer {TOKEN}"})
+        assert ok.status_code == 200 and ADK_APP_NAME in ok.json()
+        lookup = await c.get("/runs/abc", headers={"Authorization": f"Bearer {TOKEN}"})
+        assert lookup.status_code == 404  # past auth, then a normal "no such run"
+
+
+async def test_websockets_are_rejected_without_token():
+    from opspilot.api import BearerTokenAuth
+
+    sent = []
+
+    async def app(scope, receive, send):  # pragma: no cover - must not be reached
+        raise AssertionError("inner app reached without a token")
+
+    async def send(message):
+        sent.append(message)
+
+    mw = BearerTokenAuth(app, TOKEN)
+    await mw({"type": "websocket", "headers": []}, None, send)
+    assert sent == [{"type": "websocket.close", "code": 1008}]
+
+
+def test_short_or_empty_token_settings(monkeypatch):
+    from opspilot.config import Settings
+
+    monkeypatch.setenv("OPSPILOT_API_TOKEN", "  ")
+    assert Settings.from_env().api_token is None
+    monkeypatch.setenv("OPSPILOT_API_TOKEN", "short")
+    with pytest.raises(ValueError, match="at least"):
+        Settings.from_env()

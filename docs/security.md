@@ -15,7 +15,7 @@ architectural; heuristics add defence in depth. Prompt injection is mitigated,
 | Malicious text addressed to AI readers or bypassing approval | `ai_addressed` and `approval_bypass` patterns; quarantine applies to any suspicious document in the evidence registry whichever agent surfaced it; suspicious incidents never used as historical references | `core/security.py`, `core/report.py`, `core/analysis.py` | `test_subtle_ai_addressed_injection_is_flagged_and_unsafe_step_rejected`, held-out H08 |
 | Retrieved content overriding policy | Status, escalation and policy are computed by code after all LLM stages; LLM reviewer can only add concerns | `core/report.py` | `test_report.py`, guardrail perturbations |
 | Secret leakage | Secrets never in config files (`.env` ignored, `.env.example` only); redaction of keys/tokens/emails in requests, documents and report text; verifier flags secret-like output | `core/security.py`, `core/verification.py` | `test_secrets_never_persist_in_session_state`, `injection_echo_and_secret` perturbation |
-| Unauthorized access to the shared API | `opspilot serve` requires `Authorization: Bearer` tokens on every HTTP and websocket route except `GET /health`; only SHA-256 digests are configured; constant-time comparison; refuses non-loopback hosts without tokens | `api.py`, `core/auth.py`, `cli.py` | `test_auth.py` (middleware, streaming, websockets, real server) |
+| Unauthorized access to the shared API | `opspilot serve` requires `Authorization: Bearer` tokens on every HTTP and websocket route except `GET /health`; tokens configured as SHA-256 digests (or plain, hashed at startup) and compared in constant time; refuses non-loopback hosts without a token | `api.py`, `core/auth.py`, `config.py`, `cli.py` | `test_auth.py` (middleware, streaming, websockets, real server), `test_api.py` |
 | DNS rebinding against a loopback server | ADK's `Host`-header guard, enabled by passing the bind address | `api.py` | `test_a_loopback_bind_rejects_rebound_host_headers` |
 | Text leaving the process for embeddings | Off by default (`OPSPILOT_EMBEDDER=hashing`); with `gemini`, secrets are redacted before text is sent, and the on-disk cache holds vectors and hashes, not text | `adk/embeddings.py`, `core/embedding_cache.py` | `test_secrets_are_redacted_before_text_leaves_the_process`, `test_the_cache_stores_vectors_and_hashes_not_text` |
 | Investigation content leaving the process in traces | Off unless an `OTEL_EXPORTER_OTLP_*` endpoint is set; spans carry prompts and tool results by default (after the usual redaction), and `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` empties them | `observability.py`, [observability](observability.md) | `test_message_content_is_exported_unless_switched_off` |
@@ -36,6 +36,8 @@ architectural; heuristics add defence in depth. Prompt injection is mitigated,
 * The read-only policy is a verb/keyword filter over English text.
 * Session state is stored unencrypted in local SQLite.
 * `adk web` and `adk api_server` (and the Docker image's default command) have no
-  authentication; keep them on loopback. `opspilot serve` can require bearer tokens,
-  but a token is full access (no roles, per-token identity or rate limiting) and
-  tokens travel in clear text without TLS in front.
+  authentication; keep them on loopback. `opspilot serve` requires a bearer token
+  when `OPSPILOT_API_TOKEN` or `OPSPILOT_API_TOKEN_SHA256` is set and refuses to bind
+  beyond loopback without one (unless `--allow-unauthenticated`). A token is full
+  access (no roles, per-token identity or rate limiting), and tokens travel in clear
+  text without TLS in front.

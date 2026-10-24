@@ -27,7 +27,7 @@ uv run opspilot serve --port 8000
 curl -s http://127.0.0.1:8000/runs/<session_id> | jq '.status, .report.investigation_summary'
 ```
 
-It binds loopback by default. Any other `--host` needs tokens (next section).
+It binds loopback by default. Any other `--host` needs a token (next section).
 
 `adk_apps/opspilot_ai/agent.py` exposes both `root_agent` and an `App`
 (`app`) carrying the `BudgetPlugin`, so budgets and tool allowlists also apply
@@ -38,32 +38,38 @@ under `adk web` / `adk api_server`. The dataset for dev-UI sessions is
 ## Shared use: authentication
 
 `opspilot serve` can require a bearer token on everything it serves
-([ADR-0012](adr/0012-bearer-token-authentication.md)):
+([ADR-0013](adr/0013-bearer-token-authentication.md)). Configure the token's
+SHA-256 digest (preferred) or the token itself:
 
 ```bash
 uv run opspilot token                      # prints a token and its digest
 export OPSPILOT_API_TOKEN_SHA256=<digest>  # server side: the digest only
+# or: export OPSPILOT_API_TOKEN=<token>    # the token itself, at least 32 characters
 uv run opspilot serve --host 0.0.0.0
 
 curl -H "Authorization: Bearer $TOKEN" http://server:8000/runs/<session_id>
 ```
 
-* Give the **token** to clients and keep it out of the server's config; the server
-  only needs the digest. Several digests (comma-separated) let you add a new token,
-  move clients over, then drop the old one. Restart the server to apply a change.
+* Prefer the digest: give the **token** to clients and keep it out of the server's
+  config. Both variables may be set at once; any configured token is accepted.
+  Several digests (comma-separated) let you add a new token, move clients over,
+  then drop the old one. Restart the server to apply a change.
 * Everything is covered: ADK's `/run`, `/run_sse`, `/run_live` (websocket),
   sessions, artifacts, `/version`, `/docs`, and `/runs/{run_id}`. The one exception
   is `GET /health`, for load-balancer probes. A missing or wrong token gets `401`
   (`403` for a websocket handshake).
-* `--host` anything but loopback is **refused without tokens**. Behind a proxy that
-  already authenticates, `--insecure-no-auth` overrides that, with a warning.
+* `--host` anything but loopback is **refused without a token**. Behind a proxy that
+  already authenticates, `--allow-unauthenticated` overrides that, with a warning.
 * **TLS is not included.** Tokens cross the network in clear text, so put a
   TLS-terminating proxy in front or stay on a private network.
 * **A token is full access**: it can start runs (spending model budget with a live
   provider), read every report and delete sessions. There are no roles, per-token
-  identity or rate limits; failed attempts show as `401`s in the access log.
-* The Docker image's default command is `adk web`, which has no authentication;
-  keep publishing it on loopback only, or run `opspilot serve` instead.
+  identity or rate limits; failed attempts show as `401`s in the access log. Shared
+  tokens are access control for a small team; put an identity proxy in front for
+  anything wider.
+* Plain `adk web` / `adk api_server` cannot be wrapped this way, and the Docker
+  image's default command is `adk web`: keep them on loopback only, and use
+  `opspilot serve` for any shared access.
 
 ## Container
 

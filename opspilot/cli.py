@@ -225,6 +225,8 @@ async def _eval(args, settings: Settings) -> int:
     from opspilot.eval.perturbations import run_guardrail_eval
 
     s = with_provider(settings, args.live)
+    if args.verifier_matrix:
+        return await _verifier_matrix(args, s)
     results = await run_eval(s, args.cases or None, split=args.split)
     if args.guardrails and not args.live:
         results["guardrails"] = await run_guardrail_eval(s)
@@ -236,27 +238,46 @@ async def _eval(args, settings: Settings) -> int:
     return 0
 
 
+async def _verifier_matrix(args, settings: Settings) -> int:
+    from opspilot.eval.verifier_matrix import run_verifier_matrix, to_markdown
+
+    if args.live:
+        print("--verifier-matrix patches mock policies; it runs offline only", file=sys.stderr)
+        return 2
+    result = await run_verifier_matrix(settings, args.cases or None)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "verifier_matrix.json").write_text(json.dumps(result, indent=2))
+    (out / "verifier_matrix.md").write_text(to_markdown(result))
+    print(to_markdown(result))
+    print(f"results: {out / 'verifier_matrix.json'}\n         {out / 'verifier_matrix.md'}")
+    return 0
+
+
 def _serve(args, settings: Settings) -> int:
     import uvicorn
 
     from opspilot.api import create_app
 
+    digests = settings.token_digests
     local = args.host in LOOPBACK_HOSTS
-    if not local and not settings.api_token_digests:
-        if not args.insecure_no_auth:
+    if not local and not digests:
+        if not args.allow_unauthenticated:
             print(
-                f"error: refusing to serve on {args.host} without authentication. Set "
-                "OPSPILOT_API_TOKEN_SHA256 (create a token with `opspilot token`), or pass "
-                "--insecure-no-auth if an authenticating proxy sits in front.",
+                f"refusing to serve on {args.host} without authentication: set "
+                "OPSPILOT_API_TOKEN or OPSPILOT_API_TOKEN_SHA256 (create a token with "
+                "`opspilot token`), bind 127.0.0.1, or pass --allow-unauthenticated",
                 file=sys.stderr,
             )
             return 2
         print(f"warning: serving on {args.host} with no authentication", file=sys.stderr)
-    elif not local:
-        print(
-            f"note: bearer tokens travel in clear text; terminate TLS in front of {args.host}",
-            file=sys.stderr,
-        )
+    if digests:
+        print(f"auth: bearer token required ({len(digests)} accepted)", file=sys.stderr)
+        if not local:
+            print(
+                f"note: bearer tokens travel in clear text; terminate TLS in front of {args.host}",
+                file=sys.stderr,
+            )
     uvicorn.run(create_app(settings, bind_host=args.host), host=args.host, port=args.port)
     return 0
 
@@ -293,9 +314,9 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
     sv.add_argument(
-        "--insecure-no-auth",
+        "--allow-unauthenticated",
         action="store_true",
-        help="allow a non-loopback host without tokens (only behind an authenticating proxy)",
+        help="serve beyond loopback without a token (only behind an authenticating proxy)",
     )
     sub.add_parser("token", help="create an API token and the digest to configure on the server")
     s = sub.add_parser("show", help="print a persisted final report")
@@ -303,6 +324,11 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("eval", help="run the evaluation suite")
     e.add_argument("--cases", nargs="*")
     e.add_argument("--guardrails", action="store_true")
+    e.add_argument(
+        "--verifier-matrix",
+        action="store_true",
+        help="planted defects x all cases (main + held-out) vs a clean baseline; offline only",
+    )
     e.add_argument("--split", choices=["main", "heldout"], default="main")
     e.add_argument("--out", default=str(REPO_ROOT / "var" / "eval"))
     args = p.parse_args(argv)

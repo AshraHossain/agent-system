@@ -1,0 +1,210 @@
+"""Catalogue of defects that can be planted in the practice P2P API.
+
+Each bug is off by default. Turning one on makes the API violate exactly one
+financial rule in a realistic way, so the QA agent's detection rate can be
+measured: a bug counts as *detected* when the attack named in ``caught_by``
+reports BREACHED while the bug is on, and HELD while it is off.
+"""
+
+from __future__ import annotations
+
+import random
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Bug:
+    name: str
+    rule: str
+    caught_by: str
+    description: str
+
+
+BUGS: dict[str, Bug] = {
+    b.name: b
+    for b in [
+        Bug(
+            "unmatched_approve",
+            "match_gate",
+            "approve_unmatched",
+            "Approve does not require the invoice to have passed 3-way match.",
+        ),
+        Bug(
+            "over_receive_cumulative",
+            "receipt_quantity",
+            "over_receive_cumulative",
+            "Receipt checks each call against the ordered qty, not the running total.",
+        ),
+        Bug(
+            "overpay_ordered",
+            "overpayment_protection",
+            "invoice_exceeds_received",
+            "Invoice cap uses the ordered value instead of the received value.",
+        ),
+        Bug(
+            "overpay_cumulative",
+            "overpayment_protection",
+            "invoice_cumulative_overbill",
+            "Invoice cap ignores what was already invoiced on the same PO.",
+        ),
+        Bug(
+            "inactive_po",
+            "inactive_vendor_gate",
+            "inactive_vendor_po",
+            "Purchase orders can be raised against inactive vendors.",
+        ),
+        Bug(
+            "dup_case",
+            "duplicate_invoice_detection",
+            "duplicate_invoice_normalized",
+            "Duplicate check is case- and whitespace-sensitive (INV-1 vs ' inv-1').",
+        ),
+        Bug(
+            "float_money",
+            "gl_balance",
+            "gl_balance_precision",
+            "Money is computed with float, so GL debits and credits drift apart.",
+        ),
+        Bug(
+            "silent_partial",
+            "partial_receipt_flag",
+            "partial_receipt_flag",
+            "Match passes silently when goods are only partially received.",
+        ),
+        Bug(
+            "double_post",
+            "exposure_integrity",
+            "double_approve",
+            "Approving an already-approved invoice posts it to the GL again.",
+        ),
+        Bug(
+            "race_approve",
+            "concurrency",
+            "concurrent_approve",
+            "Approve has no lock: two simultaneous approvals both post.",
+        ),
+        Bug(
+            "cross_vendor",
+            "vendor_consistency",
+            "cross_vendor_invoice",
+            "An invoice from vendor B is accepted against vendor A's PO.",
+        ),
+        Bug(
+            "non_positive",
+            "input_validation",
+            "non_positive_values",
+            "Zero or negative quantities and prices are accepted.",
+        ),
+        Bug(
+            "no_price_check",
+            "price_variance",
+            "price_variance",
+            "Match ignores unit-price differences between PO and invoice.",
+        ),
+        Bug(
+            "uom_ignored",
+            "uom_consistency",
+            "invoice_uom_mismatch",
+            "Match compares quantities without units: 10 LB is matched against 10 EA.",
+        ),
+        Bug(
+            "fractional_uom",
+            "uom_consistency",
+            "fractional_discrete_qty",
+            "Fractional quantities are accepted for discrete units (2.5 EA, 0.5 BOX).",
+        ),
+        Bug(
+            "wrong_uom_factor",
+            "uom_consistency",
+            "wrong_uom_conversion_factor",
+            "Unit conversion uses 2× the correct factor; qty is understated so overbilling passes.",
+        ),
+        Bug(
+            "relaxed_price_tolerance",
+            "price_variance",
+            "price_tolerance_overbill",
+            "Match uses a 10% price tolerance instead of exact match;"
+            " small price hikes slip through.",
+        ),
+        Bug(
+            "rematch_allowed",
+            "state_machine",
+            "rematch_after_backorder",
+            "Match does not check invoice status; already-matched invoices can be re-matched,"
+            " silently clearing partial-receipt exceptions.",
+        ),
+        Bug(
+            "extra_sku_allowed",
+            "match_gate",
+            "invoice_extra_sku",
+            "Invoice creation does not verify that all line SKUs are on the PO;"
+            " freight or tax lines not in the order can be invoiced and paid.",
+        ),
+        Bug(
+            "receive_draft_po",
+            "state_machine",
+            "receive_before_submit",
+            "Receipt endpoint accepts goods against a PO that has not been submitted.",
+        ),
+        Bug(
+            "inactive_vendor_invoice",
+            "inactive_vendor_gate",
+            "invoice_inactive_vendor",
+            "Invoice creation does not verify that the vendor is still active;"
+            " invoices can be raised for deactivated vendors.",
+        ),
+        Bug(
+            "approve_skips_gl",
+            "gl_balance",
+            "partial_match_no_gl",
+            "Approve skips GL posting for matched_with_exceptions invoices;"
+            " partial-receipt approvals create no ledger entry.",
+        ),
+        Bug(
+            "pay_unapproved",
+            "payment_gate",
+            "pay_unapproved_invoice",
+            "Payment endpoint does not require the invoice to be in approved status.",
+        ),
+        Bug(
+            "double_pay",
+            "exposure_integrity",
+            "double_payment",
+            "Paying an already-paid invoice posts a second disbursement GL entry.",
+        ),
+        Bug(
+            "overpay_disbursement",
+            "overpayment_protection",
+            "payment_exceeds_invoice",
+            "Payment amount is not verified against the invoice amount;"
+            " overpayment posts to the GL.",
+        ),
+        Bug(
+            "exposure_not_cleared",
+            "exposure_integrity",
+            "exposure_not_cleared_after_payment",
+            "Vendor exposure sums only AP credits and never subtracts the debits"
+            " posted at payment, so open AP stays positive after the invoice is paid.",
+        ),
+    ]
+}
+
+
+def parse_bugs(spec: str | None) -> frozenset[str]:
+    """Parse ``"a,b"`` / ``"all"`` / ``""`` into a validated set of bug names."""
+    if not spec:
+        return frozenset()
+    if spec.strip() == "all":
+        return frozenset(BUGS)
+    names = {s.strip() for s in spec.split(",") if s.strip()}
+    unknown = names - BUGS.keys()
+    if unknown:
+        raise ValueError(f"unknown bug(s): {', '.join(sorted(unknown))}")
+    return frozenset(names)
+
+
+def pick_random(n: int, seed: int) -> frozenset[str]:
+    """``n`` distinct bugs chosen by a seeded RNG, for blind practice."""
+    if not 1 <= n <= len(BUGS):
+        raise ValueError(f"random:N needs 1 <= N <= {len(BUGS)}, got {n}")
+    return frozenset(random.Random(seed).sample(sorted(BUGS), n))

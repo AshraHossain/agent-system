@@ -5,8 +5,9 @@ reads sessions and never writes, starts or resumes anything. Runs are found
 under both names OpsPilot stores sessions as: the CLI/runner's own, and the one
 `adk api_server` uses (it names sessions after the `adk_apps/` directory).
 
-When bearer-token digests are configured, every other route requires a token
-(ADR-0012).
+With a bearer token configured (``OPSPILOT_API_TOKEN`` and/or
+``OPSPILOT_API_TOKEN_SHA256``), every route except ``GET /health`` requires
+``Authorization: Bearer <token>`` (ADR-0013).
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from pydantic import BaseModel, ValidationError
 from opspilot.adk.runner import APP_NAME, USER_ID, session_service
 from opspilot.config import REPO_ROOT, Settings
 from opspilot.contracts.report import InvestigationReport, InvestigationStatus
-from opspilot.core.auth import parse_bearer, verify_token
+from opspilot.core.auth import hash_token, parse_bearer, verify_token
 
 ADK_APP_NAME = "opspilot_ai"
 RUN_ID_PATTERN = r"^[A-Za-z0-9_-]+$"
@@ -30,17 +31,19 @@ PUBLIC_PATH = "/health"  # liveness probes cannot send tokens; it returns only {
 log = logging.getLogger("opspilot.api")
 
 
-class BearerAuthMiddleware:
+class BearerTokenAuth:
     """Require `Authorization: Bearer <token>` on every HTTP and websocket request.
 
     Plain ASGI rather than `BaseHTTPMiddleware`: it must cover websockets (`/run_live`)
-    and must not buffer streaming responses (`/run_sse`). The only exemption is
-    `GET /health`.
+    and must not buffer streaming responses (`/run_sse`). Accepts a token itself
+    and/or SHA-256 digests of tokens; compares digests in constant time. The only
+    exemption is `GET /health`.
     """
 
-    def __init__(self, app, digests: Sequence[str]):
+    def __init__(self, app, token: str | None = None, *, digests: Sequence[str] = ()):
         self.app = app
-        self.digests = tuple(digests)
+        plain = (hash_token(token),) if token else ()
+        self.digests = tuple(dict.fromkeys((*digests, *plain)))
 
     async def __call__(self, scope, receive, send):
         kind = scope["type"]
@@ -56,10 +59,10 @@ class BearerAuthMiddleware:
             await self.app(scope, receive, send)
             return
         if kind == "websocket":
-            await receive()  # the connect message; closing before accept refuses the handshake
+            # Closing before accept refuses the handshake (HTTP 403).
             await send({"type": "websocket.close", "code": 1008})
             return
-        body = b'{"detail":"authentication required"}'
+        body = b'{"detail":"missing or invalid bearer token"}'
         headers = [
             (b"content-type", b"application/json"),
             (b"content-length", str(len(body)).encode()),
@@ -139,6 +142,6 @@ def create_app(settings: Settings | None = None, *, bind_host: str | None = None
         bind_host=bind_host,
     )
     app.include_router(runs_router(settings))
-    if settings.api_token_digests:
-        app.add_middleware(BearerAuthMiddleware, digests=settings.api_token_digests)
+    if settings.token_digests:
+        app.add_middleware(BearerTokenAuth, digests=settings.token_digests)
     return app

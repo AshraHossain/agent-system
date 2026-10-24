@@ -1,0 +1,11 @@
+# Local-only
+notes.md
+.env
+var/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/

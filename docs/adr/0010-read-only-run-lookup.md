@@ -29,5 +29,5 @@ ADK's.
   rejected with 422 before any lookup.
 
 **Not solved:** there is no listing route and no pagination. Authentication was
-added afterwards by [ADR-0012](0012-bearer-token-authentication.md); this decision
+added afterwards by [ADR-0013](0013-bearer-token-authentication.md); this decision
 originally shipped without it.

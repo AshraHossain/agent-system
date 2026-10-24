@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from opspilot.core.auth import parse_digests
+from opspilot.core.auth import hash_token, parse_digests
 from opspilot.core.cost import PriceTable, load_price_table
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -115,8 +115,16 @@ class Settings:
     limits: Limits = field(default_factory=Limits)
     prices: PriceTable | None = None
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
-    # SHA-256 digests of the bearer tokens `opspilot serve` accepts; empty = no authentication.
+    # Bearer tokens for `opspilot serve` (ADR-0013): a token itself (OPSPILOT_API_TOKEN) and/or
+    # SHA-256 digests of tokens (OPSPILOT_API_TOKEN_SHA256). Neither = no authentication.
+    api_token: str | None = field(default=None, repr=False)
     api_token_digests: tuple[str, ...] = ()
+
+    @property
+    def token_digests(self) -> tuple[str, ...]:
+        """Every accepted token, as digests: the configured digests plus the plain token's."""
+        plain = (hash_token(self.api_token),) if self.api_token else ()
+        return tuple(dict.fromkeys(self.api_token_digests + plain))
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -137,4 +145,20 @@ class Settings:
             prices=load_price_table(Path(table))
             if (table := os.getenv("OPSPILOT_PRICE_TABLE"))
             else None,
+            api_token=_api_token(),
         )
+
+
+MIN_TOKEN_LENGTH = 32
+
+
+def _api_token() -> str | None:
+    token = os.getenv("OPSPILOT_API_TOKEN", "").strip()
+    if not token:
+        return None
+    if len(token) < MIN_TOKEN_LENGTH:
+        raise ValueError(
+            f"OPSPILOT_API_TOKEN must be at least {MIN_TOKEN_LENGTH} characters; "
+            "create one with `opspilot token`"
+        )
+    return token

@@ -8,6 +8,12 @@ OpsPilot AI: a read-only, multi-agent network-operations investigation system
 on **Google ADK 2.11.0** (pinned). Read [PLAN.md](PLAN.md) and
 [ARCHITECTURE.md](ARCHITECTURE.md) before changing code.
 
+This file covers OpsPilot (`opspilot/`, `adk_apps/`, `tests/`). The repository
+also holds independent projects with their own conventions: `ledger-hound/`,
+`traffic-flow-analyzer/` and `platewatch/` (self-contained; see their
+README/CLAUDE.md and run commands from inside the folder). The layering rules
+below apply to OpsPilot only.
+
 ## Commands
 
 ```bash
@@ -47,8 +53,25 @@ uv run adk web adk_apps                   # ADK dev UI
   `SequentialAgent` ignores `escalate`, so the optional `reinvestigation_gate`
   ends the rounds without skipping review or the finalizer.
 
+## Sub-projects
+
+- `traffic-flow-analyzer/` — PydanticAI-based congestion forecasting with Gradio dashboard; see its own CLAUDE.md and PLAN.md.
+
 ## Conventions
 
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.
 - Keep the mock deterministic; never assert live-model outputs exactly.
 - Do not claim production readiness.
+
+## PlateWatch (`platewatch/`) — PydanticAI licence-plate module
+
+Separate package beside `opspilot/` (see [docs/platewatch.md](docs/platewatch.md)); it does not use ADK.
+
+- `platewatch/core/` must not import `pydantic_ai`, `torch`, `transformers` or `google`
+  (`tests/test_platewatch.py` enforces it). Normalisation, tag thresholds, embedding and the
+  store live there — never in prompts.
+- Agent tools take no paths, URLs or SQL from the model (the inbox is fixed in `PlateDeps`); every
+  plate id in agent output must have been returned by a tool (output validator).
+- Detector/reader are `Protocol`s in `vision/`; Hugging Face backends import torch lazily and are
+  covered only by `-m live` (`tests/test_platewatch_live.py`). Offline tests use `ScriptedVision`.
+- Commands: `uv run platewatch demo`; `uv run pytest tests/test_platewatch.py`.

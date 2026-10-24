@@ -1,0 +1,454 @@
+"""Command line: ``ledger-hound api | run | score | stress | dspy | attacks``."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import secrets
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from dotenv import load_dotenv
+
+from .p2p_api.bugs import BUGS, parse_bugs
+
+ICON = {
+    "HELD": "✔ HELD    ",
+    "BREACHED": "✘ BREACHED",
+    "ERROR": "! ERROR   ",
+    "SKIPPED": "- SKIPPED ",
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
+    parser = argparse.ArgumentParser(prog="ledger-hound", description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    api = sub.add_parser("api", help="serve the practice P2P API")
+    api.add_argument(
+        "--bugs",
+        default=None,
+        help="comma list, 'all', empty, or 'random:N' for N hidden bugs (blind practice)",
+    )
+    api.add_argument("--host", default="127.0.0.1")
+    api.add_argument("--port", type=int, default=8000)
+    api.add_argument("--seed", type=int, default=None, help="RNG seed for random:N")
+    api.add_argument(
+        "--answer-dir", default="var/practice", help="where random:N writes its answer key"
+    )
+
+    gr = sub.add_parser("grade", help="grade a report against a blind-practice answer key")
+    gr.add_argument("key", help="answer key written by `api --bugs random:N`")
+    gr.add_argument("report", help="report JSON: Ledger Hound's, or a list of {rule, status}")
+
+    run = sub.add_parser("run", help="explore + attack + judge an API, write a JSON report")
+    run.add_argument("--base-url", help="API under test; omit to use the in-process practice API")
+    run.add_argument("--local-bugs", default="", help="bugs for the in-process API (no --base-url)")
+    run.add_argument("--mock", action="store_true", help="never call the LLM, even if a key is set")
+    run.add_argument("--agent-explore", action="store_true", help="LLM drives the happy path")
+    run.add_argument("--improvise", type=int, default=0, metavar="N", help="N LLM-invented probes")
+    run.add_argument("--only", default="", help="comma list of attack ids")
+    run.add_argument("--out", default="var/reports", help="report directory")
+    run.add_argument("--quiet", action="store_true", help="print only the report path")
+    run.add_argument(
+        "--classifier", help="DSPy program (from `dspy optimize`) for a second opinion"
+    )
+
+    sc = sub.add_parser("score", help="detection rate against every planted bug")
+    sc.add_argument("--out", default="var/score.json")
+
+    st = sub.add_parser("stress", help="N randomized POs vs an independent oracle; failure rate")
+    st.add_argument("--base-url", help="API under test; omit to use the in-process practice API")
+    st.add_argument("--local-bugs", default="", help="bugs for the in-process API (no --base-url)")
+    st.add_argument("-n", type=int, default=50, help="number of scenarios (default 50)")
+    st.add_argument("--seed", type=int, default=7, help="RNG seed; same seed = same scenarios")
+    st.add_argument("--out", default="var/stress", help="output directory")
+    st.add_argument(
+        "--concurrency", type=int, default=1, metavar="K", help="scenarios in flight at once"
+    )
+    st.add_argument(
+        "--shrink", type=int, default=0, metavar="N", help="shrink the first N failing scenarios"
+    )
+    st.add_argument(
+        "--explain",
+        action="store_true",
+        help="add a narrative of where failures cluster (LLM with BYNARA_API_KEY, else mock)",
+    )
+
+    df = sub.add_parser("diff", help="compare the API surface of two reports or OpenAPI files")
+    df.add_argument("old", help="earlier report JSON or OpenAPI JSON")
+    df.add_argument("new", help="later report JSON or OpenAPI JSON")
+    df.add_argument(
+        "--explain",
+        action="store_true",
+        help="add a plain-English LLM explanation of the changes (needs BYNARA_API_KEY)",
+    )
+
+    dp = sub.add_parser("dspy", help="optimize the violation-classifier prompt with DSPy")
+    dsub = dp.add_subparsers(dest="dspy_cmd", required=True)
+    ds = dsub.add_parser("dataset", help="build the labelled dataset from planted bugs (no LLM)")
+    ds.add_argument("--out", default="var/dspy")
+    op = dsub.add_parser("optimize", help="baseline vs optimized classifier on held-out dev set")
+    op.add_argument("--optimizer", choices=["labeled", "bootstrap", "mipro"], default="bootstrap")
+    op.add_argument("--threads", type=int, default=4)
+    op.add_argument("--out", default="var/dspy")
+
+    sub.add_parser("attacks", help="list attacks and plantable bugs")
+
+    args = parser.parse_args(argv)
+    if args.cmd == "api":
+        return _serve(args)
+    if args.cmd == "run":
+        return asyncio.run(_run(args))
+    if args.cmd == "score":
+        return asyncio.run(_score(args))
+    if args.cmd == "stress":
+        return asyncio.run(_stress(args))
+    if args.cmd == "dspy":
+        return _dspy(args)
+    if args.cmd == "diff":
+        return _diff(args)
+    if args.cmd == "grade":
+        return _grade(args)
+    return _attacks()
+
+
+def _serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from .p2p_api.app import create_app
+
+    if (args.bugs or "").strip().startswith("random:"):
+        bugs, key = hidden_bugs(args.bugs.strip(), args.seed, Path(args.answer_dir))
+        app = create_app(bugs)
+        shown: Any = f"hidden ({len(bugs)} of {len(BUGS)}); answer key: {key}"
+    else:
+        app = create_app(parse_bugs(args.bugs) if args.bugs is not None else None)
+        shown = sorted(app.state.bugs) or "none"
+    print(f"practice P2P API on http://{args.host}:{args.port}  bugs={shown}")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    return 0
+
+
+def hidden_bugs(spec: str, seed: int | None, answer_dir: Path) -> tuple[frozenset[str], Path]:
+    """Pick ``random:N`` bugs and write the answer key; the server never prints them."""
+    from .p2p_api.bugs import pick_random
+
+    try:
+        n = int(spec.split(":", 1)[1])
+    except ValueError:
+        raise SystemExit(f"--bugs {spec}: expected random:N with N a number") from None
+    seed = seed if seed is not None else secrets.randbelow(1_000_000)
+    bugs = pick_random(n, seed)
+    answer_dir.mkdir(parents=True, exist_ok=True)
+    key = answer_dir / f"answer-{datetime.now():%Y%m%d-%H%M%S}.json"
+    rows = [
+        {"name": b.name, "rule": b.rule, "caught_by": b.caught_by, "description": b.description}
+        for b in sorted((BUGS[name] for name in bugs), key=lambda b: b.name)
+    ]
+    key.write_text(json.dumps({"seed": seed, "n": n, "bugs": rows}, indent=2))
+    return bugs, key
+
+
+def _grade(args: argparse.Namespace) -> int:
+    from .qa.score import grade
+
+    key, report = (json.loads(Path(p).read_text()) for p in (args.key, args.report))
+    result = grade(key, report)
+    print(f"\nBlind practice: {result['score']} hidden bugs caught\n")
+    for mark, rows in (("✔", result["caught"]), ("✘", result["missed"])):
+        for b in rows:
+            print(f"  {mark} {b['name']:<26} {b['rule']:<28} {b['description']}")
+    if result["also_breached"]:
+        print(
+            f"\nalso breached (downstream effects or false alarms, check each): "
+            f"{', '.join(result['also_breached'])}"
+        )
+    return 0 if not result["missed"] else 1
+
+
+async def _run(args: argparse.Namespace) -> int:
+    from .qa.brain import make_brain
+    from .qa.judge import investigate
+
+    client, target = _target(args)
+    brain = make_brain(mock=args.mock)
+    try:
+        report = await investigate(
+            client,
+            brain,
+            target=target,
+            agent_explore=args.agent_explore,
+            improvise=args.improvise,
+            only=[s for s in args.only.split(",") if s] or None,
+            classifier=args.classifier,
+            run_tag=secrets.token_hex(2),
+        )
+    finally:
+        await client.aclose()
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report["api_changes"] = _api_changes(out_dir / "latest.json", report)
+    if report["api_changes"] and not report["api_changes"]["unchanged"]:
+        report["api_changes"]["explanation"] = await brain.explain_diff(report["api_changes"])
+    path = out_dir / f"report-{datetime.now():%Y%m%d-%H%M%S}.json"
+    text = json.dumps(report, indent=2, default=str)
+    path.write_text(text)
+    (out_dir / "latest.json").write_text(text)
+
+    if args.quiet:
+        print(path)
+    else:
+        _print_report(report, path)
+    breached = report["counts"]["BREACHED"] > 0 or report["happy_path"]["status"] != "PASS"
+    return 1 if breached else 0  # non-zero exit lets CI / a scheduler alert on findings
+
+
+def _api_changes(previous: Path, report: dict[str, Any]) -> dict[str, Any] | None:
+    """Diff this run's API surface against the last report in the same directory."""
+    from .qa.spec_diff import diff, load_surface
+
+    try:
+        old = json.loads(previous.read_text())
+    except (OSError, ValueError):
+        return None
+    before = load_surface(old) if isinstance(old, dict) else None
+    if before is None:
+        return None
+    meta = old.get("meta", {})
+    return {
+        "baseline": {"report_generated_at": meta.get("generated_at"), "target": meta.get("target")},
+        **diff(before, report["api_surface"]),
+    }
+
+
+def _diff(args: argparse.Namespace) -> int:
+    from .qa.spec_diff import describe, diff, load_surface
+
+    surfaces = []
+    for name in (args.old, args.new):
+        doc = json.loads(Path(name).read_text())
+        found = load_surface(doc) if isinstance(doc, dict) else None
+        if found is None:
+            print(f"{name}: neither a Ledger Hound report nor an OpenAPI document")
+            return 2
+        surfaces.append(found)
+    d = diff(*surfaces)
+    for line in describe(d):
+        print(line)
+    if getattr(args, "explain", False) and not d["unchanged"]:
+        from .qa.brain import make_brain
+
+        brain = make_brain()
+        explanation = asyncio.run(brain.explain_diff(d))
+        print(f"\nExplanation: {explanation}")
+    return 1 if d["breaking"] else 0
+
+
+def _target(args: argparse.Namespace) -> tuple[Any, str]:
+    """Client for --base-url, or for the in-process practice API with --local-bugs."""
+    from .qa.http import ApiClient
+
+    if args.base_url:
+        return ApiClient.for_url(args.base_url), args.base_url
+    from .p2p_api.app import create_app
+
+    bugs = parse_bugs(args.local_bugs)
+    target = f"in-process practice API (bugs: {', '.join(sorted(bugs)) or 'none'})"
+    return ApiClient.for_app(create_app(bugs)), target
+
+
+def _print_report(report: dict[str, Any], path: Path) -> None:
+    meta = report["meta"]
+    print(f"\nLedger Hound  target: {meta['target']}  brain: {meta['brain']}")
+    print(f"discovery: {meta['discovery']} ({len(meta['roles'])} roles)\n")
+    hp = report["happy_path"]
+    print(f"HAPPY PATH ({hp['mode']}): {hp['status']}")
+    for s in hp["steps"]:
+        mark = "✔" if s["verdict"] == "as_expected" else "✘"
+        print(f"  {mark} {s['index']:>2}. {s['name']:<28} {s['observed']}")
+    print("\nADVERSARIAL")
+    width = max((len(r["attack"]) for r in report["adversarial"]), default=0)
+    for r in report["adversarial"]:
+        sev = f" [{r['severity']}]" if r.get("severity") else ""
+        print(f"  {ICON[r['status']]} {r['attack']:<{width}} {r['observed'][:90]}{sev}")
+    print(f"\nSUMMARY: {report['summary']}")
+    if changes := report.get("api_changes"):
+        from .qa.spec_diff import describe
+
+        since = changes["baseline"]["report_generated_at"]
+        print(f"API CHANGES since {since}: " + "; ".join(describe(changes)))
+        if explanation := changes.get("explanation"):
+            print(f"  {explanation}")
+    for note in meta["notes"]:
+        print(f"note: {note}")
+    print(f"\nreport: {path}")
+
+
+async def _score(args: argparse.Namespace) -> int:
+    from .qa.score import score
+
+    result = await score()
+    print(
+        f"\nDetection rate: {result['detection_rate']}   "
+        f"false positives on clean API: {result['false_positives_on_clean_api'] or 'none'}\n"
+    )
+    width = max((len(row["caught_by"]) for row in result["bugs"]), default=0)
+    for row in result["bugs"]:
+        mark = "✔" if row["detected"] else "✘"
+        extra = f"  (+{', '.join(row['also_breached'])})" if row["also_breached"] else ""
+        print(
+            f"  {mark} {row['bug']:<26} -> {row['caught_by']:<{width}} "
+            f"happy={row['happy_path']}{extra}"
+        )
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(json.dumps(result, indent=2))
+    print(f"\nscore: {args.out}")
+    ok = result["detection_rate"].split("/")[0] == result["detection_rate"].split("/")[1]
+    return 0 if ok and not result["false_positives_on_clean_api"] else 1
+
+
+async def _stress(args: argparse.Namespace) -> int:
+    from .qa.discovery import discover
+    from .qa.stress import digest, scenario_text, stress
+
+    client, target = _target(args)
+    try:
+        result = await stress(
+            client,
+            await discover(client),
+            n=args.n,
+            seed=args.seed,
+            concurrency=args.concurrency,
+            shrink=args.shrink,
+            run_tag=secrets.token_hex(2),
+        )
+    finally:
+        await client.aclose()
+    if "error" in result:
+        print(result["error"])
+        return 2
+    result["target"] = target
+    brain_notes: list[str] = []
+    if args.explain:
+        from .qa.brain import make_brain
+
+        brain = make_brain()
+        result["narrative"] = await brain.narrate_stress(digest(result))
+        brain_notes = brain.notes
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"stress-{datetime.now():%Y%m%d-%H%M%S}.json"
+    path.write_text(json.dumps(result, indent=2, default=str))
+
+    load = result["load"]
+    print(f"\nStress  target: {target}  seed: {result['seed']}")
+    print(
+        f"{result['failed']}/{result['scenarios']} scenarios violated a control "
+        f"(failure rate {result['failure_rate']:.0%})"
+    )
+    print(
+        f"load: concurrency {load['concurrency']}, {load['elapsed_s']}s, "
+        f"{load['scenarios_per_s']} scenarios/s, {load['http_calls']} calls, "
+        f"p50 {load['latency_ms_p50']} ms, p95 {load['latency_ms_p95']} ms\n"
+    )
+    print("  by variant:")
+    for variant, row in result["by_variant"].items():
+        print(f"    {variant:<20} {row['failed']:>3}/{row['scenarios']:<3} failed")
+    if result["by_rule"]:
+        print("  by rule (scenarios affected):")
+        for rule, count in result["by_rule"].items():
+            print(f"    {rule:<24} {count}")
+        print("  first failures:")
+        for r in [r for r in result["results"] if r["violations"]][:3]:
+            v = r["violations"][0]
+            print(f"    #{r['id']} {r['variant']}: [{v['rule']}] {v['detail'][:90]}")
+    if shrunk := result.get("shrunk"):
+        print("  shrunk (smallest scenario that still fails):")
+        for m in shrunk:
+            if not m["reproduced"]:
+                print(f"    #{m['id']} [{m['rule']}] did not reproduce: suspect shared state")
+                continue
+            a, b = (
+                f"{s['lines']} line{'s' * (s['lines'] != 1)}, {s['units']} units"
+                for s in (m["size"]["original"], m["size"]["minimal"])
+            )
+            print(f"    #{m['id']} [{m['rule']}] {a} -> {b} ({m['runs']} runs)")
+            print(f"      {scenario_text(m['minimal'])}")
+    if narrative := result.get("narrative"):
+        print(f"\nNARRATIVE: {narrative}")
+    for note in brain_notes:
+        print(f"note: {note}")
+    print(f"\nstress report: {path}")
+    return 1 if result["failed"] else 0
+
+
+def _dspy(args: argparse.Namespace) -> int:
+    from .qa.labels import build_dataset, split
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    rows = asyncio.run(build_dataset())
+    train, dev = split(rows)
+    with (out / "dataset.jsonl").open("w") as fh:
+        for row in rows:
+            fh.write(json.dumps({**row, "split": "dev" if row in dev else "train"}) + "\n")
+    positives = sum(r["violation"] for r in rows)
+    print(
+        f"dataset: {len(rows)} rows ({positives} violations, {len(rows) - positives} clean); "
+        f"train {len(train)}, dev {len(dev)} -> {out / 'dataset.jsonl'}"
+    )
+    if args.dspy_cmd == "dataset":
+        return 0
+
+    from .qa.brain import LLMSettings
+
+    settings = LLMSettings.from_env()
+    if settings is None:
+        print("optimize needs an LLM: set BYNARA_API_KEY (see .env.example)")
+        return 2
+    try:
+        import dspy
+
+        from .qa.dspy_opt import configure_lm, optimize
+    except ImportError:
+        print("DSPy is an optional extra: uv sync --extra dspy")
+        return 2
+
+    print(f"optimizing with {args.optimizer} on {settings.model} ...")
+    with dspy.context(lm=configure_lm(settings)):
+        report = optimize(train, dev, args.optimizer, out, threads=args.threads)
+    (out / "optimize.json").write_text(json.dumps(report, indent=2))
+    for label in ("baseline", "optimized"):
+        r = report[label]
+        print(
+            f"  {label:<9} accuracy {r['accuracy']:.0%}  precision {r['precision']:.0%}  "
+            f"recall {r['recall']:.0%}  (tp {r['tp']} fp {r['fp']} tn {r['tn']} fn {r['fn']})"
+        )
+    acc, rec = report["accuracy_delta"], report["recall_delta"]
+    print(f"  delta     accuracy {acc:+.0%}  recall {rec:+.0%}")
+    print(f"program: {report['program']}\nprompt:  {report['prompt']}")
+    return 0
+
+
+def _attacks() -> int:
+    from .qa.adversary import ATTACKS
+
+    width = max(len(a.id) for a in ATTACKS)
+    print("ATTACKS")
+    for a in ATTACKS:
+        print(f"  {a.id:<{width}} {a.rule:<28} [{a.severity}] {a.title}")
+    print("\nPLANTABLE BUGS (practice API)")
+    for b in BUGS.values():
+        print(f"  {b.name:<26} caught by {b.caught_by:<{width}} {b.description}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
