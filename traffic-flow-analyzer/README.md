@@ -3,13 +3,21 @@
 Congestion forecasting with PydanticAI agents and an interactive Gradio + Plotly dashboard.
 
 ```
-SyntheticFeed / CsvFeed --> core (forecast, anomaly, congestion, status)   no AI imports
-                               ^
-                  read-only tools (validated, evidence-recording)
-                               ^
-   Forecast Analyst \   (parallel PydanticAI agents)
-   Incident Analyst /-> Brief Writer -> verifier (citations) -> TrafficReport (status by rule)
-                                                              -> Gradio dashboard
+SyntheticFeed / CsvFeed / ReplayFeed / LiveFeed
+        |
+        v
+core (forecast, anomaly, congestion, status, selection, freshness)   ← no AI imports
+        |
+        v
+read-only tools (validated, evidence-recording, stale-aware)
+        |
+        v
+Forecast Analyst \   (parallel PydanticAI agents)
+Incident Analyst /-> Brief Writer -> verifier (citations + numbers)
+                                  -> TrafficReport (status by rule)
+                                  -> Gradio dashboard (history, map, Ask, briefing history)
+                                  -> FastAPI REST layer  (optional)
+                                  -> AlertMonitor / webhooks  (optional)
 ```
 
 ## Quick start
@@ -21,10 +29,10 @@ uv run pytest
 uv run trafficflow serve        # http://127.0.0.1:7860
 ```
 
-Dashboard: speed history with forecast and 90% interval, a segment x time congestion heatmap
-(observed + forecast), a status table, a "Live" mode that advances simulated time, an AI
-briefing tab, an Ask tab, a Map tab and a History tab. Briefings are kept in SQLite
-(`serve --reports var/reports.db`, the default) so the history survives restarts.
+Dashboard tabs: speed history with forecast and 90% interval · segment × time congestion
+heatmap · status table · "Live" mode · AI briefing · Ask (keeps conversation context) ·
+Map · History. Briefings are persisted in SQLite (`serve --reports var/reports.db`, the
+default) so the history survives restarts.
 
 ## Docker / Deployment
 
@@ -33,7 +41,7 @@ briefing tab, an Ask tab, a Map tab and a History tab. Briefings are kept in SQL
 docker build -t trafficflow .
 
 # Run (synthetic feed by default; set TRAFFICFLOW_MODEL for a live LLM)
-docker run -p 7860:7860 -e TRAFFICFLOW_MODEL=gemini-2.0-flash trafficflow
+docker run -p 7860:7860 -e TRAFFICFLOW_MODEL=google-gla:gemini-2.0-flash -e GOOGLE_API_KEY=<key> trafficflow
 ```
 
 The dashboard is served at `http://localhost:7860`. To use a real CSV feed, mount it and pass
@@ -44,13 +52,28 @@ The dashboard is served at `http://localhost:7860`. To use a real CSV feed, moun
 ```bash
 uv run trafficflow fetch-data                      # PeMSD7 -> var/data (SHA-256 checked, not committed)
 uv run trafficflow fetch-data --dataset pems08     # PEMS08 (includes weekends) -> var/data/pems08.npz
-uv run trafficflow evaluate var/data/PeMSD7_V_228.csv   # model vs baselines, interval coverage
+uv run trafficflow evaluate var/data/PeMSD7_V_228.csv --split          # held-out half only
+uv run trafficflow evaluate var/data/pems08.npz --split --period weekend
 uv run trafficflow serve --replay var/data/PeMSD7_V_228.csv --sensors 8   # dashboard on real recordings
 ```
 
-**Result on real data (honest summary):** the model beats persistence only at 60 minutes, is
-worse at 15 and ties at 30, and its "90%" interval covers only ~59-66%. Details and caveats:
-[docs/eval_results_pems.md](docs/eval_results_pems.md).
+**Result on real data.** Forecaster constants were tuned on the first half of the PeMSD7
+origins only. The table below is the held-out second half (38 sensors, weekdays, 06:00–20:00).
+MAE is in km/h.
+
+| Horizon | Model MAE | Persistence MAE | 90% interval coverage | Mean width |
+|---|---|---|---|---|
+| 15 min | 4.69 | 4.92 | 0.90 | 21 km/h |
+| 30 min | 6.37 | 7.23 | 0.90 | 29 km/h |
+| 60 min | 7.71 | 11.02 | 0.90 | 35 km/h |
+
+- **All 228 PeMSD7 sensors:** the same picture (4.68 / 6.34 / 7.67 MAE).
+- **PEMS08 weekdays:** a different dataset, never used for tuning. The model beats
+  persistence at every horizon.
+- **PEMS08 weekends:** the model only ties persistence.
+- **Intervals:** calibrated, but wide.
+
+Details and caveats: [docs/eval_results_pems.md](docs/eval_results_pems.md).
 
 ## Using a real CSV feed
 
@@ -101,40 +124,62 @@ uv run trafficflow validate --model openai:gpt-4o --segment S2 --horizon 30
 > **Note:** Live-model output is not asserted in the test suite (outputs vary).
 > The mock model (`TRAFFICFLOW_MODEL` unset or `"mock"`) is the default for CI.
 
-## Live traffic API adapter
+## Live traffic API adapters
 
-`trafficflow/data/live.py` provides a `LiveFeed` base class that satisfies the `Feed`
-protocol. Subclass it and override `history()` to connect a real provider:
+`trafficflow/data/live.py` provides `LiveFeedBuffer`, a thread-safe rolling 7-day buffer that
+satisfies the `Feed` protocol. It is seeded with synthetic history so forecasts work at once;
+polled readings layer on top. Adapters are included for **TomTom** (`TomTomLiveFeed`),
+**HERE** (`HereLiveFeed`) and an offline `MockLiveFeed`. Review each provider's terms before
+using it against the real API.
 
-```python
-from trafficflow.data.live import LiveFeed
-from trafficflow.contracts import SegmentInfo
-
-
-class MyFeed(LiveFeed):
-    def history(self, segment_id: str, days: float = 7):
-        raw = my_client.get_speed_history(segment_id, days=days)
-        return pd.Series(raw["speed_kmh"], index=pd.to_datetime(raw["ts"]))
-
-
-feed = MyFeed(api_key="...", segments=[SegmentInfo(...)])
+```bash
+uv run trafficflow serve --live --provider tomtom --api-key $TOMTOM_API_KEY --poll-seconds 60
 ```
 
-A `HereLiveFeed` stub is included as a starting point for the HERE Traffic API.
-Possible backends: **HERE Traffic**, **TomTom Traffic**, **Google Maps Traffic**.
-The `TRAFFICFLOW_MODEL` env var still controls which AI model the agents use.
+To add another provider, override `_fetch_current()`:
+
+```python
+from trafficflow.contracts import SegmentInfo
+from trafficflow.data.live import LiveFeedBuffer
+
+
+class MyFeed(LiveFeedBuffer):
+    def _fetch_current(self) -> dict[str, float]:
+        return my_client.latest_speeds()  # {segment_id: speed_kmh}
+
+
+feed = MyFeed(segments=[SegmentInfo(id="A1", name="Main St", free_flow_kmh=80)])
+feed.start_polling(interval_seconds=30)
+```
+
+Segments with no reading in the last 15 minutes are reported as `stale`. Stale segments rule
+out a NORMAL network status.
+
+## REST API and alerts
+
+```bash
+uv sync --extra api
+uv run trafficflow serve-api --port 8000      # /segments /status /forecast/{id} /history/{id} /ask
+uv run trafficflow monitor --level heavy --webhook https://example.invalid/hook
+```
+
+The monitor polls a live feed and POSTs to the webhook when a segment reaches the chosen
+congestion level. It never calls a model.
 
 ## Honest scope
 
-- **There is no live feed wired by default.** The default is a simulated network
-  (`SyntheticFeed`). Real recordings can be replayed (`ReplayFeed`, PeMSD7) or loaded from
-  CSV (`CsvFeed`); both only advance a clock over a recording. Use `LiveFeed` subclasses
-  to connect a real API (see above).
-- PeMSD7 timestamps and units are reconstructed (the file has neither); see the evaluation doc.
-- The forecaster is an interpretable seasonal-median + decaying-residual model. On the
-  simulated data it beats persistence (`trafficflow backtest`), but that is partly circular
-  (see the real-data result above, which is more modest).
-- The incident detector can flag small absolute drops on quiet real sensors as "incidents".
+- **The default feed is simulated** (`SyntheticFeed`). Recorded data can be replayed with
+  `ReplayFeed` (PeMSD7 or PEMS08) or loaded with `CsvFeed`; both only advance a clock over a
+  recording. The TomTom and HERE adapters exist but have not been validated against the real
+  APIs.
+- **PeMSD7 and PEMS08 assumptions:** timestamps and units are reconstructed, because neither
+  file contains them. See [ADR-0004](docs/adr/0004-pemsd7-data-assumptions.md) and
+  [ADR-0005](docs/adr/0005-pems08-data-assumptions.md). The data-use terms are unverified.
+- **Forecaster:** an interpretable seasonal median with a decaying residual, blended toward
+  the latest reading.
+- **Model selection is a rule, not an LLM choice.** A backtest picks the lowest-MAE forecaster
+  per segment, and the agents only explain the result.
+- **Map coordinates** are fixed demo positions. Replayed sensors have no real coordinates.
 - Offline runs use deterministic mock models, not an LLM. For a real model set
   `TRAFFICFLOW_MODEL` (e.g. `google-gla:<model>`) plus that provider's API key; live output is
   untested here.
