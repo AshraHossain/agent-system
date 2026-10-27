@@ -64,6 +64,10 @@ uv run ruff check . && uv run ruff format --check .
 | `API_FUZZ_MODES` | `positive` | `all` adds negative-mode fuzzing |
 | `API_PERF_SAMPLES` / `API_PERF_P95_MS` | `20` / `500` | Perf sample count and p95 budget |
 
+CI (`.github/workflows/api-tests.yml`) runs lint, `-m smoke -x`, then the default suite with
+`--junitxml`, whenever `api-tests/` or `traffic-flow-analyzer/` changes; the JUnit report and
+`reports/server.log` are uploaded as the `api-tests-reports` artifact.
+
 Each test also has a 120 s hard timeout (pytest-timeout), so a hang fails the run
 instead of stalling it.
 

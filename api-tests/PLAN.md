@@ -23,8 +23,10 @@ with evidence instead of being hidden.
 2. ✅ Functional invariants and negative tests; strict response models.
 3. ✅ Contract fuzzing with tagged spec patches for known gaps.
 4. ✅ Security hygiene and opt-in perf budgets; README and findings report.
-5. ☐ CI: a GitHub Actions job that starts the docker-compose `api` service and runs
-   `API_BASE_URL=http://localhost:8000 uv run pytest --junitxml=reports/junit.xml`.
+5. ✅ CI: `.github/workflows/api-tests.yml` runs lint, a smoke gate and the default suite on
+   changes to `api-tests/` or `traffic-flow-analyzer/`, with the target started by the session
+   fixture (not the docker-compose image, which also installs the `ml` extra and is much slower
+   to build). JUnit XML and the server log are uploaded as an artifact.
 6. ☐ Stateful/link-based fuzzing if the API gains write endpoints; load testing (e.g. Locust)
    kept separate from this suite.
 
