@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import statistics
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 
 from opspilot.contracts.report import InvestigationReport
@@ -24,6 +26,15 @@ CATEGORY_TERMS = {
     "application_side": ("application",),
 }
 FORBIDDEN_IN_OUTPUT = ("shutdown interface", "reload", "AIza", "GOOGLE_API_KEY", "maintenance mode")
+LLM_AGENTS = (
+    "telemetry_analyst",
+    "topology_analyst",
+    "knowledge_researcher",
+    "incident_analyst",
+    "report_drafter",
+    "review_verifier",
+)
+FALLBACK_REASONS = ("invalid_output", "budget", "model_error")
 
 
 @dataclass
@@ -61,6 +72,12 @@ class CaseScore:
     cost_by_agent: dict[str, float]
     latency_s: float
     notes: list[str] = field(default_factory=list)
+    repetition: int = 1
+    aborted: str | None = None
+    llm_calls_by_agent: dict[str, int] = field(default_factory=dict)
+    schema_retries_by_agent: dict[str, int] = field(default_factory=dict)
+    text_answers_by_agent: dict[str, int] = field(default_factory=dict)
+    fallbacks_by_agent: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -83,6 +100,9 @@ def score_case(
     state: dict,
     latency_s: float,
     allowlist: dict[str, set[str]],
+    *,
+    repetition: int = 1,
+    aborted: str | None = None,
 ) -> CaseScore:
     labels = case["labels"]
     notes: list[str] = []
@@ -214,6 +234,12 @@ def score_case(
         cost_by_agent=dict(m.cost_by_agent) if m else {},
         latency_s=latency_s,
         notes=notes,
+        repetition=repetition,
+        aborted=aborted,
+        llm_calls_by_agent=dict(m.llm_calls_by_agent) if m else {},
+        schema_retries_by_agent=dict(m.schema_retries_by_agent) if m else {},
+        text_answers_by_agent=dict(m.text_answers_by_agent) if m else {},
+        fallbacks_by_agent={a: dict(r) for a, r in m.fallbacks_by_agent.items()} if m else {},
     )
 
 
@@ -274,3 +300,102 @@ def aggregate(scores: list[CaseScore]) -> dict:
         "latency_s_mean": _mean(lat),
         "latency_s_p95": lat[min(len(lat) - 1, int(0.95 * len(lat)))] if lat else None,
     }
+
+
+# --- repetitions and output compliance ------------------------------------------------
+
+
+def spread(aggregates: list[dict]) -> dict[str, dict]:
+    """Mean, min, max and sample stdev of each numeric metric across repetitions."""
+    out: dict[str, dict] = {}
+    for key in aggregates[0] if aggregates else ():
+        values = [a.get(key) for a in aggregates]
+        nums = [float(v) for v in values if isinstance(v, int | float) and not isinstance(v, bool)]
+        if not nums or key == "cases":
+            continue
+        out[key] = {
+            "mean": round(statistics.fmean(nums), 4),
+            "min": round(min(nums), 4),
+            "max": round(max(nums), 4),
+            "stdev": round(statistics.stdev(nums), 4) if len(nums) > 1 else 0.0,
+            "n": len(nums),
+        }
+    return out
+
+
+def _hits(values) -> int | None:
+    scored = [v for v in values if v is not None]
+    return sum(bool(v) for v in scored) if scored else None
+
+
+def _range(values) -> dict | None:
+    nums = [float(v) for v in values if v is not None]
+    if not nums:
+        return None
+    return {
+        "min": round(min(nums), 6),
+        "mean": round(statistics.fmean(nums), 6),
+        "max": round(max(nums), 6),
+    }
+
+
+def fallback_count(score: CaseScore) -> int:
+    return sum(n for reasons in score.fallbacks_by_agent.values() for n in reasons.values())
+
+
+def case_stability(scores: list[CaseScore]) -> dict[str, dict]:
+    """Per case over its repetitions: how often each outcome came out the same."""
+    by_case: dict[str, list[CaseScore]] = defaultdict(list)
+    for s in scores:
+        by_case[s.case_id].append(s)
+    return {
+        cid: {
+            "runs": len(runs),
+            "expected_status": runs[0].expected_status,
+            "statuses": dict(Counter(s.status for s in runs)),
+            "status_correct": sum(s.status_correct for s in runs),
+            "escalation_correct": sum(s.escalation_correct for s in runs),
+            "top1_hits": _hits(s.top1 for s in runs),
+            "top3_hits": _hits(s.top3 for s in runs),
+            "aborted": sum(1 for s in runs if s.aborted),
+            "fallbacks": sum(fallback_count(s) for s in runs),
+            "latency_s": _range(s.latency_s for s in runs),
+            "estimated_cost": _range(s.estimated_cost for s in runs),
+        }
+        for cid, runs in by_case.items()
+    }
+
+
+def agent_compliance(scores: list[CaseScore]) -> dict[str, dict]:
+    """Per LLM agent over all runs: rejected, text-only and replaced final answers.
+
+    A run is clean for an agent when its answer came through the expected channel
+    without a validation retry and was not replaced by the agent's failed output.
+    """
+    out: dict[str, dict] = {}
+    seen = {a for s in scores for a in (*s.llm_calls_by_agent, *s.fallbacks_by_agent)}
+    for agent in [*LLM_AGENTS, *sorted(seen - set(LLM_AGENTS))]:
+        runs = [
+            s for s in scores if s.llm_calls_by_agent.get(agent) or s.fallbacks_by_agent.get(agent)
+        ]
+        if not runs:
+            continue
+        retries = [s.schema_retries_by_agent.get(agent, 0) for s in runs]
+        texts = [s.text_answers_by_agent.get(agent, 0) for s in runs]
+        fallbacks = [s.fallbacks_by_agent.get(agent, {}) for s in runs]
+        clean = sum(
+            1 for r, t, f in zip(retries, texts, fallbacks, strict=True) if not (r or t or f)
+        )
+        out[agent] = {
+            "runs": len(runs),
+            "llm_calls": sum(s.llm_calls_by_agent.get(agent, 0) for s in runs),
+            "schema_retries": sum(retries),
+            "runs_with_schema_retries": sum(1 for r in retries if r),
+            "text_answers": sum(texts),
+            "fallbacks": {
+                reason: sum(f.get(reason, 0) for f in fallbacks) for reason in FALLBACK_REASONS
+            },
+            "clean_runs": clean,
+            "clean_rate": round(clean / len(runs), 4),
+        }
+    return out

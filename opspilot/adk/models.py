@@ -27,6 +27,9 @@ from opspilot.adk.runtime import RunFaults
 from opspilot.config import Settings
 
 CONTEXT_RE = re.compile(r'<context name="(\w+)">\s*(.*?)\s*</context>', re.S)
+# Injected schema faults (RunFaults.invalid_output / invalid_args).
+PROSE_ANSWER = "The evidence points to a congested link; I am confident about this."
+INVALID_ARGS = {"status": "done", "summary": 42}
 
 
 class ModelQuotaError(RuntimeError):
@@ -91,6 +94,7 @@ class ScriptedLlm(BaseLlm):
     faults: frozenset[str] = frozenset()
     transient: bool = False
     _calls: int = PrivateAttr(default=0)
+    _finals: int = PrivateAttr(default=0)
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
@@ -105,7 +109,19 @@ class ScriptedLlm(BaseLlm):
         if "quota" in faults:
             raise ModelQuotaError("429 RESOURCE_EXHAUSTED (simulated)")
         action = POLICIES[self.agent](parse_turn(self.agent, llm_request))
-        yield to_response(action, "set_model_response" in llm_request.tools_dict)
+        has_tools = "set_model_response" in llm_request.tools_dict
+        if isinstance(action, Final):
+            self._finals += 1
+            broken = self.faults if not (self.transient and self._finals > 1) else frozenset()
+            if "invalid_output" in broken:
+                yield LlmResponse(
+                    content=types.Content(role="model", parts=[types.Part(text=PROSE_ANSWER)])
+                )
+                return
+            if "invalid_args" in broken and has_tools:
+                yield to_response(Final(dict(INVALID_ARGS)), has_tools)
+                return
+        yield to_response(action, has_tools)
 
 
 def to_response(action: ToolCalls | Final, has_tools: bool) -> LlmResponse:
@@ -133,6 +149,10 @@ def make_model(agent: str, settings: Settings, faults: RunFaults | None = None) 
         f.add("timeout")
     if agent in faults.model_quota:
         f.add("quota")
+    if agent in faults.invalid_output:
+        f.add("invalid_output")
+    if agent in faults.invalid_args:
+        f.add("invalid_args")
     return ScriptedLlm(agent=agent, faults=frozenset(f), transient=faults.transient)
 
 

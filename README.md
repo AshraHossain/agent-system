@@ -45,7 +45,7 @@ Live Gemini (optional; see [docs/model_configuration.md](docs/model_configuratio
 export GOOGLE_API_KEY=...                # or Vertex AI + ADC
 uv run opspilot --live demo --case C03
 uv run pytest -m live
-uv run opspilot --live eval
+uv run opspilot --live eval --repeat 5   # spread over 5 runs, per-agent output compliance, vs the mock
 ```
 
 ## What it does

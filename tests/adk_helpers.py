@@ -4,7 +4,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from opspilot.adk.agents import TOOL_ALLOWLIST
+from opspilot.adk.agents import OUTPUT_SCHEMAS, TOOL_ALLOWLIST
 from opspilot.adk.plugins import BudgetPlugin
 from opspilot.adk.runtime import RunFaults, register
 
@@ -20,7 +20,7 @@ async def run_tree(
 ):
     register(inv, settings, dataset_id, faults or RunFaults())
     svc = InMemorySessionService()
-    plugin = BudgetPlugin(settings.limits, TOOL_ALLOWLIST)
+    plugin = BudgetPlugin(settings.limits, TOOL_ALLOWLIST, OUTPUT_SCHEMAS)
     runner = Runner(app_name="t", agent=agent, session_service=svc, plugins=[plugin])
     s = await svc.create_session(
         app_name="t",

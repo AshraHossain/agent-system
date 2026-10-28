@@ -64,7 +64,8 @@ listed in `removed_recommendations`.
 
 ## Failure behaviour
 
-Any LLM agent whose model call fails (timeout, quota, transport) or exceeds its
-budget finishes with a schema-valid `status: failed` output via
-`on_model_error_callback` / `BudgetPlugin`, so downstream stages and the report
-can state what is missing. See [orchestration.md](orchestration.md).
+Any LLM agent whose model call fails (timeout, quota, transport), exceeds its
+budget, or whose final answer does not fit its output schema finishes with a
+schema-valid `status: failed` output via `on_model_error_callback` /
+`BudgetPlugin`, so downstream stages and the report can state what is missing.
+See [orchestration.md](orchestration.md).

@@ -227,7 +227,14 @@ async def _eval(args, settings: Settings) -> int:
     s = with_provider(settings, args.live)
     if args.verifier_matrix:
         return await _verifier_matrix(args, s)
-    results = await run_eval(s, args.cases or None, split=args.split)
+    results = await run_eval(
+        s,
+        args.cases or None,
+        split=args.split,
+        repeat=args.repeat,
+        baseline=args.live,
+        progress=lambda line: print(line, file=sys.stderr, flush=True),
+    )
     if args.guardrails and not args.live:
         results["guardrails"] = await run_guardrail_eval(s)
     jpath, mpath = write_results(results, Path(args.out))
@@ -291,6 +298,18 @@ def _token() -> int:
     return 0
 
 
+def _repeat_count(text: str) -> int:
+    from opspilot.eval.harness import MAX_REPEAT
+
+    try:
+        n = int(text)
+    except ValueError:
+        n = 0
+    if not 1 <= n <= MAX_REPEAT:
+        raise argparse.ArgumentTypeError(f"must be a whole number from 1 to {MAX_REPEAT}")
+    return n
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
     p = argparse.ArgumentParser(prog="opspilot", description=__doc__)
@@ -330,6 +349,14 @@ def main(argv: list[str] | None = None) -> int:
         help="planted defects x all cases (main + held-out) vs a clean baseline; offline only",
     )
     e.add_argument("--split", choices=["main", "heldout"], default="main")
+    e.add_argument(
+        "--repeat",
+        type=_repeat_count,
+        default=1,
+        metavar="N",
+        help="run every case N times and report the spread (with --live, also compared "
+        "with the mock on the same cases)",
+    )
     e.add_argument("--out", default=str(REPO_ROOT / "var" / "eval"))
     args = p.parse_args(argv)
     try:

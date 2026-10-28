@@ -7,8 +7,9 @@
 - [x] Security controls and tests; demo CLI; `adk web` app; Docker; CI
 
 ## High priority
-- [ ] Run live Gemini evaluation (several repetitions), record results, compare with mock
-- [ ] Validate Gemini `set_model_response` compliance for every output schema
+- [ ] Run live Gemini evaluation (several repetitions), record results, compare with mock — tooling ready: `opspilot --live eval --repeat 5`
+- [ ] Validate Gemini `set_model_response` compliance for every output schema — measured per agent by the same run
+- [x] Live-eval tooling: `--repeat N` with spread and per-case stability, per-agent output compliance (schema retries, text answers, fallbacks), mock baseline on the same cases; an answer that breaks its schema now fails only its stage (it used to abort the run)
 - [x] Citation relevance check (entity alignment); sufficiency still unchecked
 - [x] Held-out split with recorded pre-fix baseline (now a regression set)
 - [ ] Independently authored evaluation set (different author)

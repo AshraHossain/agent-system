@@ -316,6 +316,9 @@ def metrics_from_counters(c: RunCounters, settings: Settings, state: dict) -> Ru
         tool_time_ms={k: round(v, 1) for k, v in c.tool_time_ms.items()},
         investigation_rounds=rounds["round"],
         retried_stages=list(rounds["retried"]),
+        schema_retries_by_agent=dict(c.schema_retries),
+        text_answers_by_agent=dict(c.text_answers),
+        fallbacks_by_agent={a: dict(r) for a, r in c.fallbacks.items() if r},
     )
 
 

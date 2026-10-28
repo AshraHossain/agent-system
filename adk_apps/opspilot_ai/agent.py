@@ -11,7 +11,7 @@ import if missing.
 
 from google.adk.apps import App
 
-from opspilot.adk.agents import TOOL_ALLOWLIST, build_root_agent
+from opspilot.adk.agents import OUTPUT_SCHEMAS, TOOL_ALLOWLIST, build_root_agent
 from opspilot.adk.plugins import BudgetPlugin
 from opspilot.config import Settings
 from opspilot.datasets.generate import build_all
@@ -26,5 +26,5 @@ root_agent = build_root_agent(_settings)
 app = App(
     name="opspilot_ai",
     root_agent=root_agent,
-    plugins=[BudgetPlugin(_settings.limits, TOOL_ALLOWLIST)],
+    plugins=[BudgetPlugin(_settings.limits, TOOL_ALLOWLIST, OUTPUT_SCHEMAS)],
 )
