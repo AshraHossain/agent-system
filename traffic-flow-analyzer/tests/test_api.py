@@ -178,3 +178,40 @@ def test_ask_unreadable_body_is_a_documented_400(client):
     r = client.post("/ask", content=b":\xff\xfe", headers={"content-type": "application/json"})
     assert r.status_code == 400
     assert "400" in client.get("/openapi.json").json()["paths"]["/ask"]["post"]["responses"]
+
+
+SECRET = "db at /srv/secret/feed.sqlite refused password=hunter2"
+
+
+class _BrokenFeed(SyntheticFeed):
+    def history(self, segment_id, days):
+        raise RuntimeError(SECRET)
+
+
+def _assert_opaque_500(r, caplog):
+    assert r.status_code == 500
+    detail = r.json()["detail"]
+    assert SECRET not in r.text
+    assert detail.startswith("Internal error (ref ")
+    ref = detail.removeprefix("Internal error (ref ").removesuffix(")")
+    logged = [rec for rec in caplog.records if ref in rec.getMessage()]
+    assert logged and SECRET in str(logged[0].exc_info[1])
+
+
+def test_status_500_does_not_echo_the_error(caplog):
+    client = TestClient(build_app(_BrokenFeed(days=21)))
+    _assert_opaque_500(client.get("/status"), caplog)
+
+
+def test_ask_500_does_not_echo_the_error(client, monkeypatch, caplog):
+    async def broken_ask(*args, **kwargs):
+        raise RuntimeError(SECRET)
+
+    monkeypatch.setattr("trafficflow.agents.pipeline.ask", broken_ask)
+    _assert_opaque_500(client.post("/ask", json={"question": "hi"}), caplog)
+
+
+def test_500s_are_documented(client):
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "500" in paths["/status"]["get"]["responses"]
+    assert "500" in paths["/ask"]["post"]["responses"]

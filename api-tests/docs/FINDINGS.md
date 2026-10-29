@@ -45,8 +45,11 @@ Each of these now returns a documented 4xx, or the documented value.
 
 ## Noted, not numbered
 
-- `/status` and `/ask` return `str(exc)` as the detail of a 500, which would leak internals
-  for any unexpected exception. No input found so far reaches it.
+- **Fixed:** `/status` and `/ask` used to return `str(exc)` as the detail of a 500, which would
+  leak internals (paths, credentials in messages) for any unexpected exception. No input found
+  by this suite reached it, so it got no KD number. Both now log the exception with a short
+  reference and answer `{"detail": "Internal error (ref …)"}`; the 500 is documented.
+  Unit-tested in `traffic-flow-analyzer/tests/test_api.py` by forcing a failure.
 
 ## Not defects (checked and fine)
 
