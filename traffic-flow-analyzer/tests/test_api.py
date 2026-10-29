@@ -61,6 +61,17 @@ def test_get_forecast_custom_horizon(client):
     assert len(fc["points"]) == 6  # 30 min / 5 min
 
 
+def test_get_forecast_horizon_at_cap(client):
+    r = client.get("/forecast/S1?horizon=180")
+    assert r.status_code == 200
+    assert len(r.json()["points"]) == 36
+
+
+def test_get_forecast_horizon_above_cap_is_rejected(client):
+    r = client.get("/forecast/S1?horizon=10000000")
+    assert r.status_code == 422
+
+
 def test_get_forecast_unknown_segment(client):
     r = client.get("/forecast/DOES_NOT_EXIST")
     assert r.status_code == 404
@@ -118,3 +129,16 @@ def test_stream_endpoint_in_openapi(client):
     r = client.get("/openapi.json")
     assert r.status_code == 200
     assert "/stream" in r.json()["paths"]
+
+
+def test_ask_with_history(client):
+    history = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi"}]
+    r = client.post("/ask", json={"question": "And now?", "history": history})
+    assert r.status_code == 200
+    assert r.json()["answer"]
+
+
+@pytest.mark.parametrize("item", [{"content": "hi"}, {"role": "user"}, {}])
+def test_ask_incomplete_history_item_is_rejected(client, item):
+    r = client.post("/ask", json={"question": "ok?", "history": [item]})
+    assert r.status_code == 422

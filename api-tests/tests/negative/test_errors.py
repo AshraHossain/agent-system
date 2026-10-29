@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from api_tests.assertions import assert_error, assert_status
@@ -48,6 +50,21 @@ def test_malformed_query_parameter_is_422(api, segment_id, path, params, field):
 )
 def test_ask_rejects_invalid_bodies(api, payload):
     assert_error(api.post("/ask", json=payload), 422, ValidationErrorBody)
+
+
+@pytest.mark.parametrize("item", [{"content": "hi"}, {"role": "user"}, {}])
+def test_ask_rejects_incomplete_history_items(api, item):
+    """Was KD-08: a 500 echoing the missing key."""
+    response = api.post("/ask", json={"question": "ok?", "history": [item]})
+    assert_error(response, 422, ValidationErrorBody)
+
+
+def test_oversized_horizon_is_rejected_quickly(api, segment_id):
+    """Was KD-02: no upper bound; 10M minutes took ~88 s and returned 243 MB."""
+    started = time.monotonic()
+    response = api.get(f"/forecast/{segment_id}", params={"horizon": 100_000})
+    assert_error(response, 422, ValidationErrorBody)
+    assert time.monotonic() - started < 1.0
 
 
 def test_ask_rejects_non_json(api):
