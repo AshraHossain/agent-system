@@ -12,8 +12,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-# KD-02: horizon/days have no upper bound; huge values take minutes to answer.
-FUZZ_BOUNDS = {"horizon": (1, 180), "days": (0.01, 30.0)}
+# KD-03: days has no bounds; negative values are accepted and huge ones are slow.
+FUZZ_BOUNDS = {"days": (0.01, 30.0)}
 
 # Operations whose path parameters can name a missing segment.
 _PATH_PARAM_OPS = ("/forecast/{segment_id}", "/history/{segment_id}", "/path/{source}/{target}")
@@ -58,23 +58,12 @@ def patched_spec(spec: dict[str, Any]) -> dict[str, Any]:
                 },
             )
 
-    # KD-02: bound the parameters fuzzing may generate.
+    # KD-03: bound the parameters fuzzing may generate.
     for op in (op for item in paths.values() for op in item.values()):
         for param in op.get("parameters", []):
             if param.get("name") in FUZZ_BOUNDS:
                 low, high = FUZZ_BOUNDS[param["name"]]
                 param["schema"].update(minimum=low, maximum=high)
-
-    # KD-08: /ask accepts any string map as a history item but 500s without
-    # "role" and "content"; fuzz only the items it can handle.
-    ask = out.get("components", {}).get("schemas", {}).get("AskRequest", {})
-    for variant in ask.get("properties", {}).get("history", {}).get("anyOf", []):
-        if variant.get("type") == "array":
-            variant["items"]["required"] = ["role", "content"]
-            variant["items"]["properties"] = {
-                "role": {"type": "string"},
-                "content": {"type": "string"},
-            }
 
     # KD-06: timestamps are served without a UTC offset, which RFC 3339
     # "date-time" requires. Shape and type are still checked.

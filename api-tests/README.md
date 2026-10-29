@@ -43,7 +43,7 @@ API_BASE_URL=http://localhost:8000 uv run pytest
 uv run pytest -m smoke -x                          # fast liveness gate
 uv run pytest -m "functional or negative"
 uv run pytest -m contract                          # fuzzing, schema-valid requests only
-API_FUZZ_MODES=all uv run pytest -m contract       # + negative mode (finds the known KD-08 too)
+API_FUZZ_MODES=all uv run pytest -m contract       # + negative mode (invalid requests too)
 API_FUZZ_EXAMPLES=200 uv run pytest -m contract    # deeper fuzzing
 uv run pytest -m perf                              # latency budgets
 uv run pytest -n auto -m "not contract and not perf"   # parallel (pytest-xdist; one server per worker)
@@ -90,6 +90,6 @@ latency, body preview).
 
 ## Results on the current target
 
-Default run: 65 passed, 14 xfailed (8 known defects), 1 skipped (auth, no token);
-perf: 5 passed. Two medium findings, an unbounded `horizon` (KD-02) and a 500 on
-incomplete `/ask` history (KD-08), plus six low ones; see [docs/FINDINGS.md](docs/FINDINGS.md).
+Eight findings so far. The two medium ones, an unbounded `horizon` (KD-02) and a 500 on
+incomplete `/ask` history (KD-08), are fixed and now guarded by the negative tests; six low
+ones are open and pinned as strict xfails. See [docs/FINDINGS.md](docs/FINDINGS.md).

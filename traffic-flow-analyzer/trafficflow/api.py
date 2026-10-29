@@ -31,11 +31,14 @@ from trafficflow.contracts import CongestionLevel
 from trafficflow.data.feed import Feed
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Query
     from fastapi.responses import StreamingResponse
     from pydantic import BaseModel as _BaseModel
 except ImportError as _err:
     raise ImportError("fastapi is required: pip install 'trafficflow[api]'") from _err
+
+# Same cap as the agents' forecast tools; work and response size grow with the horizon.
+MAX_HORIZON_MINUTES = 180
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +82,14 @@ class StatusOut(_BaseModel):
     segment_levels: dict[str, str]
 
 
+class Turn(_BaseModel):
+    role: str
+    content: str
+
+
 class AskRequest(_BaseModel):
     question: str
-    history: list[dict[str, str]] | None = None
+    history: list[Turn] | None = None
 
 
 class AskResponse(_BaseModel):
@@ -154,7 +162,7 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         return StatusOut(as_of=feed.now, status=ns.value, segment_levels=seg_levels)
 
     @app.get("/forecast/{segment_id}", response_model=ForecastOut)
-    def get_forecast(segment_id: str, horizon: int = 60):
+    def get_forecast(segment_id: str, horizon: int = Query(60, le=MAX_HORIZON_MINUTES)):
         segs = {s.id: s for s in feed.segments()}
         if segment_id not in segs:
             raise HTTPException(status_code=404, detail=f"Segment {segment_id!r} not found")
@@ -223,7 +231,8 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         from trafficflow.agents.pipeline import ask
 
         try:
-            answer = await ask(feed, body.question, model=model, history=body.history)
+            history = [t.model_dump() for t in body.history] if body.history else None
+            answer = await ask(feed, body.question, model=model, history=history)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return AskResponse(answer=answer)

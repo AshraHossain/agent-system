@@ -6,7 +6,7 @@ match the response schema. Known spec gaps are patched first; see
 ``api_tests.contract``.
 
 By default only schema-valid requests are generated: invalid ones keep landing
-on the known input-validation defects (KD-01/03/08), which are pinned in
+on the known input-validation defects (KD-01/03), which are pinned in
 ``tests/known_defects/``. ``API_FUZZ_MODES=all`` adds schemathesis' negative
 mode to look for anything new; expect those known defects among its failures.
 """
