@@ -84,6 +84,12 @@ class RunMetrics(BaseModel):
     tool_time_ms: dict[str, float] = Field(default_factory=dict)
     investigation_rounds: int = 1
     retried_stages: list[str] = Field(default_factory=list)
+    # Output compliance per agent: set_model_response calls rejected by validation (the
+    # model retried), final answers sent as text instead of set_model_response, and
+    # outputs replaced by the agent's failed output, by reason.
+    schema_retries_by_agent: dict[str, int] = Field(default_factory=dict)
+    text_answers_by_agent: dict[str, int] = Field(default_factory=dict)
+    fallbacks_by_agent: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
 class InvestigationReport(BaseModel):

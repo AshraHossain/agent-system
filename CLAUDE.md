@@ -38,7 +38,7 @@ uv run adk web adk_apps                   # ADK dev UI
   the generator and `opspilot/eval`). `tests/test_evaluation.py` guards this.
 - New LLM agent ⇒ add an output contract, an instruction provider in
   `adk/prompts.py`, a mock policy + `failed_output` in `adk/mock_policies.py`,
-  an allowlist entry in `adk/agents.py`, and contract tests.
+  allowlist and `OUTPUT_SCHEMAS` entries in `adk/agents.py`, and contract tests.
 
 ## ADK specifics verified for 2.11.0 (see tests/test_adk_contract.py)
 
@@ -52,6 +52,11 @@ uv run adk web adk_apps                   # ADK dev UI
 - `LoopAgent` ends when any event it yields has `actions.escalate`;
   `SequentialAgent` ignores `escalate`, so the optional `reinvestigation_gate`
   ends the rounds without skipping review or the finalizer.
+- A final *text* answer that fails `output_schema` raises `ValidationError` and
+  aborts the whole run (JSON text, even fenced, is accepted); `BudgetPlugin`
+  replaces such answers with the agent's `failed_output`. Invalid
+  `set_model_response` arguments go back to the model as `{"error": ...}` for
+  another try.
 
 ## Sub-projects
 

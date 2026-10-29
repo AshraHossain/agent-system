@@ -113,13 +113,17 @@ export OPSPILOT_EMBEDDER=gemini          # default: hashing
 | Transient HTTP (429/5xx) | Retried by google-genai up to `max_model_attempts`, with backoff (1–8 s) |
 | Timeout / quota after retries / other model error | `on_model_error_callback` returns a schema-valid `status: failed` output; pipeline continues; report becomes `inconclusive` or `failed` |
 | Model or iteration budget exhausted | `BudgetPlugin` short-circuits with the same failed output |
+| `set_model_response` arguments that fail the schema | ADK returns the validation error to the model, which tries again until its iteration budget runs out |
+| Final answer that does not fit the schema (prose, truncated JSON, no answer) | `BudgetPlugin` replaces it with the same failed output, naming the reason; without this ADK raises and the whole run fails |
 | Wall-clock limit | Run cancelled; deterministic fallback report with status `failed` is persisted |
 
 ## Known live-mode risks (unverified offline)
 
-* Gemini must call `set_model_response` with schema-conformant JSON; failures
-  surface as validation errors → stage failure.
-* Live models may cite irrelevant-but-existing evidence; the verifier checks
-  existence and kind, not relevance.
+* Gemini should answer through `set_model_response`. Rejected arguments are
+  retried, JSON sent as text is accepted, and anything else fails only that
+  stage; `opspilot --live eval` counts all three per agent
+  ([evaluation.md](evaluation.md#live-evaluation)).
+* Live models may cite existing evidence that does not support the claim; the
+  verifier checks existence, kind and entity relevance, not sufficiency.
 * Live behaviour has not been evaluated in this environment (no credentials). This
   includes the Gemini embedding option above.

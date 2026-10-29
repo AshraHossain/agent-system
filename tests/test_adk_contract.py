@@ -5,6 +5,7 @@ If an ADK upgrade changes any of these, this file fails first.
 
 import json
 
+import pytest
 from google.adk.agents import BaseAgent, LlmAgent, SequentialAgent
 from google.adk.events import Event, EventActions
 from google.adk.models import BaseLlm, LlmResponse
@@ -12,7 +13,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import ToolContext
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 class Out(BaseModel):
@@ -106,3 +107,60 @@ async def test_on_model_error_callback_can_supply_schema_valid_output():
     )
     state = await _run(agent)
     assert state["out"] == {"value": -1}
+
+
+class Scripted(BaseLlm):
+    """Replies with the given final parts after one `probe` call."""
+
+    model: str = "scripted"
+    finals: list = []  # noqa: RUF012 - pydantic field, copied per instance
+    seen: list = []  # noqa: RUF012 - pydantic field, copied per instance
+
+    async def generate_content_async(self, req, stream=False):
+        self.seen.append(req)
+        frs = [p.function_response for c in req.contents for p in c.parts if p.function_response]
+        if not frs:
+            call = types.FunctionCall(name="probe", args={"entity_id": "x"})
+            part = types.Part(function_call=call)
+        else:
+            part = self.finals[min(len(frs) - 1, len(self.finals) - 1)]
+        yield LlmResponse(content=types.Content(role="model", parts=[part]))
+
+
+def _schema_agent(finals):
+    return LlmAgent(
+        name="a",
+        model=Scripted(finals=finals, seen=[]),
+        instruction="i",
+        tools=[probe],
+        output_schema=Out,
+        output_key="out",
+        include_contents="none",
+    )
+
+
+async def test_a_final_text_answer_that_breaks_output_schema_aborts_the_run():
+    """Why BudgetPlugin replaces such answers with the agent's failed output."""
+    with pytest.raises(ValidationError, match="Out"):
+        await _run(_schema_agent([types.Part(text="The value is about four.")]))
+    # A JSON answer in text (even fenced) is accepted although set_model_response exists.
+    state = await _run(_schema_agent([types.Part(text='```json\n{"value": 4.0}\n```')]))
+    assert state["out"] == {"value": 4.0}
+
+
+async def test_rejected_set_model_response_arguments_go_back_to_the_model():
+    bad = types.Part(function_call=types.FunctionCall(name="set_model_response", args={"v": 1}))
+    good = types.Part(
+        function_call=types.FunctionCall(name="set_model_response", args={"value": 2.0})
+    )
+    agent = _schema_agent([bad, good])
+    state = await _run(agent)
+    assert state["out"] == {"value": 2.0}
+    replies = [
+        p.function_response.response
+        for c in agent.model.seen[-1].contents
+        for p in c.parts
+        if p.function_response and p.function_response.name == "set_model_response"
+    ]
+    assert len(replies) == 1 and set(replies[0]) == {"error"}
+    assert replies[0]["error"].startswith("Validation Error found")

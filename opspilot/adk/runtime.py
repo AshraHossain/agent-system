@@ -22,8 +22,13 @@ class RunFaults:
 
     model_timeout: frozenset[str] = frozenset()
     model_quota: frozenset[str] = frozenset()
+    # Final answers that break the output schema: prose instead of JSON, or
+    # `set_model_response` arguments that fail validation (agents with tools only).
+    invalid_output: frozenset[str] = frozenset()
+    invalid_args: frozenset[str] = frozenset()
     telemetry_unavailable: bool = False
-    # Model faults hit only each agent's first call (a transient outage).
+    # Model faults hit only each agent's first call (a transient outage); schema
+    # faults only its first final answer.
     transient: bool = False
 
     @classmethod
@@ -32,6 +37,8 @@ class RunFaults:
         return cls(
             model_timeout=frozenset(spec.get("model_timeout", [])),
             model_quota=frozenset(spec.get("model_quota", [])),
+            invalid_output=frozenset(spec.get("invalid_output", [])),
+            invalid_args=frozenset(spec.get("invalid_args", [])),
             telemetry_unavailable=bool(spec.get("telemetry_unavailable", False)),
             transient=bool(spec.get("transient", False)),
         )

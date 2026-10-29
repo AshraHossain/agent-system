@@ -20,7 +20,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.genai import types
 
-from opspilot.adk.agents import TOOL_ALLOWLIST, build_root_agent
+from opspilot.adk.agents import OUTPUT_SCHEMAS, TOOL_ALLOWLIST, build_root_agent
 from opspilot.adk.deterministic import metrics_from_counters
 from opspilot.adk.plugins import BudgetPlugin
 from opspilot.adk.rounds import ROUNDS_KEY, STAGE_GROUPS
@@ -168,7 +168,7 @@ async def run_investigation(
         )
     inv = session.state["investigation_id"]
     register(inv, settings, session.state.get("dataset_id", dataset_id), faults)
-    plugin = BudgetPlugin(settings.limits, TOOL_ALLOWLIST)
+    plugin = BudgetPlugin(settings.limits, TOOL_ALLOWLIST, OUTPUT_SCHEMAS)
     runner = Runner(
         app_name=APP_NAME,
         agent=build_root_agent(settings, faults),

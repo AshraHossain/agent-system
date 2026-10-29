@@ -6,6 +6,7 @@ import sys
 from google.adk.apps import App
 
 from opspilot import cli
+from opspilot.adk.agents import OUTPUT_SCHEMAS
 from opspilot.adk.plugins import BudgetPlugin
 
 
@@ -18,7 +19,8 @@ def test_adk_app_entry_point(monkeypatch, data_dir):
     finally:
         sys.path.remove("adk_apps")
     assert isinstance(mod.app, App) and mod.app.root_agent is mod.root_agent
-    assert any(isinstance(p, BudgetPlugin) for p in mod.app.plugins)
+    (plugin,) = [p for p in mod.app.plugins if isinstance(p, BudgetPlugin)]
+    assert plugin.schemas == OUTPUT_SCHEMAS  # dev-UI runs get the output guard too
     assert mod.root_agent.name == "opspilot_investigation"
 
 
