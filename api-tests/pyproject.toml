@@ -1,0 +1,44 @@
+[project]
+name = "api-tests"
+version = "0.1.0"
+description = "Black-box API test suite (smoke, functional, negative, contract, perf, security) for the Traffic Flow API."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7,<3",
+    "pytest>=8.2",
+]
+
+[dependency-groups]
+dev = ["schemathesis>=4", "pytest-timeout>=2.3", "pytest-xdist>=3.6", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/api_tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers -m 'not perf'"
+xfail_strict = true
+timeout = 120
+markers = [
+    "smoke: every endpoint answers (run first)",
+    "functional: happy paths and data invariants",
+    "negative: bad input gets a clean 4xx",
+    "contract: schemathesis fuzzing against the OpenAPI document",
+    "perf: latency budgets (opt-in: -m perf)",
+    "security: black-box hygiene checks",
+    "known_defect: strict-xfail pins for defects in docs/FINDINGS.md",
+]
+junit_family = "xunit2"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

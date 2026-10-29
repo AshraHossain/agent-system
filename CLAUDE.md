@@ -10,7 +10,7 @@ on **Google ADK 2.11.0** (pinned). Read [PLAN.md](PLAN.md) and
 
 This file covers OpsPilot (`opspilot/`, `adk_apps/`, `tests/`). The repository
 also holds independent projects with their own conventions: `ledger-hound/`,
-`traffic-flow-analyzer/` and `platewatch/` (self-contained; see their
+`traffic-flow-analyzer/`, `platewatch/` and `api-tests/` (self-contained; see their
 README/CLAUDE.md and run commands from inside the folder). The layering rules
 below apply to OpsPilot only.
 
@@ -61,6 +61,7 @@ uv run adk web adk_apps                   # ADK dev UI
 ## Sub-projects
 
 - `traffic-flow-analyzer/` — PydanticAI-based congestion forecasting with Gradio dashboard; see its own CLAUDE.md and PLAN.md.
+- `api-tests/` — black-box HTTP test suite (pytest, httpx, schemathesis) for the Traffic Flow API; see its own CLAUDE.md and docs/FINDINGS.md.
 
 ## Conventions
 

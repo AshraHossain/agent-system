@@ -1,0 +1,38 @@
+name: api-tests
+on:
+  push:
+    paths:
+      - "api-tests/**"
+      - "traffic-flow-analyzer/**" # the API under test
+      - ".github/workflows/api-tests.yml"
+  pull_request:
+    paths:
+      - "api-tests/**"
+      - "traffic-flow-analyzer/**"
+      - ".github/workflows/api-tests.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: api-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Install the target (started by the session fixture)
+        working-directory: traffic-flow-analyzer
+        run: uv sync --frozen --extra api
+      - run: uv run ruff check . && uv run ruff format --check .
+      - name: Tests (smoke first, then the rest; perf stays opt-in)
+        run: |
+          uv run pytest -m smoke -x
+          uv run pytest --junitxml=reports/junit.xml
+      - name: Upload report and server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-tests-reports
+          path: api-tests/reports/
+          if-no-files-found: ignore
