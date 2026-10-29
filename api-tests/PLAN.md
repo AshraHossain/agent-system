@@ -32,5 +32,6 @@ with evidence instead of being hidden.
 
 ## Out of scope
 
-- Fixing the target's defects (reported in `docs/FINDINGS.md` with suggested fixes).
+- Fixing the target's defects inside this suite: fixes land in `traffic-flow-analyzer/`
+  (KD-01..KD-09 are fixed), and their tests move from `known_defects/` into the regular suite.
 - Asserting live-model `/ask` output.

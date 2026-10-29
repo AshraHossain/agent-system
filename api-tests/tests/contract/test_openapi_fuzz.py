@@ -5,10 +5,10 @@ documented status codes, documented content types and response bodies that
 match the response schema. Known spec gaps are patched first; see
 ``api_tests.contract``.
 
-By default only schema-valid requests are generated: invalid ones keep landing
-on the known input-validation defects (KD-01/03), which are pinned in
-``tests/known_defects/``. ``API_FUZZ_MODES=all`` adds schemathesis' negative
-mode to look for anything new; expect those known defects among its failures.
+Both schema-valid and invalid (negative mode) requests are generated: invalid
+ones must get a documented 4xx. ``API_FUZZ_MODES=positive`` restricts fuzzing
+to valid requests, e.g. while a new input-validation finding is pinned in
+``tests/known_defects/`` and would otherwise fail every run.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ pytestmark = pytest.mark.contract
 
 MAX_EXAMPLES = int(os.environ.get("API_FUZZ_EXAMPLES", "25"))
 MODES = (
-    list(GenerationMode)
-    if os.environ.get("API_FUZZ_MODES", "positive") == "all"
-    else [GenerationMode.POSITIVE]
+    [GenerationMode.POSITIVE]
+    if os.environ.get("API_FUZZ_MODES", "all") == "positive"
+    else list(GenerationMode)
 )
 
 

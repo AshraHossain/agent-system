@@ -32,7 +32,7 @@ API_BASE_URL=http://localhost:8000 uv run pytest
 | `smoke` | `tests/smoke/` | Every endpoint answers 2xx with the right content type; the spec lists every path. Run first: `-m smoke -x` |
 | `functional` | `tests/functional/` | Response schemas (strict Pydantic models in `src/api_tests/schemas.py`) and data invariants: forecast steps and spacing, `lower ≤ speed ≤ upper`, peak = max point, level monotone in index, history window and ordering, routes are simple paths and each weight optimises its own metric, SSE events, interval clamp |
 | `negative` | `tests/negative/` | Unknown ids → 404, malformed params/bodies → 422 with FastAPI's error shape, wrong methods → 405 |
-| `contract` | `tests/contract/` | [Schemathesis](https://schemathesis.readthedocs.io) property-based fuzzing over `/openapi.json`: no 5xx, documented status codes and content types, schema-valid bodies |
+| `contract` | `tests/contract/` | [Schemathesis](https://schemathesis.readthedocs.io) property-based fuzzing over `/openapi.json` with valid and invalid requests: no 5xx, documented status codes and content types, schema-valid bodies; plus checks that the spec matches what is sent |
 | `security` | `tests/security/` | No stack traces or paths in error bodies, hostile ids (traversal, injection, 4 KB) rejected cleanly, large bodies don't crash it, no version in `server`, no permissive CORS, auth enforced when `API_TOKEN` is set |
 | `known_defect` | `tests/known_defects/` | Defects found in the target, pinned as strict xfails — see [docs/FINDINGS.md](docs/FINDINGS.md) |
 | `perf` | `tests/perf/` | p95 latency per endpoint against a budget. **Opt-in**: `-m perf` |
@@ -42,8 +42,8 @@ API_BASE_URL=http://localhost:8000 uv run pytest
 ```bash
 uv run pytest -m smoke -x                          # fast liveness gate
 uv run pytest -m "functional or negative"
-uv run pytest -m contract                          # fuzzing, schema-valid requests only
-API_FUZZ_MODES=all uv run pytest -m contract       # + negative mode (invalid requests too)
+uv run pytest -m contract                          # fuzzing, valid and invalid requests
+API_FUZZ_MODES=positive uv run pytest -m contract  # schema-valid requests only
 API_FUZZ_EXAMPLES=200 uv run pytest -m contract    # deeper fuzzing
 uv run pytest -m perf                              # latency budgets
 uv run pytest -n auto -m "not contract and not perf"   # parallel (pytest-xdist; one server per worker)
@@ -61,7 +61,7 @@ uv run ruff check . && uv run ruff format --check .
 | `API_TARGET_PROJECT` | `../traffic-flow-analyzer` | Project to start when `API_BASE_URL` is unset |
 | `API_STARTUP_TIMEOUT` | `90` | Seconds to wait for the local server |
 | `API_FUZZ_EXAMPLES` | `25` | Schemathesis examples per operation |
-| `API_FUZZ_MODES` | `positive` | `all` adds negative-mode fuzzing |
+| `API_FUZZ_MODES` | `all` | `positive` limits fuzzing to schema-valid requests |
 | `API_PERF_SAMPLES` / `API_PERF_P95_MS` | `20` / `500` | Perf sample count and p95 budget |
 
 CI (`.github/workflows/api-tests.yml`) runs lint, `-m smoke -x`, then the default suite with
@@ -80,7 +80,7 @@ src/api_tests/
   server.py      starts/stops the target on a free port
   schemas.py     expected response models (independent of the target's own models)
   assertions.py  assert_status / assert_schema / assert_ok / assert_error / p95
-  contract.py    OpenAPI patches for known spec gaps, each tagged with its finding ID
+  contract.py    OpenAPI prep for fuzzing (excludes /stream; holds tagged patches for open spec gaps)
 tests/           one folder per marker (table above)
 docs/FINDINGS.md defects found, with reproduction curls and suggested fixes
 ```
@@ -90,6 +90,6 @@ latency, body preview).
 
 ## Results on the current target
 
-Eight findings so far. The two medium ones, an unbounded `horizon` (KD-02) and a 500 on
-incomplete `/ask` history (KD-08), are fixed and now guarded by the negative tests; six low
-ones are open and pinned as strict xfails. See [docs/FINDINGS.md](docs/FINDINGS.md).
+Nine findings, all fixed in the target and now guarded by regular tests: two medium (an
+unbounded `horizon`, KD-02, and a 500 on incomplete `/ask` history, KD-08) and seven low.
+See [docs/FINDINGS.md](docs/FINDINGS.md).

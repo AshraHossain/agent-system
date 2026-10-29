@@ -142,3 +142,39 @@ def test_ask_with_history(client):
 def test_ask_incomplete_history_item_is_rejected(client, item):
     r = client.post("/ask", json={"question": "ok?", "history": [item]})
     assert r.status_code == 422
+
+
+@pytest.mark.parametrize("horizon", [0, -5, 7])
+def test_get_forecast_horizon_must_be_whole_steps(client, horizon):
+    r = client.get(f"/forecast/S1?horizon={horizon}")
+    assert r.status_code == 422
+
+
+@pytest.mark.parametrize("days", [0, -1, 31])
+def test_get_history_days_out_of_range(client, days):
+    r = client.get(f"/history/S1?days={days}")
+    assert r.status_code == 422
+
+
+def test_get_history_timestamps_are_iso(client):
+    ts = client.get("/history/S1?days=0.05").json()["readings"][0]["ts"]
+    assert "T" in ts
+
+
+def test_get_path_unknown_weight(client):
+    r = client.get("/path/S1/S4?weight=bogus")
+    assert r.status_code == 422
+
+
+def test_openapi_documents_404s_and_local_times(client):
+    spec = client.get("/openapi.json").json()
+    for path in ("/forecast/{segment_id}", "/history/{segment_id}", "/path/{source}/{target}"):
+        assert "404" in spec["paths"][path]["get"]["responses"]
+    as_of = spec["components"]["schemas"]["StatusOut"]["properties"]["as_of"]
+    assert "format" not in as_of  # no RFC 3339 promise: the values carry no offset
+
+
+def test_ask_unreadable_body_is_a_documented_400(client):
+    r = client.post("/ask", content=b":\xff\xfe", headers={"content-type": "application/json"})
+    assert r.status_code == 400
+    assert "400" in client.get("/openapi.json").json()["paths"]["/ask"]["post"]["responses"]
