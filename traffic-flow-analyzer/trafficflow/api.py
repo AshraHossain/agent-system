@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -30,6 +32,8 @@ from typing import Annotated, Any, Literal
 from trafficflow.contracts import CongestionLevel
 from trafficflow.core.simulate import STEP_MINUTES  # a horizon is a whole number of steps
 from trafficflow.data.feed import Feed
+
+logger = logging.getLogger(__name__)
 
 try:
     from fastapi import FastAPI, HTTPException, Query
@@ -74,6 +78,14 @@ class ErrorOut(_BaseModel):
 
 
 NOT_FOUND = {404: {"model": ErrorOut, "description": "Unknown segment or no path"}}
+SERVER_ERROR = {500: {"model": ErrorOut, "description": "Internal error; details are logged"}}
+
+
+def _internal_error(where: str) -> HTTPException:
+    """Log the active exception and return a 500 that does not echo it to the client."""
+    ref = uuid.uuid4().hex[:12]
+    logger.exception("%s failed (ref %s)", where, ref)
+    return HTTPException(status_code=500, detail=f"Internal error (ref {ref})")
 
 
 class ForecastPointOut(_BaseModel):
@@ -163,7 +175,7 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             for s in feed.segments()
         ]
 
-    @app.get("/status", response_model=StatusOut)
+    @app.get("/status", response_model=StatusOut, responses=SERVER_ERROR)
     def get_status():
         segs = {s.id: s for s in feed.segments()}
         try:
@@ -176,7 +188,7 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             ]
             ns = network_status(forecasts, anomalies, stale_segments(hists, feed.now))
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise _internal_error("GET /status") from exc
 
         seg_levels: dict[str, str] = {}
         for sid, seg in segs.items():
@@ -264,7 +276,10 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
     @app.post(
         "/ask",
         response_model=AskResponse,
-        responses={400: {"model": ErrorOut, "description": "Unreadable request body"}},
+        responses={
+            400: {"model": ErrorOut, "description": "Unreadable request body"},
+            **SERVER_ERROR,
+        },
     )
     async def ask_question(body: AskRequest):
         from trafficflow.agents.pipeline import ask
@@ -273,7 +288,7 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             history = [t.model_dump() for t in body.history] if body.history else None
             answer = await ask(feed, body.question, model=model, history=history)
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise _internal_error("POST /ask") from exc
         return AskResponse(answer=answer)
 
     @app.get(
