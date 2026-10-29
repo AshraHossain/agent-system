@@ -88,6 +88,12 @@ def test_forecast_speed_is_consistent_with_the_index(api, segment_ids):
 # -- history -----------------------------------------------------------------
 
 
+def test_history_timestamps_use_iso_format(api, segment_id):
+    """Was KD-07: a space separator, unlike every other endpoint."""
+    readings = api.get(f"/history/{segment_id}", params={"days": 0.05}).json()["readings"]
+    assert "T" in readings[0]["ts"], readings[0]["ts"]
+
+
 def test_history_is_ordered_and_inside_the_window(api, segment_id):
     days = 0.5
     h = assert_ok(api.get(f"/history/{segment_id}", params={"days": days}), History)

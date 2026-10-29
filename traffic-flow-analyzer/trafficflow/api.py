@@ -25,20 +25,37 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from trafficflow.contracts import CongestionLevel
+from trafficflow.core.simulate import STEP_MINUTES  # a horizon is a whole number of steps
 from trafficflow.data.feed import Feed
 
 try:
     from fastapi import FastAPI, HTTPException, Query
     from fastapi.responses import StreamingResponse
     from pydantic import BaseModel as _BaseModel
+    from pydantic import WithJsonSchema
 except ImportError as _err:
     raise ImportError("fastapi is required: pip install 'trafficflow[api]'") from _err
 
-# Same cap as the agents' forecast tools; work and response size grow with the horizon.
+# Same bounds as the agents' forecast tools; work and response size grow with the horizon.
+MIN_HORIZON_MINUTES = 5
 MAX_HORIZON_MINUTES = 180
+MAX_HISTORY_DAYS = 30
+
+# Feeds keep naive local clocks, so timestamps carry no UTC offset. Declaring them as
+# RFC 3339 "date-time" would promise one; describe what is actually sent instead.
+LocalTime = Annotated[
+    datetime,
+    WithJsonSchema(
+        {
+            "type": "string",
+            "description": "Feed-local time, ISO 8601 without a UTC offset",
+            "examples": ["2026-09-16T08:30:00"],
+        }
+    ),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -52,8 +69,15 @@ class SegmentInfoOut(_BaseModel):
     free_flow_kmh: float
 
 
+class ErrorOut(_BaseModel):
+    detail: str
+
+
+NOT_FOUND = {404: {"model": ErrorOut, "description": "Unknown segment or no path"}}
+
+
 class ForecastPointOut(_BaseModel):
-    ts: datetime
+    ts: LocalTime
     speed_kmh: float
     lower_kmh: float
     upper_kmh: float
@@ -70,14 +94,19 @@ class ForecastOut(_BaseModel):
     points: list[ForecastPointOut]
 
 
+class ReadingOut(_BaseModel):
+    ts: LocalTime
+    speed_kmh: float
+
+
 class HistoryOut(_BaseModel):
     segment_id: str
     days: float
-    readings: list[dict[str, Any]]
+    readings: list[ReadingOut]
 
 
 class StatusOut(_BaseModel):
-    as_of: datetime
+    as_of: LocalTime
     status: str
     segment_levels: dict[str, str]
 
@@ -161,8 +190,13 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
 
         return StatusOut(as_of=feed.now, status=ns.value, segment_levels=seg_levels)
 
-    @app.get("/forecast/{segment_id}", response_model=ForecastOut)
-    def get_forecast(segment_id: str, horizon: int = Query(60, le=MAX_HORIZON_MINUTES)):
+    @app.get("/forecast/{segment_id}", response_model=ForecastOut, responses=NOT_FOUND)
+    def get_forecast(
+        segment_id: str,
+        horizon: int = Query(
+            60, ge=MIN_HORIZON_MINUTES, le=MAX_HORIZON_MINUTES, multiple_of=STEP_MINUTES
+        ),
+    ):
         segs = {s.id: s for s in feed.segments()}
         if segment_id not in segs:
             raise HTTPException(status_code=404, detail=f"Segment {segment_id!r} not found")
@@ -190,8 +224,8 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             ],
         )
 
-    @app.get("/history/{segment_id}", response_model=HistoryOut)
-    def get_history(segment_id: str, days: float = 1.0):
+    @app.get("/history/{segment_id}", response_model=HistoryOut, responses=NOT_FOUND)
+    def get_history(segment_id: str, days: float = Query(1.0, gt=0, le=MAX_HISTORY_DAYS)):
         segs = {s.id for s in feed.segments()}
         if segment_id not in segs:
             raise HTTPException(status_code=404, detail=f"Segment {segment_id!r} not found")
@@ -199,11 +233,11 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             h = feed.history(segment_id, days)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        readings = [{"ts": str(ts), "speed_kmh": float(v)} for ts, v in h.items()]
+        readings = [ReadingOut(ts=ts.to_pydatetime(), speed_kmh=float(v)) for ts, v in h.items()]
         return HistoryOut(segment_id=segment_id, days=days, readings=readings)
 
-    @app.get("/path/{source}/{target}", response_model=PathOut)
-    def get_path(source: str, target: str, weight: str = "time"):
+    @app.get("/path/{source}/{target}", response_model=PathOut, responses=NOT_FOUND)
+    def get_path(source: str, target: str, weight: Literal["time", "distance"] = "time"):
         """Shortest path between two segments (by travel time or distance)."""
         from trafficflow.core.graph import SegmentGraph
 
@@ -226,7 +260,12 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             bottleneck=result.bottleneck,
         )
 
-    @app.post("/ask", response_model=AskResponse)
+    # FastAPI answers 400 itself when the body cannot be decoded (e.g. not UTF-8).
+    @app.post(
+        "/ask",
+        response_model=AskResponse,
+        responses={400: {"model": ErrorOut, "description": "Unreadable request body"}},
+    )
     async def ask_question(body: AskRequest):
         from trafficflow.agents.pipeline import ask
 

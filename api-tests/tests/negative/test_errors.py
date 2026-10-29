@@ -39,6 +39,25 @@ def test_malformed_query_parameter_is_422(api, segment_id, path, params, field):
 
 
 @pytest.mark.parametrize(
+    ("path", "params", "field"),
+    [
+        ("/forecast/{seg}", {"horizon": 0}, "horizon"),  # was KD-01
+        ("/forecast/{seg}", {"horizon": -5}, "horizon"),  # was KD-01
+        ("/forecast/{seg}", {"horizon": 7}, "horizon"),  # was KD-01: silently became 5
+        ("/history/{seg}", {"days": -1}, "days"),  # was KD-03
+        ("/history/{seg}", {"days": 0}, "days"),  # was KD-03
+        ("/history/{seg}", {"days": 10_000}, "days"),  # was KD-03
+        ("/path/{seg}/{seg}", {"weight": "bogus"}, "weight"),  # was KD-04
+    ],
+)
+def test_out_of_range_query_parameter_is_422(api, segment_id, path, params, field):
+    body = assert_error(
+        api.get(path.format(seg=segment_id), params=params), 422, ValidationErrorBody
+    )
+    assert any(field in issue.loc for issue in body.detail)
+
+
+@pytest.mark.parametrize(
     "payload",
     [
         {},
