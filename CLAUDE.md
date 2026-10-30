@@ -71,7 +71,7 @@ uv run adk web adk_apps                   # ADK dev UI
 
 ## PlateWatch (`platewatch/`) — PydanticAI licence-plate module
 
-Separate package beside `opspilot/` (see [docs/platewatch.md](docs/platewatch.md)); it does not use ADK.
+Separate package beside `opspilot/` (see [platewatch/README.md](platewatch/README.md)); it does not use ADK.
 
 - `platewatch/core/` must not import `pydantic_ai`, `torch`, `transformers` or `google`
   (`tests/test_platewatch.py` enforces it). Normalisation, tag thresholds, embedding and the

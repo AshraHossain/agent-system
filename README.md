@@ -18,7 +18,7 @@ uv sync                                  # Python 3.11–3.13, installs google-a
 uv run opspilot build-data               # 14 synthetic datasets -> var/datasets/*.db
 uv run opspilot demo --case C03          # full investigation, offline (mock model)
 uv run opspilot demo --case C10 --show-labels   # malicious-document case, labels after the run
-uv run pytest                            # 150+ offline tests, no credentials needed
+uv run pytest                            # 350+ offline tests, no credentials needed
 uv run opspilot eval --guardrails        # evaluation report -> var/eval/
 ```
 
@@ -60,9 +60,15 @@ graph LR
   T & N & K --> A[incident analyst]
   A --> D[report drafter]
   D --> V[evidence verifier<br/>deterministic]
-  V --> L[review verifier]
+  V --> G{reinvestigation gate<br/>optional, max 2 rounds}
+  G -. failed stages .-> P
+  G --> L[review verifier]
   L --> F[finalizer<br/>deterministic status]
 ```
+
+The gate and loop exist only with `OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`; by
+default the verifier feeds the review verifier directly
+([orchestration](docs/orchestration.md#optional-re-investigation-rounds)).
 
 * **Agents interpret; tools calculate.** Statistics, graph traversal, blast
   radius, retrieval scoring, hypothesis rules, validation and status decisions
@@ -117,8 +123,21 @@ their commands from inside the folder. The root project is OpsPilot only.
 
 ## PlateWatch
 
-A separate PydanticAI module detects, tags and vector-searches vehicle licence plates:
-`uv run platewatch demo` (offline). See [docs/platewatch.md](docs/platewatch.md).
+A separate PydanticAI project detects, reads, tags and vector-searches vehicle licence plates.
+See [platewatch/README.md](platewatch/README.md).
+
+```mermaid
+graph LR
+  IMG[inbox image] --> DET[detector<br/>HF object detection]
+  DET --> RD[reader<br/>TrOCR]
+  RD --> NT[normalise + tag<br/>core, deterministic]
+  NT --> ST[(PlateStore<br/>SQLite + vectors)]
+  AG[PydanticAI agent] -->|scan_new_images · search_plates · list_needs_review| ST
+```
+
+Ingestion is isolated per image (`PLATEWATCH_IMAGE_TIMEOUT`, default 30 s) and per detection
+(one bad crop does not drop the image); search hits report how many times a plate was seen.
+`cd platewatch && uv run platewatch demo` runs offline with a scripted detector and mock agent.
 
 ## Documentation
 
@@ -129,10 +148,6 @@ A separate PydanticAI module detects, tags and vector-searches vehicle licence p
 [security](docs/security.md) · [sessions](docs/session_management.md) ·
 [models](docs/model_configuration.md) · [observability](docs/observability.md) · [deployment](docs/deployment.md) ·
 [ADRs](docs/adr/README.md) · [architecture review](docs/review.md)
-
-## Sub-projects
-
-- **traffic-flow-analyzer/** — PydanticAI-based congestion forecasting with Gradio dashboard. See [traffic-flow-analyzer/README.md](traffic-flow-analyzer/README.md).
 
 ## License
 
