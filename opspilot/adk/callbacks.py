@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import LlmRequest, LlmResponse
@@ -13,6 +14,22 @@ from opspilot.adk.mock_policies import failed_output
 from opspilot.adk.models import Final, to_response
 
 log = logging.getLogger(__name__)
+
+_HTTP_STATUS = re.compile(r"\b[45]\d\d [A-Z][A-Z_]{3,}")
+
+
+def describe_model_error(error: Exception, limit: int = 240) -> str:
+    """One-line reason that keeps the HTTP status and quota detail.
+
+    google-genai/ADK prefix quota errors with a long help paragraph and URL, so a plain
+    prefix cut left only "429 RESOURC". Start the text at the status code instead.
+    """
+    text = " ".join(str(error).split())
+    status = _HTTP_STATUS.search(text)
+    if status:
+        text = text[status.start() :]
+    return f"model error ({type(error).__name__}): {text[:limit]}"
+
 
 NEUTRAL_USER_TEXT = (
     "Investigate according to the scope and context in your instructions. "
@@ -73,7 +90,7 @@ def model_error_fallback(agent_name: str):
     def callback(
         callback_context: CallbackContext, llm_request: LlmRequest, error: Exception
     ) -> LlmResponse | None:
-        reason = f"model error ({type(error).__name__}): {str(error)[:160]}"
+        reason = describe_model_error(error)
         log.warning("%s: %s", agent_name, reason)
         has_tools = "set_model_response" in (llm_request.tools_dict or {})
         return to_response(Final(failed_output(agent_name, reason)), has_tools)

@@ -37,6 +37,8 @@ class Limits:
     max_duration_s: float = 120.0
     max_evidence_records: int = 200
     max_model_attempts: int = 2
+    retry_initial_delay_s: float = 1.0
+    retry_max_delay_s: float = 8.0
     model_timeout_s: float = 60.0
     max_request_chars: int = 4000
     max_report_chars: int = 60_000
@@ -60,6 +62,10 @@ class Limits:
             max_duration_s=_float("OPSPILOT_MAX_DURATION_S", cls.max_duration_s),
             max_evidence_records=_int("OPSPILOT_MAX_EVIDENCE", cls.max_evidence_records),
             max_model_attempts=_int("OPSPILOT_MAX_MODEL_ATTEMPTS", cls.max_model_attempts),
+            retry_initial_delay_s=_float(
+                "OPSPILOT_RETRY_INITIAL_DELAY_S", cls.retry_initial_delay_s
+            ),
+            retry_max_delay_s=_float("OPSPILOT_RETRY_MAX_DELAY_S", cls.retry_max_delay_s),
             model_timeout_s=_float("OPSPILOT_MODEL_TIMEOUT_S", cls.model_timeout_s),
             max_request_chars=_int("OPSPILOT_MAX_REQUEST_CHARS", cls.max_request_chars),
             max_report_chars=_int("OPSPILOT_MAX_REPORT_CHARS", cls.max_report_chars),
