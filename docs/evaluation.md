@@ -50,6 +50,7 @@ uv run opspilot eval --split heldout
 | affected_services_jaccard | vs labelled affected services |
 | citation_validity | cited IDs (hypotheses, steps, anomalies) present in the evidence registry |
 | citation_relevance | cited evidence concerns the claim: hypothesis evidence is about the component, its link endpoints or explained services; key facts name the entity of the evidence they cite |
+| (verifier) evidence sufficiency | not a metric of its own: hypotheses and key facts whose cited readings do not show the claimed metric moving the claimed way are counted in `unsupported_claim_rate` and listed under the `evidence_sufficient` check |
 | unsupported_claim_rate | verifier unsupported claims / claims checked |
 | runbook precision/recall | report runbooks vs labelled relevant runbooks; irrelevant/outdated included counted |
 | missing_evidence_detection | labelled gaps named in `missing_information` |
@@ -84,7 +85,8 @@ honestly:
   designed for), `benign` (harmless edits; any flag is a false positive) and
   `blind_spot` (semantic errors with valid citations: swapped ranking,
   inflated confidence, a neighbouring component blamed, a summary that
-  contradicts the findings, paraphrased overconfidence, an omitted service);
+  contradicts the findings, paraphrased overconfidence, an omitted service,
+  a category or key fact its cited readings do not support);
 * **outcomes**: `flagged` (new issue code, reviewer concern, worse status or
   removed recommendation), `neutralized` (no flag, but a deterministic stage
   rebuilt the defective part), `missed` (the defect reaches the final report

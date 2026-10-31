@@ -15,9 +15,9 @@ honestly:
   - ``benign``     harmless edits. Any ``flagged`` here is a false positive.
   - ``blind_spot`` semantic errors with valid citations: wrong ranking,
                    inflated confidence, blaming a neighbouring component,
-                   a summary that contradicts the findings. The verifier only
-                   checks existence, support, relevance and policy (review
-                   weakness 9), so these chart what is *not* covered.
+                   a summary that contradicts the findings, evidence that does
+                   not back the claim (wrong category or metric for the cited
+                   readings). These chart what the deterministic checks miss.
 
 Outcome of one mutated run:
 
@@ -90,6 +90,15 @@ def _unaffected_service(affected: list[str]) -> str | None:
     for svc in _topology()["services"]:
         if svc["id"] not in affected:
             return svc["id"]
+    return None
+
+
+def _telemetry_metric(ctx: Ctx, evidence_id: str) -> str | None:
+    """Metric of a telemetry reading cited in the clean run (from its source)."""
+    clean: InvestigationReport = ctx["clean"]
+    for ref in [*clean.supporting_evidence, *clean.contradicting_evidence]:
+        if ref.evidence_id == evidence_id and ref.source.startswith("telemetry:"):
+            return ref.source.split("/", 1)[1].split("@", 1)[0]
     return None
 
 
@@ -261,6 +270,75 @@ def m_drop_service(o: dict, ctx: Ctx) -> dict:
     return {**o, "affected_services": services[:-1]}
 
 
+# Each category's top hypothesis relabelled with another category that applies to the
+# same kind of component but not to the readings it cites.
+RELABEL = {
+    "link_congestion": "link_physical_degradation",
+    "link_physical_degradation": "link_congestion",
+    "wan_degradation": "link_congestion",
+    "telemetry_artifact": "link_physical_degradation",
+    "device_resource_saturation": "telemetry_artifact",
+    "dns_degradation": "telemetry_artifact",
+    "application_side": "dns_degradation",
+}
+# A different metric for a key fact to name (the reading it cites stays the same).
+OTHER_METRIC = {
+    "utilization_pct": "error_rate",
+    "error_rate": "utilization_pct",
+    "packet_loss_pct": "cpu_pct",
+    "probe_loss_pct": "cpu_pct",
+    "latency_ms": "error_rate",
+    "query_latency_ms": "mem_pct",
+    "cpu_pct": "packet_loss_pct",
+    "mem_pct": "latency_ms",
+    "session_util_pct": "latency_ms",
+    "latency_p95_ms": "utilization_pct",
+    "error_pct": "utilization_pct",
+}
+
+
+def m_relabel_category(o: dict, ctx: Ctx) -> dict:
+    hyps = o.get("hypotheses") or []
+    if not hyps or hyps[0]["category"] not in RELABEL:
+        return o
+    o = copy.deepcopy(o)
+    h = o["hypotheses"][0]
+    h["category"] = RELABEL[h["category"]]
+    _applied(ctx, component=h["component_id"], category=h["category"])
+    return o
+
+
+def m_congestion_without_utilization(o: dict, ctx: Ctx) -> dict:
+    hyps = o.get("hypotheses") or []
+    if not hyps or hyps[0]["category"] != "link_congestion":
+        return o
+    ids = hyps[0]["supporting_evidence_ids"]
+    rest = [e for e in ids if _telemetry_metric(ctx, e) != "utilization_pct"]
+    if not rest or len(rest) == len(ids):
+        return o
+    o = copy.deepcopy(o)
+    o["hypotheses"][0]["supporting_evidence_ids"] = rest
+    _applied(ctx, component=hyps[0]["component_id"], ids=set(rest))
+    return o
+
+
+def m_fact_wrong_metric(o: dict, ctx: Ctx) -> dict:
+    facts = o.get("key_facts") or []
+    if not facts:
+        return o
+    # Facts name the metric of the reading they cite ("lnk-l1-s1 critical: utilization_pct
+    # window mean ..."); name another one instead.
+    tokens = [t.strip(":,.") for t in facts[0]["statement"].split()]
+    metric = next((t for t in tokens if t in OTHER_METRIC), None)
+    if metric is None:
+        return o
+    statement = facts[0]["statement"].replace(metric, OTHER_METRIC[metric], 1)
+    o = copy.deepcopy(o)
+    o["key_facts"][0] = {**facts[0], "statement": statement}
+    _applied(ctx, statement=statement)
+    return o
+
+
 def _facts_text(r: InvestigationReport) -> str:
     return " ".join(r.facts)
 
@@ -404,6 +482,35 @@ MUTATIONS: list[Mutation] = [
         m_drop_service,
         lambda r, c, x: x["service"] not in r.affected_services,
     ),
+    Mutation(
+        "relabelled_category",
+        "blind_spot",
+        "incident_analyst",
+        "top hypothesis given another category its cited readings do not support",
+        m_relabel_category,
+        lambda r, c, x: any(
+            h.component_id == x["component"] and h.category.value == x["category"] for h in _hyps(r)
+        ),
+    ),
+    Mutation(
+        "congestion_without_utilization",
+        "blind_spot",
+        "incident_analyst",
+        "congestion claimed on latency and loss alone (utilization reading dropped)",
+        m_congestion_without_utilization,
+        lambda r, c, x: any(
+            h.component_id == x["component"] and set(h.supporting_evidence_ids) == x["ids"]
+            for h in _hyps(r)
+        ),
+    ),
+    Mutation(
+        "fact_wrong_metric",
+        "blind_spot",
+        "report_drafter",
+        "key fact names a different metric than the reading it cites",
+        m_fact_wrong_metric,
+        lambda r, c, x: x["statement"] in _facts_text(r),
+    ),
 ]
 
 
@@ -477,7 +584,7 @@ async def run_verifier_matrix(
     rows = []
     for m in mutations:
         for cid in case_ids:
-            ctx: Ctx = {"applied": False}
+            ctx: Ctx = {"applied": False, "clean": clean[cid]}
             with patched(m.agent, lambda o, m=m, ctx=ctx: m.mutate(o, ctx)):
                 report = await _run(cid, settings)
             if not ctx["applied"]:

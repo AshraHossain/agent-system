@@ -70,6 +70,59 @@ NEGATION_RE = re.compile(
     r"\b(?:not|no|never|cannot|can't|isn't|wasn't|aren't|nor|yet to)\W+(?:\w+\W+){0,2}$", re.I
 )
 
+# Evidence sufficiency, mirroring what the rule engine (core/analysis.py) treats as
+# support. A hypothesis must cite an anomalous reading on its own component in a metric
+# that fits its category (any metric for `unknown`); congestion may rest on loss or
+# latency only when utilization data for the link is missing. Readings the rules count
+# against a category must not be cited as its support.
+ANOMALOUS = {"elevated", "critical", "recovered"}
+SUFFICIENCY_CODES = {
+    "insufficient_support",
+    "support_contradicts_claim",
+    "fact_metric_mismatch",
+    "fact_contradicts_evidence",
+}
+FITTING: dict[HypothesisCategory, set[str] | None] = {
+    _C.LINK_CONGESTION: {"utilization_pct"},
+    _C.LINK_PHYSICAL: {"error_rate", "packet_loss_pct", "probe_loss_pct"},
+    _C.DEVICE_SATURATION: {"cpu_pct", "mem_pct", "session_util_pct"},
+    _C.DNS: {"query_latency_ms", "cpu_pct"},
+    _C.WAN: {"latency_ms", "packet_loss_pct", "probe_loss_pct"},
+    _C.TELEMETRY_ARTIFACT: {"packet_loss_pct"},
+    _C.APPLICATION: {"latency_p95_ms", "error_pct"},
+    _C.UNKNOWN: None,
+}
+CONGESTION_WITHOUT_UTILIZATION = {"packet_loss_pct", "probe_loss_pct", "latency_ms"}
+AGAINST: dict[HypothesisCategory, set[tuple[str, str]]] = {
+    _C.LINK_CONGESTION: {("error_rate", "anomalous"), ("utilization_pct", "normal")},
+    _C.LINK_PHYSICAL: {
+        ("utilization_pct", "anomalous"),
+        ("error_rate", "normal"),
+        ("probe_loss_pct", "normal"),
+    },
+    _C.TELEMETRY_ARTIFACT: {
+        ("probe_loss_pct", "anomalous"),
+        ("error_rate", "anomalous"),
+        ("packet_loss_pct", "normal"),
+    },
+}
+# Metric families a key fact can name, by the words that name them.
+FACT_METRICS: dict[str, tuple[set[str], tuple[str, ...]]] = {
+    "utilization": ({"utilization_pct"}, ("utiliz", "utilis", "bandwidth")),
+    "errors": ({"error_rate", "error_pct"}, ("error", "crc", "fcs")),
+    "loss": ({"packet_loss_pct", "probe_loss_pct"}, ("loss",)),
+    "latency": ({"latency_ms", "query_latency_ms", "latency_p95_ms"}, ("latency", "rtt")),
+    "cpu": ({"cpu_pct"}, ("cpu",)),
+    "memory": ({"mem_pct"}, ("memory", "mem_pct")),
+    "sessions": ({"session_util_pct"}, ("session",)),
+}
+# A fact that states one of these describes an abnormal reading.
+ABNORMAL_RE = re.compile(
+    r"\b(?:critical|elevated|spik\w*|surg\w*|ris(?:e|es|ing|en)|rose|increas\w*"
+    r"|saturat\w*|abnormal\w*|anomal\w*|exceed\w*|breach\w*)\b",
+    re.IGNORECASE,
+)
+
 NO_IMPACT_RE = re.compile(
     r"\bno (?:services?|customers?|users?|applications?) (?:are|is|were|was) "
     r"(?:affected|impacted)\b|\bno (?:customer |service |user )?impact\b"
@@ -94,6 +147,84 @@ def _mentions(statement: str, ev: Evidence) -> bool:
     names = {ev.entity_id, ev.entity_id.removeprefix("svc:")}
     text = statement.lower()
     return any(n.lower() in text for n in names)
+
+
+def _reading(ev: Evidence) -> str | None:
+    """'anomalous' or 'normal' for a telemetry reading with a verdict, else None."""
+    if ev.kind != EvidenceKind.TELEMETRY or not ev.metric:
+        return None
+    verdict = ev.data.get("verdict")
+    return "anomalous" if verdict in ANOMALOUS else "normal" if verdict == "normal" else None
+
+
+def _missing_metrics(evidence: dict[str, Evidence]) -> set[tuple[str | None, str | None]]:
+    """(entity, metric) pairs with missing data; metric None means the whole entity."""
+    return {
+        (e.entity_id, e.metric) for e in evidence.values() if e.kind == EvidenceKind.DATA_QUALITY
+    }
+
+
+def _sufficiency(
+    h: Hypothesis, evidence: dict[str, Evidence], missing: set
+) -> tuple[str | None, list[str]]:
+    """(what the cited support lacks or None, cited readings that argue against ``h``)."""
+    own = {h.component_id, f"svc:{h.component_id}"}
+    readings = [
+        (e, evidence[e])
+        for e in h.supporting_evidence_ids
+        if e in evidence and evidence[e].entity_id in own and _reading(evidence[e])
+    ]
+    against = [
+        e for e, ev in readings if (ev.metric, _reading(ev)) in AGAINST.get(h.category, set())
+    ]
+    fitting = FITTING.get(h.category)
+    if h.category == _C.LINK_CONGESTION and (
+        (h.component_id, "utilization_pct") in missing or (h.component_id, None) in missing
+    ):
+        fitting = (fitting or set()) | CONGESTION_WITHOUT_UTILIZATION
+    backed = any(
+        _reading(ev) == "anomalous" and (fitting is None or ev.metric in fitting)
+        for _, ev in readings
+    )
+    lacking = None
+    if not backed and h.confidence != "weak":
+        wanted = "/".join(sorted(fitting)) if fitting else "telemetry"
+        lacking = f"no anomalous {wanted} reading on {h.component_id}"
+    return lacking, against
+
+
+def _fact_problems(statement: str, cited: list[Evidence]) -> list[tuple[str, str]]:
+    """Key fact vs the telemetry readings it cites: right metric, right direction."""
+    readings = [ev for ev in cited if _reading(ev)]
+    if not readings:
+        return []
+    text = statement.lower()
+    named = set().union(
+        *(metrics for metrics, words in FACT_METRICS.values() if any(w in text for w in words))
+    )
+    out = []
+    if named and not any(ev.metric in named for ev in readings):
+        measured = ", ".join(sorted({ev.metric for ev in readings}))
+        out.append(
+            (
+                "fact_metric_mismatch",
+                f"names a metric its cited readings ({measured}) do not measure",
+            )
+        )
+    relevant = [ev for ev in readings if ev.metric in named] or readings
+    claim = next(
+        (
+            m.group(0)
+            for m in ABNORMAL_RE.finditer(statement)
+            if not NEGATION_RE.search(statement[max(0, m.start() - 40) : m.start()])
+        ),
+        None,
+    )
+    if claim and all(_reading(ev) == "normal" for ev in relevant):
+        out.append(
+            ("fact_contradicts_evidence", f"says '{claim}' but its cited readings are normal")
+        )
+    return out
 
 
 def _ids(*groups: Iterable[str]) -> list[str]:
@@ -167,6 +298,8 @@ def verify(
 
     # 2. Hypothesis support -------------------------------------------------
     hyps = analysis.hypotheses if analysis else []
+    missing_data = _missing_metrics(evidence)
+    sufficiency_checked = 0
     for rank, h in enumerate(hyps):
         claims += 1
         direct = [
@@ -225,6 +358,34 @@ def verify(
                 f"{h.hypothesis_id} claims {h.category.value} on {h.component_id}, a {kind}",
                 [h.hypothesis_id],
             )
+        if direct:
+            sufficiency_checked += 1
+            lacking, against = _sufficiency(h, evidence, missing_data)
+            sev = "error" if rank == 0 else "warning"
+            if lacking:
+                if sev == "error":
+                    unsupported.append(f"{h.hypothesis_id}: {lacking}")
+                issue(
+                    sev,
+                    "insufficient_support",
+                    f"{h.hypothesis_id} claims {h.category.value} on {h.component_id} but "
+                    f"cites {lacking}",
+                    [h.hypothesis_id],
+                )
+            if against:
+                if sev == "error":
+                    unsupported.append(f"{h.hypothesis_id}: support argues against the claim")
+                issue(
+                    sev,
+                    "support_contradicts_claim",
+                    f"{h.hypothesis_id} cites readings that argue against {h.category.value} on "
+                    f"{h.component_id}: "
+                    + ", ".join(
+                        f"{e} ({evidence[e].metric} {evidence[e].data.get('verdict')})"
+                        for e in against
+                    ),
+                    against,
+                )
         doc_support = [
             e
             for e in h.supporting_evidence_ids
@@ -313,6 +474,11 @@ def verify(
                 issue(
                     "error", "uncited_fact", f"key fact lacks valid evidence: {kf.statement[:80]}"
                 )
+            if mentioned:
+                sufficiency_checked += 1
+            for code, problem in _fact_problems(kf.statement, [evidence[e] for e in mentioned]):
+                unsupported.append(f"fact {problem}: {kf.statement[:120]}")
+                issue("error", code, f"key fact {problem}: {kf.statement[:80]}", mentioned)
         for mention in sorted(set(COMPONENT_RE.findall(draft.summary))):
             if mention not in known_components:
                 unsupported.append(f"summary mentions unknown component '{mention}'")
@@ -322,6 +488,13 @@ def verify(
             if sev == "error":
                 unsupported.append(problem)
             issue(sev, code, problem)
+    checks.append(
+        Check(
+            name="evidence_sufficient",
+            passed=not any(i.code in SUFFICIENCY_CODES and i.severity == "error" for i in issues),
+            details=f"{sufficiency_checked} claims checked against what their readings show",
+        )
+    )
     checks.append(
         Check(
             name="draft_claims_supported",
