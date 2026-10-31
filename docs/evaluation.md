@@ -81,7 +81,7 @@ honestly:
   compared with **the same case's clean run**, so a signal only counts if the
   mutation caused it;
 * **three kinds of mutation**: `catch` (defects the deterministic checks are
-  designed for), `benign` (harmless edits; any flag is a false positive) and
+  designed for, including a strong hypothesis cut down to one citation), `benign` (harmless edits; any flag is a false positive) and
   `blind_spot` (semantic errors with valid citations: swapped ranking,
   inflated confidence, a neighbouring component blamed, a summary that
   contradicts the findings, paraphrased overconfidence, an omitted service);

@@ -39,7 +39,10 @@ live model would investigate real incidents.
 * Weakness 9 below is partly addressed: the verifier now checks citation
   *relevance* (hypothesis evidence must concern the component, its endpoints or
   explained services; key facts must name the entity of the evidence they
-  cite). It still cannot judge whether the evidence is sufficient.
+  cite). It now also checks *sufficiency* for hypotheses: the confidence a
+  hypothesis claims may not exceed what its cited on-target evidence can carry
+  under the rule engine's own confidence rules (`insufficient_evidence`). It
+  does not judge whether a key fact's evidence is enough for its wording.
 * A verifier detection matrix ([eval_results_verifier.md](eval_results_verifier.md))
   runs 16 planted defects on all 24 cases against each case's clean run:
   designed-for defects 162/162 caught, 0/45 false positives on harmless edits,
@@ -50,7 +53,9 @@ live model would investigate real incidents.
   errors caught rose to 69/93 with still 0/45 false positives. A certainty
   lexicon (`overstated_certainty`) then brought it to 93/93, but the
   mutation's phrase is in the lexicon, so that last step is not independent
-  evidence: plain assertions ("The firewall caused this") still pass.
+  evidence: plain assertions ("The firewall caused this") still pass. An
+  evidence-sufficiency check and a 17th mutation (`thinned_support`) followed:
+  178/178 designed-for defects caught, still 0/45 false positives.
 
 ## Weaknesses, in order of importance
 

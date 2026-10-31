@@ -4,7 +4,36 @@ Generated with `uv run opspilot eval --verifier-matrix` (offline, mock provider,
 24 cases: C01–C14 and H01–H10). Method:
 [evaluation.md](evaluation.md#verifier-detection-matrix-opspilotevalverifier_matrixpy).
 
-## Certainty lexicon (current)
+## Evidence sufficiency (current)
+
+`insufficient_evidence` compares each hypothesis' confidence with what its
+cited, on-target direct evidence can carry, using the rule engine's own
+confidence rules (`core/analysis.py`): `strong` needs two or more distinct
+anomalous measurements of metrics that fit the category (one of them the
+signature metric: utilization for congestion, error rate for a physical fault,
+query latency for DNS), no contradicting evidence and not every reading
+recovered; one anomalous measurement carries `moderate`; topology or normal
+readings alone carry only `weak`. `telemetry_artifact` and `application_side`
+never exceed `moderate`. It is an **error** on the leading hypothesis and a
+**warning** on the others. A new `catch` mutation, `thinned_support`, keeps a
+`strong` top hypothesis but cuts its citations to one.
+
+| Measure | Before | Now |
+|---|---|---|
+| Designed-for defects caught | 162 / 162 | **178 / 178** (+16 `thinned_support`) |
+| False positives on harmless edits | 0 / 45 | **0 / 45** |
+| Semantic errors caught | 93 / 93 | **93 / 93** |
+
+`thinned_support` is flagged 16/16, by `insufficient_evidence` alone; no
+earlier check fires on it (`confidence_above_rules` compares confidence with
+the rules, not with what was cited). `inflated_confidence` now raises
+`insufficient_evidence` as well as `confidence_above_rules` (6/6). None of the
+24 unmodified cases raises the new code. The same author wrote the check and
+the mutation, so 16/16 is expected; the hand-written cases in
+`tests/test_verification.py` cover wrong-category metrics, missing signature
+metrics, normal readings, contradictions, recovered readings and category caps.
+
+## Certainty lexicon
 
 `overstated_certainty` flags certainty wording in the summary or a key fact
 ("without any doubt", "the root cause is", "it is clear that", "definitely",

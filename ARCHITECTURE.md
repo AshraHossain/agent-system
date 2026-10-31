@@ -99,7 +99,8 @@ metric/window or document ID) and a few key numbers.
 flowchart TD
   IN[incident_analysis + report_draft + findings + evidence:*] --> C1{Cited evidence IDs exist?}
   C1 --> C2{Each hypothesis has ≥1 non-historical supporting evidence?}
-  C2 --> C3{Draft claims ⊆ specialist findings?<br/>services · components}
+  C2 --> C2b{Cited evidence enough for the claimed confidence?}
+  C2b --> C3{Draft claims ⊆ specialist findings?<br/>services · components}
   C3 --> C4{Contradicting evidence on ranked hypotheses?}
   C4 --> C5{Recommendations pass read-only policy?}
   C5 --> C6{No secrets / injection payloads in output?}

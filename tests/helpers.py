@@ -36,6 +36,29 @@ CONTRA = Evidence.make(
     metric="probe_loss_pct",
     data={"verdict": "normal"},
 )
+ERR = Evidence.make(
+    EvidenceKind.TELEMETRY,
+    "lnk-l1-s1 error_rate critical",
+    "telemetry:lnk-l1-s1/e",
+    entity_id="lnk-l1-s1",
+    metric="error_rate",
+    data={"verdict": "critical"},
+)
+LOSS = Evidence.make(
+    EvidenceKind.TELEMETRY,
+    "lnk-l1-s1 packet loss elevated",
+    "telemetry:lnk-l1-s1/loss",
+    entity_id="lnk-l1-s1",
+    metric="packet_loss_pct",
+    data={"verdict": "elevated"},
+)
+PATH = Evidence.make(
+    EvidenceKind.TOPOLOGY,
+    "checkout traverses lnk-l1-s1",
+    "topology:path/checkout",
+    entity_id="lnk-l1-s1",
+    data={"services": "checkout"},
+)
 DOC = Evidence.make(
     EvidenceKind.DOCUMENT,
     "RB-001 runbook",
@@ -52,7 +75,7 @@ OLD = Evidence.make(
     data={"status": "deprecated"},
     trusted=False,
 )
-EVIDENCE = {e.evidence_id: e for e in (TEL, TEL2, CONTRA, DOC, OLD)}
+EVIDENCE = {e.evidence_id: e for e in (TEL, TEL2, CONTRA, ERR, LOSS, PATH, DOC, OLD)}
 
 
 def hyp(**kw):

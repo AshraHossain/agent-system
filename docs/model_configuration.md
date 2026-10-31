@@ -124,6 +124,8 @@ export OPSPILOT_EMBEDDER=gemini          # default: hashing
   stage; `opspilot --live eval` counts all three per agent
   ([evaluation.md](evaluation.md#live-evaluation)).
 * Live models may cite existing evidence that does not support the claim; the
-  verifier checks existence, kind and entity relevance, not sufficiency.
+  verifier checks existence, kind, entity relevance and whether the cited
+  evidence can carry each hypothesis' confidence, but not whether a key fact's
+  wording goes beyond its evidence.
 * Live behaviour has not been evaluated in this environment (no credentials). This
   includes the Gemini embedding option above.

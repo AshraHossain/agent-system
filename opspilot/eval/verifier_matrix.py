@@ -188,6 +188,17 @@ def m_swap_support(o: dict, ctx: Ctx) -> dict:
     return o
 
 
+def m_thin_support(o: dict, ctx: Ctx) -> dict:
+    hyps = o.get("hypotheses") or []
+    if not hyps or hyps[0]["confidence"] != "strong" or len(hyps[0]["supporting_evidence_ids"]) < 2:
+        return o
+    o = copy.deepcopy(o)
+    h = o["hypotheses"][0]
+    h["supporting_evidence_ids"] = h["supporting_evidence_ids"][:1]
+    _applied(ctx, component=h["component_id"])
+    return o
+
+
 # benign
 
 
@@ -333,6 +344,19 @@ MUTATIONS: list[Mutation] = [
         m_swap_support,
         lambda r, c, x: any(
             h.component_id == x["component"] and set(h.supporting_evidence_ids) == x["ids"]
+            for h in _hyps(r)
+        ),
+    ),
+    Mutation(
+        "thinned_support",
+        "catch",
+        "incident_analyst",
+        "strong top hypothesis keeps its confidence but cites one measurement",
+        m_thin_support,
+        lambda r, c, x: any(
+            h.component_id == x["component"]
+            and h.confidence == "strong"
+            and len(h.supporting_evidence_ids) == 1
             for h in _hyps(r)
         ),
     ),
