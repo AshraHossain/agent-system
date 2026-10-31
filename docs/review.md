@@ -56,6 +56,10 @@ live model would investigate real incidents.
   lexicon (`overstated_certainty`) then brought it to 93/93, but the
   mutation's phrase is in the lexicon, so that last step is not independent
   evidence: plain assertions ("The firewall caused this") still pass.
+  Evidence-sufficiency checks then added three mutations (wrong category for
+  the cited readings, congestion without its utilization reading, a fact
+  naming the wrong metric): 6/49 caught before, 49/49 after, 142/142 overall,
+  still 0/45 false positives and no new code on any clean case.
 
 ## Weaknesses, in order of importance
 
