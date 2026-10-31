@@ -1,6 +1,7 @@
 import pytest
-from helpers import CONTRA, EVIDENCE, OLD, TEL, findings, hyp
+from helpers import CONTRA, ERR, EVIDENCE, LOSS, OLD, PATH, TEL, TEL2, findings, hyp
 
+from opspilot.contracts.evidence import Evidence, EvidenceKind
 from opspilot.contracts.findings import IncidentAnalysis, KeyFact, RecommendedStep
 from opspilot.core.verification import verify
 
@@ -159,7 +160,11 @@ def test_analyst_may_lower_but_not_raise_rule_confidence():
 
 def test_ranking_against_rules_tie_warns_weaker_errors():
     a = hyp()
-    b = hyp(hypothesis_id="H2", category="link_physical_degradation")
+    b = hyp(
+        hypothesis_id="H2",
+        category="link_physical_degradation",
+        supporting_evidence_ids=[ERR.evidence_id, LOSS.evidence_id],
+    )
     tie = run_ref(rules=[a, b], analysis=analysis(b, a))
     [issue] = [i for i in tie.issues if i.code == "ranking_differs_from_rules"]
     assert issue.severity == "warning" and tie.verdict == "pass"
@@ -245,3 +250,107 @@ def test_plain_assertion_is_a_known_miss():
     """No marker word, no flag: this stays the live reviewer's job."""
     res = run_ref(draft=_with_summary("The firewall caused this outage."))
     assert "overstated_certainty" not in codes(res)
+
+
+# --- evidence sufficiency: is what the hypothesis cites enough for its confidence? ---
+
+
+def ids(*evs):
+    return [e.evidence_id for e in evs]
+
+
+def sufficiency(res):
+    return [i for i in res.issues if i.code == "insufficient_evidence"]
+
+
+def test_sufficient_evidence_passes():
+    res = run(analysis=analysis(hyp()))  # utilization + latency, both anomalous
+    assert not sufficiency(res) and res.verdict == "pass"
+    assert next(c for c in res.checks if c.name == "evidence_sufficient").passed
+
+
+def test_strong_needs_two_anomalous_measurements():
+    res = run(analysis=analysis(hyp(supporting_evidence_ids=ids(TEL))))
+    [issue] = sufficiency(res)
+    assert issue.severity == "error" and "at most moderate" in issue.message
+    assert res.verdict == "needs_review" and res.unsupported_claims
+    assert not next(c for c in res.checks if c.name == "evidence_sufficient").passed
+    ok = run(analysis=analysis(hyp(supporting_evidence_ids=ids(TEL), confidence="moderate")))
+    assert not sufficiency(ok)
+
+
+def test_normal_readings_and_topology_do_not_count_as_support():
+    """A probe that reads normal and a path that exists show no anomaly at all."""
+    res = run(
+        analysis=analysis(hyp(supporting_evidence_ids=ids(CONTRA, PATH), confidence="moderate"))
+    )
+    [issue] = sufficiency(res)
+    assert "at most weak" in issue.message
+    weak = run(analysis=analysis(hyp(supporting_evidence_ids=ids(CONTRA, PATH), confidence="weak")))
+    assert not sufficiency(weak)
+
+
+def test_strong_needs_the_category_signature_metric():
+    """Congestion without a utilization reading is capped, as in the rules."""
+    res = run(analysis=analysis(hyp(supporting_evidence_ids=ids(TEL2, LOSS))))
+    [issue] = sufficiency(res)
+    assert "utilization_pct" in issue.message
+    physical = hyp(category="link_physical_degradation", supporting_evidence_ids=ids(ERR, LOSS))
+    assert not sufficiency(run(analysis=analysis(physical)))
+
+
+def test_measurements_of_the_wrong_kind_do_not_count():
+    """Congestion evidence (utilization, latency) does not support a physical fault."""
+    h = hyp(category="link_physical_degradation", confidence="moderate")
+    [issue] = sufficiency(run(analysis=analysis(h)))
+    assert "at most weak" in issue.message and "link_physical_degradation" in issue.message
+
+
+def test_contradicted_hypothesis_cannot_be_strong():
+    res = run(analysis=analysis(hyp(contradicting_evidence_ids=ids(CONTRA))))
+    assert any("contradicting" in i.message for i in sufficiency(res))
+
+
+def test_recovered_measurements_cap_at_moderate():
+    rec = [
+        Evidence.make(
+            EvidenceKind.TELEMETRY,
+            f"lnk-l1-s1 {m} recovered",
+            f"telemetry:lnk-l1-s1/{m}/rec",
+            entity_id="lnk-l1-s1",
+            metric=m,
+            data={"verdict": "recovered"},
+        )
+        for m in ("utilization_pct", "latency_ms")
+    ]
+    evidence = {**EVIDENCE, **{e.evidence_id: e for e in rec}}
+    f = findings(analysis=analysis(hyp(supporting_evidence_ids=ids(*rec))))
+    res = verify(
+        evidence=evidence,
+        known_components=KNOWN,
+        known_services={"checkout"},
+        suspicious_docs=set(),
+        **f,
+    )
+    [issue] = sufficiency(res)
+    assert "recovered" in issue.message
+
+
+def test_categories_that_need_confirmation_are_capped():
+    h = hyp(category="telemetry_artifact", supporting_evidence_ids=ids(LOSS, TEL))
+    [issue] = sufficiency(run(analysis=analysis(h)))
+    assert "at most moderate" in issue.message
+    assert not sufficiency(run(analysis=analysis(h.model_copy(update={"confidence": "moderate"}))))
+
+
+def test_lower_ranked_hypotheses_only_warn():
+    thin = hyp(hypothesis_id="H2", supporting_evidence_ids=ids(TEL))
+    res = run(analysis=analysis(hyp(), thin))
+    [issue] = sufficiency(res)
+    assert issue.severity == "warning" and issue.refs == ["H2"] and res.verdict == "pass"
+
+
+def test_unsupported_hypothesis_is_not_reported_twice():
+    """No direct evidence at all is unsupported_hypothesis, not also insufficient."""
+    res = run(analysis=analysis(hyp(supporting_evidence_ids=ids(OLD))))
+    assert "unsupported_hypothesis" in codes(res) and not sufficiency(res)

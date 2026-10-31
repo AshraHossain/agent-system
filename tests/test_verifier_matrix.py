@@ -99,3 +99,10 @@ async def test_refuses_live_provider(settings):
 
     with pytest.raises(ValueError, match="mock"):
         await run_verifier_matrix(replace(settings, provider="gemini"), ["C03"])
+
+
+def test_thinned_support_is_caught_by_the_sufficiency_check(matrix):
+    """A strong top hypothesis cut to one citation; only insufficient_evidence sees it."""
+    rows = [r for r in matrix["rows"] if r["mutation"] == "thinned_support"]
+    assert rows and all(r["outcome"] == "flagged" for r in rows)
+    assert all("insufficient_evidence:error" in r["signals"] for r in rows)

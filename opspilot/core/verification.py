@@ -70,6 +70,27 @@ NEGATION_RE = re.compile(
     r"\b(?:not|no|never|cannot|can't|isn't|wasn't|aren't|nor|yet to)\W+(?:\w+\W+){0,2}$", re.I
 )
 
+# Evidence sufficiency: how much the cited evidence can carry, mirroring the confidence
+# rules in core/analysis.py. Per category: the metrics whose anomaly supports it (None:
+# any metric), the metrics one of which a ``strong`` claim needs (None: any two), and the
+# highest confidence the category can reach from telemetry alone.
+ANOMALOUS = {"elevated", "critical", "recovered"}
+_LINK_LOSS = {"packet_loss_pct", "probe_loss_pct"}
+SUFFICIENCY: dict[HypothesisCategory, tuple[set[str] | None, set[str] | None, str]] = {
+    _C.LINK_CONGESTION: (
+        {"utilization_pct", "latency_ms", *_LINK_LOSS},
+        {"utilization_pct"},
+        "strong",
+    ),
+    _C.LINK_PHYSICAL: ({"error_rate", *_LINK_LOSS}, {"error_rate"}, "strong"),
+    _C.DEVICE_SATURATION: ({"cpu_pct", "mem_pct", "session_util_pct"}, None, "strong"),
+    _C.DNS: ({"query_latency_ms", "cpu_pct"}, {"query_latency_ms"}, "strong"),
+    _C.WAN: ({"latency_ms", *_LINK_LOSS}, None, "strong"),
+    _C.TELEMETRY_ARTIFACT: ({"packet_loss_pct"}, None, "moderate"),
+    _C.APPLICATION: (None, None, "moderate"),
+    _C.UNKNOWN: (None, None, "strong"),
+}
+
 NO_IMPACT_RE = re.compile(
     r"\bno (?:services?|customers?|users?|applications?) (?:are|is|were|was) "
     r"(?:affected|impacted)\b|\bno (?:customer |service |user )?impact\b"
@@ -126,6 +147,7 @@ def verify(
     component_types = component_types or {}
     irrelevant: list[str] = []
     relevance_checked = 0
+    sufficiency_checked = 0
     issues: list[VerificationIssue] = []
     checks: list[Check] = []
     unsupported: list[str] = []
@@ -206,6 +228,19 @@ def verify(
                 f"{h.hypothesis_id} ({h.component_id}) cites only evidence about other entities",
                 off_target,
             )
+        on_target = [evidence[e] for e in direct if e not in off_target]
+        if on_target:
+            sufficiency_checked += 1
+            ceiling, why = _sufficient_confidence(h, on_target)
+            if CONF_RANK[h.confidence] < CONF_RANK[ceiling]:
+                sev = "error" if rank == 0 else "warning"
+                problem = (
+                    f"{h.hypothesis_id} is {h.confidence} but its cited evidence supports at "
+                    f"most {ceiling}: {why}"
+                )
+                if sev == "error":
+                    unsupported.append(problem)
+                issue(sev, "insufficient_evidence", problem, [h.hypothesis_id])
         if h.component_id not in known_components and h.component_id not in known_services:
             unsupported.append(f"{h.hypothesis_id}: unknown component {h.component_id}")
             issue(
@@ -242,6 +277,15 @@ def verify(
                 f"{h.hypothesis_id} ({h.category.value} on {h.component_id}) is contradicted by "
                 f"{', '.join(h.contradicting_evidence_ids)}"
             )
+    checks.append(
+        Check(
+            name="evidence_sufficient",
+            passed=not any(
+                i.code == "insufficient_evidence" and i.severity == "error" for i in issues
+            ),
+            details=f"{sufficiency_checked} hypotheses checked",
+        )
+    )
     if hyps:
         top = hyps[0]
         for other in hyps[1:]:
@@ -474,6 +518,41 @@ def _compare_with_rules(hyps: list[Hypothesis], rules: list[Hypothesis] | None, 
         + (f" ({promoted.confidence} vs {rule_top.confidence})" if weaker else " (tie)"),
         [top.hypothesis_id],
     )
+
+
+def _sufficient_confidence(h: Hypothesis, cited: list[Evidence]) -> tuple[str, str]:
+    """The highest confidence ``cited`` (direct evidence about the hypothesis' own
+    component) can justify, and why it stops there.
+
+    Counts distinct anomalous measurements of the category's metrics, as the rules do:
+    two or more (one of them the category's signature metric, where it has one) with no
+    contradicting evidence can be ``strong``; one is ``moderate``; none (topology only,
+    or only normal readings) is ``weak``. Only recovered readings cap it at ``moderate``.
+    """
+    metrics, signature, cap = SUFFICIENCY.get(h.category, (None, None, "strong"))
+    readings = {
+        (e.entity_id, e.metric): e.data.get("verdict")
+        for e in cited
+        if e.kind == EvidenceKind.TELEMETRY
+        and e.data.get("verdict") in ANOMALOUS
+        and (metrics is None or e.metric in metrics)
+    }
+    names = sorted({m for _, m in readings if m})
+    if not readings:
+        return "weak", f"no cited measurement shows an anomaly relevant to {h.category.value}"
+    if len(readings) == 1:
+        return "moderate", f"a single anomalous measurement ({', '.join(names)})"
+    if signature and not signature & set(names):
+        return "moderate", (
+            f"no anomalous {' or '.join(sorted(signature))} is cited (only {', '.join(names)})"
+        )
+    if h.contradicting_evidence_ids:
+        return "moderate", "the hypothesis lists contradicting evidence"
+    if all(v == "recovered" for v in readings.values()):
+        return "moderate", "every supporting measurement has recovered"
+    if cap != "strong":
+        return cap, f"{h.category.value} cannot be confirmed from telemetry alone"
+    return "strong", f"{len(readings)} anomalous measurements ({', '.join(names)})"
 
 
 def _certainty_marker(text: str) -> str | None:
