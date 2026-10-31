@@ -10,7 +10,8 @@
 - [ ] Run live Gemini evaluation (several repetitions), record results, compare with mock — tooling ready: `opspilot --live eval --repeat 5`
 - [ ] Validate Gemini `set_model_response` compliance for every output schema — measured per agent by the same run
 - [x] Live-eval tooling: `--repeat N` with spread and per-case stability, per-agent output compliance (schema retries, text answers, fallbacks), mock baseline on the same cases; an answer that breaks its schema now fails only its stage (it used to abort the run)
-- [x] Citation relevance check (entity alignment); sufficiency still unchecked
+- [x] Citation relevance check (entity alignment)
+- [x] Evidence-sufficiency checks: hypotheses need an anomalous reading that fits their category and must not cite readings the rules count against it; key facts must cite a reading of the metric they name, and a claimed anomaly must not rest on normal readings (verifier matrix: 6/49 -> 49/49 on the new planted defects, 0 new codes on clean runs)
 - [x] Held-out split with recorded pre-fix baseline (now a regression set)
 - [ ] Independently authored evaluation set (different author)
 - [x] Verifier detection matrix: planted defects x all cases vs a clean baseline (`opspilot eval --verifier-matrix`, docs/eval_results_verifier.md)

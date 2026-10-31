@@ -39,7 +39,12 @@ live model would investigate real incidents.
 * Weakness 9 below is partly addressed: the verifier now checks citation
   *relevance* (hypothesis evidence must concern the component, its endpoints or
   explained services; key facts must name the entity of the evidence they
-  cite). It still cannot judge whether the evidence is sufficient.
+  cite) and *sufficiency* for what it can read off the readings: a hypothesis
+  must cite an anomalous reading of a metric that fits its category on its own
+  component, and must not cite readings the rules count against it; a key fact
+  must cite a reading of the metric it names, and an anomaly it claims must not
+  rest only on normal readings. Whether the evidence is enough for the
+  *argument* (beyond metric and direction) is still the reviewer's job.
 * A verifier detection matrix ([eval_results_verifier.md](eval_results_verifier.md))
   runs 16 planted defects on all 24 cases against each case's clean run:
   designed-for defects 162/162 caught, 0/45 false positives on harmless edits,
@@ -89,10 +94,10 @@ live model would investigate real incidents.
 8. **Process-global runtime registry.** Fine for CLI/tests; in a long-running
    `adk web` server, runtimes for dev-UI sessions are never unregistered
    (slow memory growth) and the registry is per process.
-9. **Verifier scope.** It checks existence, kind, support, policy and
-   echoes, not whether a cited, existing evidence item actually supports the
-   specific claim (relevance). The secondary LLM reviewer is the only semantic
-   check and is untested live.
+9. **Verifier scope.** It checks existence, kind, support, policy, echoes,
+   relevance and metric/direction sufficiency (see above), not the reasoning
+   that links the readings to the conclusion. The secondary LLM reviewer is
+   the only check of that reasoning and is untested live.
 10. **Small evaluation set.** 14 cases, one author. Rates such as top-1 have
     very wide uncertainty even when live runs are added.
 
@@ -123,8 +128,8 @@ live model would investigate real incidents.
    and record schema-compliance failures per agent.
 2. Commission an independently authored case set (different author, different
    fault signatures) to break label/rule co-design.
-3. Add an evidence-relevance check (claim ↔ evidence entity/metric alignment)
-   and evaluate the LLM reviewer with seeded semantic errors.
+3. Evaluate the LLM reviewer with seeded semantic errors (the relevance and
+   sufficiency checks are in place; the verifier matrix provides the seeds).
 4. Decide whether to keep the Incident Analyst as an LLM; if live runs show no
    gain over the rule ranking, make it deterministic and use the LLM only for
    explanation.

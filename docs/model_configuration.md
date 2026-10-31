@@ -123,7 +123,9 @@ export OPSPILOT_EMBEDDER=gemini          # default: hashing
   retried, JSON sent as text is accepted, and anything else fails only that
   stage; `opspilot --live eval` counts all three per agent
   ([evaluation.md](evaluation.md#live-evaluation)).
-* Live models may cite existing evidence that does not support the claim; the
-  verifier checks existence, kind and entity relevance, not sufficiency.
+* Live models may cite existing evidence that does not support the claim. The
+  verifier checks existence, kind, entity relevance and whether the cited
+  readings show the claimed metric moving the claimed way, not the reasoning
+  built on them.
 * Live behaviour has not been evaluated in this environment (no credentials). This
   includes the Gemini embedding option above.
