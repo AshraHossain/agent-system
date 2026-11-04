@@ -102,11 +102,10 @@ Try this in `uv run python`:
 ```python
 import torch
 
-x = torch.tensor([[1.0, 2.0, 3.0],
-                  [4.0, 5.0, 6.0]])
-print(x.shape)        # torch.Size([2, 3])  -> 2 rows, 3 columns
-print(x.sum(dim=1))   # tensor([ 6., 15.])  -> sum along each row
-print(x @ x.T)        # matrix multiply: (2,3) @ (3,2) -> (2,2)
+x = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+print(x.shape)  # torch.Size([2, 3])  -> 2 rows, 3 columns
+print(x.sum(dim=1))  # tensor([ 6., 15.])  -> sum along each row
+print(x @ x.T)  # matrix multiply: (2,3) @ (3,2) -> (2,2)
 ```
 
 Three letters appear everywhere in the model code:
@@ -123,9 +122,9 @@ This is the magic that makes training possible. Run it:
 import torch
 
 w = torch.tensor(3.0, requires_grad=True)  # a "knob"; PyTorch will track how it is used
-loss = (w * 2 - 10) ** 2                    # some measure of wrongness; it is 0 when w == 5
-loss.backward()                             # compute d(loss)/d(w)
-print(w.grad)                               # tensor(-16.) -> negative: increasing w lowers the loss
+loss = (w * 2 - 10) ** 2  # some measure of wrongness; it is 0 when w == 5
+loss.backward()  # compute d(loss)/d(w)
+print(w.grad)  # tensor(-16.) -> negative: increasing w lowers the loss
 ```
 
 `loss.backward()` worked out the slope for us. A real model does the same thing for 100,000 knobs
@@ -195,7 +194,7 @@ Look at how the code does it:
 
 ```python
 problems = [f"{a}+{b}={a + b}" for a in range(100) for b in range(100)]
-random.Random(seed).shuffle(problems)       # shuffle BEFORE splitting
+random.Random(seed).shuffle(problems)  # shuffle BEFORE splitting
 train, val, test = split_list(problems, val_frac=0.1, test_frac=0.1)
 ```
 
@@ -258,9 +257,9 @@ decode(...)       -> 7+12=19
 The core of it is two dictionaries:
 
 ```python
-chars = sorted(set(text))                       # every distinct character, in a fixed order
-stoi = {ch: i for i, ch in enumerate(chars)}    # string -> integer
-itos = {i: ch for i, ch in enumerate(chars)}    # integer -> string
+chars = sorted(set(text))  # every distinct character, in a fixed order
+stoi = {ch: i for i, ch in enumerate(chars)}  # string -> integer
+itos = {i: ch for i, ch in enumerate(chars)}  # integer -> string
 encode = lambda s: [stoi[c] for c in s]
 decode = lambda ids: "".join(itos[i] for i in ids)
 ```
@@ -352,9 +351,9 @@ opt = torch.optim.AdamW([table], lr=0.1)
 
 for step in range(500):
     ix = torch.randint(len(data) - 1, (256,))
-    x, y = data[ix], data[ix + 1]          # current char, next char
-    logits = table[x]                      # (256, V) scores for the next char
-    loss = F.cross_entropy(logits, y)      # how wrong were we?
+    x, y = data[ix], data[ix + 1]  # current char, next char
+    logits = table[x]  # (256, V) scores for the next char
+    loss = F.cross_entropy(logits, y)  # how wrong were we?
     opt.zero_grad()
     loss.backward()
     opt.step()
@@ -440,12 +439,12 @@ each row of scores into weights that sum to 1. The output at `t` is the weighted
 values.
 
 ```python
-k = self.key(x)                                   # (B, T, hs)
-q = self.query(x)                                 # (B, T, hs)
-scores = q @ k.transpose(-2, -1) * hs ** -0.5     # (B, T, T): every query vs every key
-scores = scores.masked_fill(tril == 0, -inf)      # causal mask: no peeking at the future
-weights = softmax(scores, dim=-1)                 # each row sums to 1
-out = weights @ self.value(x)                     # (B, T, hs): weighted average of values
+k = self.key(x)  # (B, T, hs)
+q = self.query(x)  # (B, T, hs)
+scores = q @ k.transpose(-2, -1) * hs**-0.5  # (B, T, T): every query vs every key
+scores = scores.masked_fill(tril == 0, -inf)  # causal mask: no peeking at the future
+weights = softmax(scores, dim=-1)  # each row sums to 1
+out = weights @ self.value(x)  # (B, T, hs): weighted average of values
 ```
 
 Three details:
@@ -521,10 +520,10 @@ About 100k parameters. Most live in the blocks: each block has 4 × (64×64) for
 ```python
 for step in range(max_steps):
     x, y = get_batch(train_data, block_size, batch_size, device)
-    logits, loss = model(x, y)          # 1. forward pass
-    optimizer.zero_grad()               # 2. clear old gradients
-    loss.backward()                     # 3. backward pass (backpropagation)
-    optimizer.step()                    # 4. update the weights
+    logits, loss = model(x, y)  # 1. forward pass
+    optimizer.zero_grad()  # 2. clear old gradients
+    loss.backward()  # 3. backward pass (backpropagation)
+    optimizer.step()  # 4. update the weights
 ```
 
 1. **Forward pass**: run the batch through the model and compute the loss.
@@ -698,11 +697,11 @@ The model only ever predicts *one* next character. To produce text we loop:
 
 ```python
 for _ in range(max_new_tokens):
-    logits, _ = model(idx[:, -block_size:])     # only the last block_size chars fit
-    logits = logits[:, -1, :]                   # we only need the prediction for the last position
+    logits, _ = model(idx[:, -block_size:])  # only the last block_size chars fit
+    logits = logits[:, -1, :]  # we only need the prediction for the last position
     probs = softmax(logits / temperature)
-    next_id = torch.multinomial(probs, 1)       # sample, or argmax for greedy
-    idx = torch.cat([idx, next_id], dim=1)      # append and go again
+    next_id = torch.multinomial(probs, 1)  # sample, or argmax for greedy
+    idx = torch.cat([idx, next_id], dim=1)  # append and go again
 ```
 
 This is called **autoregressive** generation: each output becomes part of the next input. It is
