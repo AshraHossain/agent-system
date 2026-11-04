@@ -97,9 +97,10 @@ each has its own README, and none imports another.
 | `ledger-hound/` | Agentic QA for a Purchase-to-Pay API: explorer, adversary and judge agents, stress test, DSPy classifier | OpenAI Agents SDK, FastAPI, DSPy | `ledger-hound.yml` |
 | `traffic-flow-analyzer/` | Congestion forecasting with an interactive dashboard | PydanticAI, Gradio | `trafficflow.yml` |
 | `platewatch/` | Licence-plate detection, tagging and vector search ([README](platewatch/README.md)) | PydanticAI, Hugging Face | `platewatch.yml` |
+| `train-small-model/` | Learning project: train a tiny GPT-style model from scratch on your own data ([README](train-small-model/README.md), [lesson notes](train-small-model/notes.md)) | PyTorch | none (run `uv run pytest` locally) |
 
-`ledger-hound/`, `traffic-flow-analyzer/` and `platewatch/` are
-self-contained (own `pyproject.toml`, `uv.lock`, tests, CI workflow); run
+`ledger-hound/`, `traffic-flow-analyzer/`, `platewatch/` and `train-small-model/` are
+self-contained (own `pyproject.toml`, `uv.lock`, tests); run
 their commands from inside the folder. The root project is OpsPilot only.
 
 ## Repository map (OpsPilot)
