@@ -4,7 +4,56 @@ Generated with `uv run opspilot eval --verifier-matrix` (offline, mock provider,
 24 cases: C01–C14 and H01–H10). Method:
 [evaluation.md](evaluation.md#verifier-detection-matrix-opspilotevalverifier_matrixpy).
 
-## Certainty lexicon (current)
+## Evidence sufficiency (current)
+
+Four checks compare each claim with what its cited telemetry readings show,
+using what the rule engine (`core/analysis.py`) treats as support:
+
+* `insufficient_support`: a moderate or strong hypothesis cites no anomalous
+  reading on its own component in a metric that fits its category
+  (utilization for congestion; errors or loss for a physical fault; CPU,
+  memory or sessions for device saturation; and so on). Congestion may rest on
+  loss or latency only when utilization data for the link is missing. Error
+  for the leading hypothesis, warning below.
+* `support_contradicts_claim`: a "supporting" reading is one the rules count
+  against the category: a utilization spike for a physical fault, errors for
+  congestion, probe loss for a telemetry artifact, or a normal reading of the
+  category's own signal. Readings that rule out an alternative (normal
+  utilization for a physical fault) stay allowed.
+* `fact_metric_mismatch`: a key fact names a metric none of its cited readings
+  measures.
+* `fact_contradicts_evidence`: a key fact says a reading is critical, elevated,
+  rising, ... (not negated) while every cited reading of that metric is normal.
+
+Three blind-spot mutations were added to the matrix and measured **before** the
+checks were written:
+
+| Mutation | Applicable | Before | Now |
+|---|---|---|---|
+| `relabelled_category`: top hypothesis given another category for the same kind of component, citations intact | 22 | 6 flagged (side effects of existing rules), 16 missed | **22 flagged** |
+| `congestion_without_utilization`: congestion claimed on latency and loss, utilization reading dropped | 5 | 5 missed | **5 flagged** |
+| `fact_wrong_metric`: a key fact names another metric than the reading it cites | 22 | 22 missed | **22 flagged** |
+
+| Measure | Before | Now |
+|---|---|---|
+| Designed-for defects caught | 162 / 162 | **162 / 162** |
+| False positives on harmless edits | 0 / 45 | **0 / 45** |
+| Semantic errors caught | 99 / 142 | **142 / 142** |
+
+None of the 24 unmodified cases raises any of the new codes, with or without
+their run faults (48 clean runs), and no case changes status.
+
+**Read this with care.** The three mutations were designed together with the
+checks, so catching them shows the checks work as intended, not that they
+generalise. The independent part is the clean runs: the rules are strict
+enough to catch the planted errors without firing on any real output of the
+pipeline. Known misses, pinned in `tests/test_verification.py`: a fact that
+*understates* a critical reading ("utilization looks fine"), and a physical
+fault argued from loss alone while error counters that were not cited are
+normal. Only cited readings are judged, and only metric and direction: whether
+the readings add up to the conclusion is still the reviewer's job.
+
+## Certainty lexicon
 
 `overstated_certainty` flags certainty wording in the summary or a key fact
 ("without any doubt", "the root cause is", "it is clear that", "definitely",

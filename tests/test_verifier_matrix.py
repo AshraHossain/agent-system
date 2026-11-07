@@ -66,6 +66,24 @@ def test_certainty_wording_is_caught_by_the_lexicon(matrix):
     assert rows["paraphrased_certainty", "C03"]["signals"] == ["overstated_certainty:warning"]
 
 
+def test_evidence_that_does_not_back_the_claim_is_caught(matrix):
+    """Closed by the evidence-sufficiency checks (core/verification.py)."""
+    m = matrix["mutations"]
+    assert m["relabelled_category"]["flagged"] == 2 and m["fact_wrong_metric"]["flagged"] == 2
+    rows = {(r["mutation"], r["case"]): r for r in matrix["rows"]}
+    # C03 physical -> congestion: errors argue against it, utilization is normal.
+    c03 = rows["relabelled_category", "C03"]["signals"]
+    assert {"insufficient_support:error", "support_contradicts_claim:error"} <= set(c03)
+    assert "fact_metric_mismatch:error" in rows["fact_wrong_metric", "C05"]["signals"]
+
+
+def test_congestion_without_its_utilization_reading_is_caught(settings):
+    [m] = [m for m in MUTATIONS if m.name == "congestion_without_utilization"]
+    res = asyncio.run(run_verifier_matrix(settings, ["C02"], mutations=[m]))
+    [row] = res["rows"]
+    assert row["outcome"] == "flagged" and "insufficient_support:error" in row["signals"]
+
+
 def test_inapplicable_mutations_are_marked_not_scored(matrix):
     na = [r for r in matrix["rows"] if r["outcome"] == "n/a"]
     assert {r["mutation"] for r in na} >= {"swapped_support", "inflated_confidence"}

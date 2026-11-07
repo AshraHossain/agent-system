@@ -28,6 +28,14 @@ TEL2 = Evidence.make(
     metric="latency_ms",
     data={"verdict": "critical"},
 )
+ERR = Evidence.make(
+    EvidenceKind.TELEMETRY,
+    "lnk-l1-s1 errors critical",
+    "telemetry:lnk-l1-s1/e",
+    entity_id="lnk-l1-s1",
+    metric="error_rate",
+    data={"verdict": "critical"},
+)
 CONTRA = Evidence.make(
     EvidenceKind.TELEMETRY,
     "probe normal",
@@ -52,7 +60,7 @@ OLD = Evidence.make(
     data={"status": "deprecated"},
     trusted=False,
 )
-EVIDENCE = {e.evidence_id: e for e in (TEL, TEL2, CONTRA, DOC, OLD)}
+EVIDENCE = {e.evidence_id: e for e in (TEL, TEL2, ERR, CONTRA, DOC, OLD)}
 
 
 def hyp(**kw):
