@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from fastapi import FastAPI, HTTPException, Query
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import RedirectResponse, StreamingResponse
     from pydantic import BaseModel as _BaseModel
     from pydantic import WithJsonSchema
 except ImportError as _err:
@@ -167,6 +167,11 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         description="Read-only congestion forecasting endpoints.",
         version="0.1.0",
     )
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        """No endpoint lives at `/`; send a browser to the interactive docs instead."""
+        return RedirectResponse(url="/docs")
 
     @app.get("/segments", response_model=list[SegmentInfoOut])
     def list_segments():
