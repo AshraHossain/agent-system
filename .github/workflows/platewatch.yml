@@ -16,3 +16,7 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff check . && uv run ruff format --check .
       - run: uv run pytest
+      - name: Offline demo
+        env:
+          PYDANTIC_AI_NO_BANNER: "1"
+        run: uv run platewatch demo
