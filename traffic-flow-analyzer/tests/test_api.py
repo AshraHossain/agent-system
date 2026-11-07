@@ -215,3 +215,13 @@ def test_500s_are_documented(client):
     paths = client.get("/openapi.json").json()["paths"]
     assert "500" in paths["/status"]["get"]["responses"]
     assert "500" in paths["/ask"]["post"]["responses"]
+
+
+def test_root_redirects_to_docs(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307)
+    assert r.headers["location"] == "/docs"
+
+
+def test_root_is_not_in_the_openapi_schema(client):
+    assert "/" not in client.get("/openapi.json").json()["paths"]
