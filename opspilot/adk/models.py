@@ -167,8 +167,8 @@ def generate_config(
             timeout=int(settings.limits.model_timeout_s * 1000),
             retry_options=types.HttpRetryOptions(
                 attempts=settings.limits.max_model_attempts,
-                initial_delay=1.0,
-                max_delay=8.0,
+                initial_delay=settings.limits.retry_initial_delay_s,
+                max_delay=settings.limits.retry_max_delay_s,
                 http_status_codes=[429, 500, 503, 504],
             ),
         ),
