@@ -1,84 +1,52 @@
-# CLAUDE.md — OpsPilot AI
+# CLAUDE.md — agent-system
 
-Guidance for Claude Code when working in this repository.
+A workspace of independent GenAI projects: agents, multi-agent orchestration, RAG, LLM
+evaluation and red teaming. Nothing here is production-ready; never claim it is.
 
-## What this is
+## Projects
 
-OpsPilot AI: a read-only, multi-agent network-operations investigation system
-on **Google ADK 2.11.0** (pinned). Read [PLAN.md](PLAN.md) and
-[ARCHITECTURE.md](ARCHITECTURE.md) before changing code.
+| Path | What | Stack | Detail |
+|---|---|---|---|
+| `opspilot/`, `adk_apps/`, `tests/` (repo root) | Multi-agent network-ops investigation, evidence-linked report | Google ADK 2.11.0 (pinned), Gemini / Vertex AI | `.claude/rules/opspilot.md`, [PLAN.md](PLAN.md), [ARCHITECTURE.md](ARCHITECTURE.md) |
+| `ledger-hound/` | Agentic QA / red team of a Purchase-to-Pay API | OpenAI Agents SDK, DSPy, FastAPI | its README |
+| `traffic-flow-analyzer/` | Congestion forecasting agents + dashboard | PydanticAI, Gradio | its CLAUDE.md |
+| `platewatch/` | Licence-plate detection, tagging, vector search | PydanticAI, Hugging Face | its CLAUDE.md |
+| `api-tests/` | Black-box API tests for the Traffic Flow API | pytest, httpx, schemathesis | its CLAUDE.md |
 
-This file covers OpsPilot (`opspilot/`, `adk_apps/`, `tests/`). The repository
-also holds independent projects with their own conventions: `ledger-hound/`,
-`traffic-flow-analyzer/`, `platewatch/` and `api-tests/` (self-contained; see their
-README/CLAUDE.md and run commands from inside the folder). The layering rules
-below apply to OpsPilot only.
+Each sub-project has its own `pyproject.toml`, `uv.lock`, tests and a path-filtered workflow in
+`.github/workflows/`. Run its commands from inside its folder.
 
-## Commands
+## Root commands (OpsPilot)
 
 ```bash
-uv sync                                   # setup (UV only; no raw pip)
-uv run pytest                             # offline suite (live tests excluded by default)
-uv run pytest -m live                     # needs GOOGLE_API_KEY or Vertex AI ADC
+uv sync                                   # uv only; never raw pip
+uv run pytest                             # offline suite; live tests are excluded by default
 uv run ruff check . && uv run ruff format --check .
-uv run opspilot demo --case C03           # end-to-end demo (mock model)
+uv run opspilot demo --case C03           # end-to-end, mock model
 uv run opspilot eval --guardrails         # evaluation -> var/eval/
-uv run adk web adk_apps                   # ADK dev UI
+uv run pytest -m live                     # needs GOOGLE_API_KEY (AI Studio) or Vertex AI ADC
 ```
 
-## Layering rules (do not break)
+## Rules for every project
 
-- `opspilot/contracts/` and `opspilot/core/` must not import `google.adk`.
-- Calculations, thresholds, graph rules, status and escalation live in `core/`
-  — never in prompts or LLM outputs.
-- Tools are Pydantic-validated, read-only, return `{"status": "ok"|"error", ...}`
-  and record evidence via `tool_context.state["evidence:<ID>"]`.
-- Tools never accept dataset IDs, paths, SQL, URLs or commands from the model.
-- Agents never see case labels (`cases.yaml` `labels`/`world` are read only by
-  the generator and `opspilot/eval`). `tests/test_evaluation.py` guards this.
-- New LLM agent ⇒ add an output contract, an instruction provider in
-  `adk/prompts.py`, a mock policy + `failed_output` in `adk/mock_policies.py`,
-  allowlist and `OUTPUT_SCHEMAS` entries in `adk/agents.py`, and contract tests.
-
-## ADK specifics verified for 2.11.0 (see tests/test_adk_contract.py)
-
-- `output_schema` + `tools` works via an injected `set_model_response` tool.
-- `include_contents="none"` still forwards the current user message — we
-  replace it in `before_model_callback` (`sanitize_user_content`).
-- `before_agent_callback` content is validated against `output_schema`, so
-  skips must return schema-valid JSON.
-- `ctx.end_invocation` does not stop a `SequentialAgent`; stages check
-  `intake_error` themselves.
-- `LoopAgent` ends when any event it yields has `actions.escalate`;
-  `SequentialAgent` ignores `escalate`, so the optional `reinvestigation_gate`
-  ends the rounds without skipping review or the finalizer.
-- A final *text* answer that fails `output_schema` raises `ValidationError` and
-  aborts the whole run (JSON text, even fenced, is accepted); `BudgetPlugin`
-  replaces such answers with the agent's `failed_output`. Invalid
-  `set_model_response` arguments go back to the model as `{"error": ...}` for
-  another try.
-
-## Sub-projects
-
-- `traffic-flow-analyzer/` — PydanticAI-based congestion forecasting with Gradio dashboard; see its own CLAUDE.md and PLAN.md.
-- `api-tests/` — black-box HTTP test suite (pytest, httpx, schemathesis) for the Traffic Flow API; see its own CLAUDE.md and docs/FINDINGS.md.
-
-## Conventions
-
+- **Projects stay independent.** No project imports another. Never add a sub-project to the root
+  uv workspace, the root `pyproject.toml`, the root CI job or a root `conftest.py` to make
+  something pass; fix it inside the project.
+- **Agents interpret, code calculates.** Numbers, thresholds, status, ranking and escalation are
+  deterministic Python in a framework-free `core/`; `contracts/` and `core/` never import the
+  agent framework. Never move a calculation into a prompt.
+- **Tools are narrow.** Validated arguments, read-only unless the project says otherwise, and no
+  paths, URLs, SQL or commands taken from the model.
+- **Offline by default.** Every project runs and tests with a deterministic mock model and no
+  credentials. Live-model tests carry the `live` marker. Never assert a live model's exact output.
+- **Ground truth never reaches an agent.** Labels, answer keys and held-back data are read only by
+  generators and evaluation code; keep the tests that guard this.
+- **Report results as measured.** State the model, the number of runs and the spread. A mock result
+  measures the pipeline, not the model. Never skip, loosen or delete a test to get green.
+- **Secrets** come from the environment or ADC; never commit keys or put them in prompts or logs.
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.
-- Keep the mock deterministic; never assert live-model outputs exactly.
-- Do not claim production readiness.
 
-## PlateWatch (`platewatch/`) — PydanticAI licence-plate module
+## Where the procedures are
 
-Separate package beside `opspilot/` (see [platewatch/README.md](platewatch/README.md)); it does not use ADK.
-
-- `platewatch/core/` must not import `pydantic_ai`, `torch`, `transformers` or `google`
-  (`platewatch/tests/test_platewatch.py` enforces it). Normalisation, tag thresholds, embedding
-  and the store live there — never in prompts.
-- Agent tools take no paths, URLs or SQL from the model (the inbox is fixed in `PlateDeps`); every
-  plate id in agent output must have been returned by a tool (output validator).
-- Detector/reader are `Protocol`s in `vision/`; Hugging Face backends import torch lazily and are
-  covered only by `-m live` (`platewatch/tests/test_platewatch_live.py`). Offline tests use
-  `ScriptedVision`.
-- Commands (run from inside `platewatch/`): `uv run platewatch demo`; `uv run pytest`.
+Multi-step work is in skills under `.claude/skills/` (also readable by Antigravity through
+`.agents/skills/`): `new-agent-project`, `add-llm-agent`, `llm-eval`, `eval-dataset`, `red-team`.
