@@ -1,7 +1,7 @@
 """Live check of the Hugging Face detector + TrOCR on real photos. Excluded by default.
 
-    PLATEWATCH_LIVE_DIR=/path/to/photos uv run --with transformers --with torch pytest -m live \
-        tests/test_platewatch_live.py -s
+    cd platewatch && PLATEWATCH_LIVE_DIR=/path/to/photos \
+        uv run --with transformers --with torch pytest -m live tests/test_platewatch_live.py -s
 
 Each photo is named after the plate it shows, e.g. ``ABC1234.jpg`` or ``ABC1234_2.jpg``. Needs
 network access to download the models. Thresholds are deliberately loose: real models are
@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
+
 from platewatch.core.store import PlateStore
 from platewatch.core.text import normalize_plate
 from platewatch.pipeline import IMAGE_SUFFIXES, PlatePipeline

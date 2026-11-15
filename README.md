@@ -18,7 +18,7 @@ uv sync                                  # Python 3.11–3.13, installs google-a
 uv run opspilot build-data               # 14 synthetic datasets -> var/datasets/*.db
 uv run opspilot demo --case C03          # full investigation, offline (mock model)
 uv run opspilot demo --case C10 --show-labels   # malicious-document case, labels after the run
-uv run pytest                            # 350+ offline tests, no credentials needed
+uv run pytest                            # 450+ offline tests, no credentials needed
 uv run opspilot eval --guardrails        # evaluation report -> var/eval/
 ```
 

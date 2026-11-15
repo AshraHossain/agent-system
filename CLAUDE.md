@@ -74,10 +74,11 @@ uv run adk web adk_apps                   # ADK dev UI
 Separate package beside `opspilot/` (see [platewatch/README.md](platewatch/README.md)); it does not use ADK.
 
 - `platewatch/core/` must not import `pydantic_ai`, `torch`, `transformers` or `google`
-  (`tests/test_platewatch.py` enforces it). Normalisation, tag thresholds, embedding and the
-  store live there — never in prompts.
+  (`platewatch/tests/test_platewatch.py` enforces it). Normalisation, tag thresholds, embedding
+  and the store live there — never in prompts.
 - Agent tools take no paths, URLs or SQL from the model (the inbox is fixed in `PlateDeps`); every
   plate id in agent output must have been returned by a tool (output validator).
 - Detector/reader are `Protocol`s in `vision/`; Hugging Face backends import torch lazily and are
-  covered only by `-m live` (`tests/test_platewatch_live.py`). Offline tests use `ScriptedVision`.
-- Commands: `uv run platewatch demo`; `uv run pytest tests/test_platewatch.py`.
+  covered only by `-m live` (`platewatch/tests/test_platewatch_live.py`). Offline tests use
+  `ScriptedVision`.
+- Commands (run from inside `platewatch/`): `uv run platewatch demo`; `uv run pytest`.
