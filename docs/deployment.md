@@ -55,9 +55,15 @@ curl -H "Authorization: Bearer $TOKEN" http://server:8000/runs/<session_id>
   Several digests (comma-separated) let you add a new token, move clients over,
   then drop the old one. Restart the server to apply a change.
 * Everything is covered: ADK's `/run`, `/run_sse`, `/run_live` (websocket),
-  sessions, artifacts, `/version`, `/docs`, and `/runs/{run_id}`. The one exception
-  is `GET /health`, for load-balancer probes. A missing or wrong token gets `401`
-  (`403` for a websocket handshake).
+  sessions, artifacts, `/version`, `/docs`, and `/runs/{run_id}`. Both
+  `Authorization: Bearer <token>` and `X-API-Key: <token>` are accepted. The only
+  exemptions are `GET /health`, `GET /ready`, and `GET /readyz` for container probes.
+  A missing or wrong token gets `401` (`403` for a websocket handshake).
+* Sliding-window rate limiting (`RATE_LIMIT_PER_MINUTE`, default `120` req/min) returns
+  HTTP `429` with `Retry-After: 60`, and `InputBoundaryMiddleware` enforces path
+  traversal checks (`400`), payload byte caps (`413`, default 5 MiB), and MIME
+  allowlists (`415`). Every response includes `X-Request-ID`, `X-Process-Time-Ms`, and
+  OWASP security headers ([ADR-0014](adr/0014-owasp-defense-in-depth-and-frozen-contracts.md)).
 * `--host` anything but loopback is **refused without a token**. Behind a proxy that
   already authenticates, `--allow-unauthenticated` overrides that, with a warning.
 * **TLS is not included.** Tokens cross the network in clear text, so put a

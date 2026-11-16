@@ -23,14 +23,16 @@ digest form, rotation, the `/health` exemption and the DNS-rebinding fix are add
   never be human-chosen passwords. Several digests allow rotation without downtime
   for clients. A malformed digest or a short token stops every command with a clear
   error instead of silently disabling authentication.
-* **Enforcement.** A plain ASGI middleware, outermost, so it covers HTTP, streaming
-  (`/run_sse`) and websockets (`/run_live`) and runs before any ADK handler.
-  `Authorization: Bearer <token>` is the only accepted form (not a query string or
-  cookie); duplicate or malformed headers are refused. Missing and wrong tokens get
-  an identical 401 (a refused websocket handshake gets 403). Comparison is
-  constant-time over every digest.
-* **One exemption:** `GET /health`, which returns only `{"status": "ok"}`, so load
-  balancers can probe. `/version`, `/docs` and `/openapi.json` are protected.
+* **Enforcement.** A plain ASGI middleware (`BearerTokenAuth`), covering HTTP, streaming
+  (`/run_sse`) and websockets (`/run_live`) and running before any ADK handler.
+  Accepts either `Authorization: Bearer <token>` or `X-API-Key: <token>` (configured via
+  `OPSPILOT_API_TOKEN_SHA256`, `OPSPILOT_API_TOKEN`, or `API_AUTH_TOKEN`); requests
+  that supply both headers or duplicate headers are refused as ambiguous. Missing and
+  wrong tokens get an identical 401 (a refused websocket handshake gets 403). Comparison
+  is constant-time over every digest via `hmac.compare_digest`.
+* **Container probe exemptions:** `GET /health`, `GET /ready`, and `GET /readyz`, so
+  load balancers and orchestrators can probe liveness and session-store readiness without
+  credentials. `/version`, `/docs` and `/openapi.json` are protected.
 * **Fail closed.** `opspilot serve` refuses any non-loopback `--host` unless a token
   is configured. `--allow-unauthenticated` overrides that, with a warning, for a
   deployment behind a proxy that authenticates. Loopback without a token still works.

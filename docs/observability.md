@@ -11,16 +11,16 @@ unless you ask.
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # OTLP over HTTP, not gRPC (4317)
 export OTEL_SERVICE_NAME=opspilot
 
-uv run --with 'opentelemetry-exporter-otlp-proto-http==1.42.1' opspilot demo --case C03
-uv run --with 'opentelemetry-exporter-otlp-proto-http==1.42.1' opspilot serve
+uv run opspilot demo --case C03
+uv run opspilot serve
 ```
 
-* **The exporter is not a project dependency.** `google-adk` ships the hooks but
-  leaves the exporter optional, and adding it to `uv.lock` would force `protobuf`
-  below 7 for everyone ([ADR-0012](adr/0012-otlp-exporter-not-locked.md)). `uv run --with` adds it for that
-  run only. 1.42.1 is the version tested, and the newest OpenTelemetry release that
-  `google-adk` 2.11.0 accepts (it caps `opentelemetry-sdk` at 1.42.1). Without it, the commands below stop at once with this exact
-  instruction instead of running untraced.
+* **Included in `dev` dependencies.** `opentelemetry-exporter-otlp-proto-http==1.42.1`
+  is pinned in `[dependency-groups] dev` ([ADR-0012](adr/0012-otlp-exporter-not-locked.md)),
+  so a standard `uv sync` runs all 23 OTLP unit and end-to-end tests in
+  `tests/test_tracing.py` without skipping and exports traces out of the box. In a
+  `--no-dev` production install, add `--with 'opentelemetry-exporter-otlp-proto-http==1.42.1'`
+  when enabling OTLP export.
 * A local backend to look at the result (not run here; any OTLP/HTTP receiver works):
   `docker run --rm -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one`, then open
   http://localhost:16686.
