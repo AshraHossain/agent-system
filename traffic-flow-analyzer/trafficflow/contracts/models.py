@@ -45,6 +45,7 @@ class SegmentInfo(BaseModel):
 
 
 class ForecastPoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
     ts: datetime
     speed_kmh: float
     lower_kmh: float
@@ -54,6 +55,7 @@ class ForecastPoint(BaseModel):
 
 
 class SegmentForecast(BaseModel):
+    model_config = ConfigDict(frozen=True)
     segment_id: str
     method: str
     horizon_minutes: int
@@ -64,6 +66,7 @@ class SegmentForecast(BaseModel):
 
 
 class Anomaly(BaseModel):
+    model_config = ConfigDict(frozen=True)
     segment_id: str
     start: datetime
     points: int
@@ -75,32 +78,38 @@ class Anomaly(BaseModel):
 
 
 class SegmentOutlook(BaseModel):
+    model_config = ConfigDict(frozen=True)
     segment_id: str
     note: str = Field(max_length=300)
     evidence_ids: list[str] = Field(min_length=1)
 
 
 class ForecastFinding(BaseModel):
+    model_config = ConfigDict(frozen=True)
     outlooks: list[SegmentOutlook]
 
 
 class IncidentNote(BaseModel):
+    model_config = ConfigDict(frozen=True)
     segment_id: str
     summary: str = Field(max_length=300)
     evidence_ids: list[str] = Field(min_length=1)
 
 
 class IncidentFinding(BaseModel):
+    model_config = ConfigDict(frozen=True)
     incidents: list[IncidentNote]
 
 
 class Finding(BaseModel):
+    model_config = ConfigDict(frozen=True)
     claim: str = Field(max_length=400)
     segment_ids: list[str]
     evidence_ids: list[str] = Field(min_length=1)
 
 
 class TrafficBrief(BaseModel):
+    model_config = ConfigDict(frozen=True)
     headline: str = Field(max_length=160)
     summary: str = Field(max_length=1200)
     findings: list[Finding]
@@ -110,6 +119,7 @@ class TrafficBrief(BaseModel):
 class TrafficReport(BaseModel):
     """Final, verified report. `status` is computed by rule in core, never by an LLM."""
 
+    model_config = ConfigDict(frozen=True)
     as_of: datetime
     horizon_minutes: int
     status: NetworkStatus

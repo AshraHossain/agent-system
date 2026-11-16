@@ -8,7 +8,7 @@ import re
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 EVIDENCE_ID_PATTERN = r"^EV-(TEL|TOP|DOC|INC|DQ)-[0-9a-f]{8}$"
 EVIDENCE_ID_RE = re.compile(EVIDENCE_ID_PATTERN)
@@ -31,6 +31,8 @@ class Evidence(BaseModel):
     IDs are derived from the canonical content, so the same fact always gets the
     same ID (idempotent across retries and parallel branches).
     """
+
+    model_config = ConfigDict(frozen=True)
 
     evidence_id: str = Field(pattern=EVIDENCE_ID_PATTERN)
     kind: EvidenceKind

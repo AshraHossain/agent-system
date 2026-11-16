@@ -11,6 +11,37 @@ from opspilot.core.telemetry import default_windows
 from opspilot.core.topology import Topology
 from opspilot.datasets.generate import build_all
 
+UNIT_MODULES = frozenset(
+    {
+        "test_analysis",
+        "test_cost",
+        "test_dataset",
+        "test_embeddings",
+        "test_eval_repetitions",
+        "test_evidence",
+        "test_policy",
+        "test_report",
+        "test_retrieval",
+        "test_security",
+        "test_telemetry",
+        "test_topology",
+        "test_verification",
+    }
+)
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Ensure every offline test is categorized as either `unit` or `integration`."""
+    for item in items:
+        existing = {m.name for m in item.iter_markers()}
+        if existing & {"unit", "integration", "live"}:
+            continue
+        mod = item.module.__name__.rsplit(".", 1)[-1]
+        if mod in UNIT_MODULES:
+            item.add_marker(pytest.mark.unit)
+        else:
+            item.add_marker(pytest.mark.integration)
+
 
 @pytest.fixture(scope="session")
 def data_dir(tmp_path_factory) -> Path:

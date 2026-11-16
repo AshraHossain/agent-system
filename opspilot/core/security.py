@@ -1,18 +1,35 @@
-"""Input validation, secret redaction, prompt-injection heuristics, untrusted isolation.
+"""Input validation, secret redaction, prompt-injection heuristics, untrusted isolation,
+path/MIME/payload boundary guards, and sliding-window rate limiting.
 
-These are heuristics. They reduce risk; they do not make prompt injection
-impossible. The real guarantees come from architecture: agents have no
-mutating tools, tool arguments are validated, dataset selection is not
-model-controlled, and status/escalation are computed by deterministic code.
+These heuristics reduce risk; they do not make prompt injection impossible.
+The real guarantees come from architecture: agents have no mutating tools,
+tool arguments are validated, dataset selection is not model-controlled, and
+status/escalation are computed by deterministic code.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import threading
+import time
 import unicodedata
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 from opspilot.core.errors import InvalidArgument
+
+ALLOWED_MIME_TYPES: frozenset[str] = frozenset(
+    {
+        "application/json",
+        "multipart/form-data",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+    }
+)
+DEFAULT_MAX_PAYLOAD_BYTES: int = 5 * 1024 * 1024  # 5 MiB
+SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 INJECTION_PATTERNS: dict[str, re.Pattern[str]] = {
     "ignore_instructions": re.compile(
@@ -63,10 +80,13 @@ SECRET_PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_DELIM = re.compile(r"<<\s*/?\s*untrusted_document[^>]*>>", re.I)
+_DELIM = re.compile(
+    r"(?:<<\s*/?\s*untrusted_(?:document|context)[^>]*>>|<\s*/?\s*untrusted_(?:document|context)[^>]*>)",
+    re.I,
+)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ValidatedText:
     text: str
     flags: list[str] = field(default_factory=list)
@@ -114,13 +134,76 @@ def validate_request(text: str, max_chars: int) -> ValidatedText:
     return ValidatedText(clean, flags, n)
 
 
-def isolate_untrusted(doc_id: str, text: str, max_chars: int = 1500) -> tuple[str, list[str]]:
-    """Redact, scan and wrap retrieved content as clearly-delimited untrusted data.
+def sanitize_filename(
+    raw: str,
+    *,
+    pattern: re.Pattern[str] = SAFE_FILENAME_RE,
+) -> str:
+    """Strip directory traversal sequences via `os.path.basename` and enforce regex allowlist."""
+    if not isinstance(raw, str):
+        raise InvalidArgument("filename/identifier must be a string")
+    cleaned = _CONTROL.sub("", raw).replace("\\", "/").strip()
+    base = os.path.basename(cleaned)
+    if not base or base in {".", ".."} or not pattern.match(base):
+        raise InvalidArgument(f"invalid filename or identifier {raw!r}")
+    return base
 
-    Returns (wrapped_text, flags). Suspected injections are withheld entirely:
-    the model is told the document exists and was quarantined, but never sees
-    the payload.
-    """
+
+def validate_mime_type(
+    content_type: str | None,
+    allowed: frozenset[str] = ALLOWED_MIME_TYPES,
+) -> str:
+    """Validate an HTTP `Content-Type` header against the strict MIME allowlist."""
+    if not content_type or not isinstance(content_type, str):
+        raise InvalidArgument("missing Content-Type header")
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    if media_type not in allowed:
+        raise InvalidArgument(f"unsupported media type {media_type!r}")
+    return media_type
+
+
+def validate_payload_size(
+    size_bytes: int,
+    max_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES,
+) -> int:
+    """Enforce payload/upload byte caps."""
+    if size_bytes < 0:
+        raise InvalidArgument("invalid negative Content-Length")
+    if size_bytes > max_bytes:
+        raise InvalidArgument(f"payload size {size_bytes} exceeds limit of {max_bytes} bytes")
+    return size_bytes
+
+
+class SlidingWindowRateLimiter:
+    """Deterministic sliding-window rate limiter keyed by client identifier."""
+
+    def __init__(self, limit_per_minute: int = 120, window_s: float = 60.0):
+        if limit_per_minute < 0:
+            raise ValueError("limit_per_minute must be >= 0")
+        if window_s <= 0:
+            raise ValueError("window_s must be > 0")
+        self.limit = limit_per_minute
+        self.window_s = window_s
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def allow(self, client_key: str, *, now: float | None = None) -> tuple[bool, int]:
+        """Return `(allowed, retry_after_s)` for `client_key` at timestamp `now`."""
+        if self.limit == 0:
+            return True, 0
+        ts = time.monotonic() if now is None else now
+        cutoff = ts - self.window_s
+        with self._lock:
+            q = self._hits[client_key]
+            while q and q[0] <= cutoff:
+                q.popleft()
+            if len(q) >= self.limit:
+                return False, int(self.window_s)
+            q.append(ts)
+            return True, 0
+
+
+def _sanitize_untrusted_body(text: str, max_chars: int = 1500) -> tuple[str, list[str]]:
     flags: list[str] = []
     body = normalize(_DELIM.sub("[delimiter removed]", text))
     body, n = redact(body)
@@ -134,5 +217,27 @@ def isolate_untrusted(doc_id: str, text: str, max_chars: int = 1500) -> tuple[st
         )
     if len(body) > max_chars:
         body = body[:max_chars] + " …[truncated]"
-    wrapped = f"<<untrusted_document id={doc_id}>> {body} <</untrusted_document>>"
+    return body, flags
+
+
+def wrap_untrusted_context(
+    source_id: str, text: str, max_chars: int = 1500
+) -> tuple[str, list[str]]:
+    """Sanitize and frame untrusted tool/log/document text inside `<untrusted_context>` tags."""
+    safe_id = (
+        sanitize_filename(source_id) if SAFE_FILENAME_RE.match(source_id or "") else "untrusted"
+    )
+    body, flags = _sanitize_untrusted_body(text, max_chars=max_chars)
+    return f'<untrusted_context id="{safe_id}">{body}</untrusted_context>', flags
+
+
+def isolate_untrusted(doc_id: str, text: str, max_chars: int = 1500) -> tuple[str, list[str]]:
+    """Redact, scan and wrap retrieved content as clearly-delimited untrusted data.
+
+    Returns (wrapped_text, flags). Suspected injections are withheld entirely:
+    the model is told the document exists and was quarantined, but never sees
+    the payload.
+    """
+    framed, flags = wrap_untrusted_context(doc_id, text, max_chars=max_chars)
+    wrapped = f"<<untrusted_document id={doc_id}>> {framed} <</untrusted_document>>"
     return wrapped, flags

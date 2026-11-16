@@ -36,7 +36,7 @@ class ModelQuotaError(RuntimeError):
     """Simulated 429 RESOURCE_EXHAUSTED."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class Turn:
     agent: str
     context: dict[str, Any]
@@ -56,12 +56,12 @@ class Turn:
         return any(n == name for n, _ in self.results)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolCalls:
     calls: list[tuple[str, dict]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Final:
     output: dict = field(default_factory=dict)
 

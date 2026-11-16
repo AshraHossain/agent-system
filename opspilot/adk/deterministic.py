@@ -240,11 +240,13 @@ class EvidenceVerifierAgent(BaseAgent):
         if errors:
             from opspilot.contracts.verification import VerificationIssue
 
-            result.issues += [
+            extra_issues = [
                 VerificationIssue(severity="error", code="schema_violation", message=e)
                 for e in errors
             ]
-            result.verdict = "needs_review"
+            result = result.model_copy(
+                update={"issues": [*result.issues, *extra_issues], "verdict": "needs_review"}
+            )
         yield _event(
             self,
             ctx,

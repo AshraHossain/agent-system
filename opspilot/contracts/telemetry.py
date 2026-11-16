@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from opspilot.contracts.evidence import Evidence
 
@@ -12,6 +12,8 @@ Verdict = Literal["normal", "elevated", "critical", "recovered", "insufficient_d
 
 
 class MetricStats(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     count: int
     expected_count: int
     missing_count: int
@@ -23,6 +25,8 @@ class MetricStats(BaseModel):
 
 
 class BaselineComparison(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     entity_id: str
     metric: str
     baseline: MetricStats
@@ -35,6 +39,8 @@ class BaselineComparison(BaseModel):
 
 
 class Anomaly(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     entity_id: str
     entity_type: str
     metric: str
@@ -51,6 +57,8 @@ class Anomaly(BaseModel):
 
 
 class DataQualityIssue(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     entity_id: str
     metric: str | None
     issue: Literal["missing", "delayed", "unknown_entity"]
@@ -59,6 +67,8 @@ class DataQualityIssue(BaseModel):
 
 
 class AnomalySummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     window: str
     entities_checked: int
     anomalies: list[Anomaly]
@@ -68,6 +78,8 @@ class AnomalySummary(BaseModel):
 
 
 class TelemetrySnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     entity_id: str
     window: str
     metrics: dict[str, MetricStats]

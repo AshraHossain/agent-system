@@ -40,9 +40,11 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101", "S311"]
 
 [tool.ruff.lint.per-file-ignores]
 # prompt prose and the impact table read better unwrapped
 "src/ledger_hound/qa/brain.py" = ["E501"]
 "src/ledger_hound/qa/labels.py" = ["E501"]
+"tests/**" = ["S"]

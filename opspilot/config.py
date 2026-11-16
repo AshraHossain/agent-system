@@ -14,6 +14,7 @@ from typing import Literal
 
 from opspilot.core.auth import hash_token, parse_digests
 from opspilot.core.cost import PriceTable, load_price_table
+from opspilot.core.security import DEFAULT_MAX_PAYLOAD_BYTES
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -42,15 +43,27 @@ class Limits:
     max_report_chars: int = 60_000
     # 1 = single pass (default). 2 = one extra round that retries failed stages.
     max_investigation_rounds: int = 1
+    rate_limit_per_minute: int = 120
+    max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
 
     def __post_init__(self) -> None:
         if self.max_investigation_rounds not in (1, 2):
             raise ValueError(
                 f"max_investigation_rounds must be 1 or 2, got {self.max_investigation_rounds!r}"
             )
+        if self.rate_limit_per_minute < 0:
+            raise ValueError(
+                f"rate_limit_per_minute must be >= 0, got {self.rate_limit_per_minute!r}"
+            )
+        if self.max_payload_bytes <= 0:
+            raise ValueError(f"max_payload_bytes must be > 0, got {self.max_payload_bytes!r}")
 
     @classmethod
     def from_env(cls) -> Limits:
+        rate_limit = _int(
+            "RATE_LIMIT_PER_MINUTE",
+            _int("OPSPILOT_RATE_LIMIT_PER_MINUTE", cls.rate_limit_per_minute),
+        )
         return cls(
             max_llm_calls=_int("OPSPILOT_MAX_LLM_CALLS", cls.max_llm_calls),
             max_llm_calls_per_agent=_int(
@@ -66,6 +79,8 @@ class Limits:
             max_investigation_rounds=_int(
                 "OPSPILOT_MAX_INVESTIGATION_ROUNDS", cls.max_investigation_rounds
             ),
+            rate_limit_per_minute=rate_limit,
+            max_payload_bytes=_int("OPSPILOT_MAX_PAYLOAD_BYTES", cls.max_payload_bytes),
         )
 
 
@@ -115,8 +130,9 @@ class Settings:
     limits: Limits = field(default_factory=Limits)
     prices: PriceTable | None = None
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
-    # Bearer tokens for `opspilot serve` (ADR-0013): a token itself (OPSPILOT_API_TOKEN) and/or
-    # SHA-256 digests of tokens (OPSPILOT_API_TOKEN_SHA256). Neither = no authentication.
+    # Bearer/API-Key tokens for `opspilot serve` (ADR-0013): a token itself
+    # (OPSPILOT_API_TOKEN / API_AUTH_TOKEN) and/or SHA-256 digests of tokens
+    # (OPSPILOT_API_TOKEN_SHA256). Neither = no authentication.
     api_token: str | None = field(default=None, repr=False)
     api_token_digests: tuple[str, ...] = ()
 
@@ -154,11 +170,12 @@ MIN_TOKEN_LENGTH = 32
 
 def _api_token() -> str | None:
     token = os.getenv("OPSPILOT_API_TOKEN", "").strip()
-    if not token:
-        return None
-    if len(token) < MIN_TOKEN_LENGTH:
-        raise ValueError(
-            f"OPSPILOT_API_TOKEN must be at least {MIN_TOKEN_LENGTH} characters; "
-            "create one with `opspilot token`"
-        )
-    return token
+    if token:
+        if len(token) < MIN_TOKEN_LENGTH:
+            raise ValueError(
+                f"OPSPILOT_API_TOKEN must be at least {MIN_TOKEN_LENGTH} characters; "
+                "create one with `opspilot token`"
+            )
+        return token
+    alt = os.getenv("API_AUTH_TOKEN", "").strip()
+    return alt or None

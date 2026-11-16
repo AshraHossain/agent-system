@@ -8,6 +8,14 @@ LOW_CONFIDENCE = 0.5
 MIN_LEN, MAX_LEN = 4, 8
 
 _NON_ALNUM = re.compile(r"[^A-Z0-9]")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_TAG_ESCAPE = re.compile(r"<\s*/?\s*untrusted_context[^>]*>", re.I)
+
+
+def sanitize_ocr_text(raw: str, max_chars: int = 128) -> str:
+    """Strip control characters and boundary-escape tags, then wrap inside `<untrusted_context>`."""
+    cleaned = _TAG_ESCAPE.sub("", _CONTROL.sub(" ", raw or "")).strip()[:max_chars]
+    return f"<untrusted_context>{cleaned}</untrusted_context>"
 
 
 def normalize_plate(raw: str) -> str:

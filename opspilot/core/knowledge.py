@@ -6,6 +6,8 @@ agent. Deprecated/superseded documents and suspected injections are flagged.
 
 from __future__ import annotations
 
+import os
+
 from opspilot.contracts.evidence import Evidence, EvidenceKind
 from opspilot.contracts.knowledge import DocumentHit, SearchResult
 from opspilot.core.dataset import Dataset, Document
@@ -124,10 +126,18 @@ def search(
     )
 
 
+def _clean_doc_id(doc_id: str) -> str:
+    """Strip any directory traversal components from a caller-supplied doc_id."""
+    if not isinstance(doc_id, str):
+        raise InvalidArgument("doc_id must be a string")
+    return os.path.basename(doc_id.replace("\\", "/").strip())
+
+
 def get_document(ds: Dataset, doc_id: str) -> DocumentHit:
+    clean_id = _clean_doc_id(doc_id)
     docs = _docs(ds)
     for doc in docs:
-        if doc.doc_id == doc_id:
+        if doc.doc_id == clean_id:
             body, iso = isolate_untrusted(doc.doc_id, doc.body, max_chars=1500)
             flags = _flags(doc, iso)
             ev = _evidence(doc, flags)
@@ -150,9 +160,10 @@ def get_document(ds: Dataset, doc_id: str) -> DocumentHit:
 
 
 def document_evidence(ds: Dataset, doc_id: str) -> Evidence:
+    clean_id = _clean_doc_id(doc_id)
     docs = _docs(ds)
     for doc in docs:
-        if doc.doc_id == doc_id:
+        if doc.doc_id == clean_id:
             _, iso = isolate_untrusted(doc.doc_id, doc.body)
             return _evidence(doc, _flags(doc, iso))
     raise NotFound(doc_id)

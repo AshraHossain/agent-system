@@ -19,7 +19,7 @@ from opspilot.eval.verifier_matrix import (
     to_markdown,
 )
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 SLICE = ["C03", "C05"]  # C05 has two hypotheses, so ranking/support swaps apply
 

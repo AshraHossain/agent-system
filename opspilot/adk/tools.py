@@ -227,25 +227,8 @@ def get_service_dependencies(services: list[str], tool_context: ToolContext) -> 
     def run(rt, scope):
         a = _v(_Services, services=services)
         res = rt.topology.dependencies(a.services)
-        ranked = []
-        examined = set(res.services)
-        for comp, svcs in res.shared_components.items():
-            others = {
-                s
-                for s in (n[4:] for n in rt.topology.dependents(comp) if n.startswith("svc:"))
-                if s not in examined
-            }
-            ranked.append(
-                {
-                    "component_id": comp,
-                    "services": svcs,
-                    "other_dependents": len(others),
-                    "type": rt.topology.components[comp]["type"],
-                }
-            )
-        ranked.sort(key=lambda r: (r["other_dependents"], -len(r["services"]), r["component_id"]))
         payload = res.model_dump(mode="json", exclude={"evidence", "shared_components"})
-        payload["shared_ranked"] = ranked[:15]
+        payload["shared_ranked"] = rt.topology.rank_shared_dependencies(res)
         payload["_evidence"] = res.evidence
         return payload
 

@@ -2,7 +2,8 @@
 
 OpsPilot is **read-only decision support**. Its strongest controls are
 architectural; heuristics add defence in depth. Prompt injection is mitigated,
-**not solved**.
+**not solved**. See top-level [SECURITY.md](../SECURITY.md) for the complete
+OWASP API & LLM Top 10 threat model and verification matrix.
 
 ## Threats and controls
 

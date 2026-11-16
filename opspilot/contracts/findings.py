@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 StageStatus = Literal["completed", "partial", "failed"]
 Confidence = Literal["strong", "moderate", "weak"]
@@ -27,6 +27,8 @@ class HypothesisCategory(StrEnum):
 
 
 class ObservedAnomaly(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     entity_id: str
     metric: str
     description: str = Field(max_length=300)
@@ -34,6 +36,8 @@ class ObservedAnomaly(BaseModel):
 
 
 class TelemetryFinding(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     status: StageStatus
     summary: str = Field(max_length=1200)
     time_window: str
@@ -46,24 +50,32 @@ class TelemetryFinding(BaseModel):
 
 
 class SharedDependency(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     component_id: str
     services: list[str]
     evidence_ids: list[str]
 
 
 class ImpactEntry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     service: str
     impact: Literal["critical", "high", "medium", "low"]
     exposure: Literal["single_point", "redundant", "indirect"]
 
 
 class BlastRadiusEntry(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     component_id: str
     impacts: list[ImpactEntry]
     evidence_ids: list[str]
 
 
 class TopologyFinding(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     status: StageStatus
     summary: str = Field(max_length=1200)
     services_examined: list[str]
@@ -76,6 +88,8 @@ class TopologyFinding(BaseModel):
 
 
 class DocReference(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     doc_id: str
     title: str
     note: str = Field(max_length=300)
@@ -83,11 +97,15 @@ class DocReference(BaseModel):
 
 
 class DocIssue(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     doc_id: str
     issue: str = Field(max_length=300)
 
 
 class KnowledgeFinding(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     status: StageStatus
     summary: str = Field(max_length=1200)
     relevant_runbooks: list[DocReference]
@@ -100,6 +118,8 @@ class KnowledgeFinding(BaseModel):
 
 
 class Hypothesis(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     hypothesis_id: str
     category: HypothesisCategory
     component_id: str
@@ -117,6 +137,8 @@ class Hypothesis(BaseModel):
 
 
 class IncidentAnalysis(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     status: StageStatus
     hypotheses: list[Hypothesis] = Field(description="Ranked, most likely first")
     unexplained_observations: list[str]
@@ -124,11 +146,15 @@ class IncidentAnalysis(BaseModel):
 
 
 class KeyFact(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     statement: str = Field(max_length=400)
     evidence_ids: list[str]
 
 
 class RecommendedStep(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     step: str = Field(max_length=300)
     rationale: str = Field(max_length=300)
     runbook_ids: list[str]
@@ -136,6 +162,8 @@ class RecommendedStep(BaseModel):
 
 
 class ReportDraft(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     summary: str = Field(max_length=2000)
     key_facts: list[KeyFact]
     affected_services: list[str]
@@ -146,11 +174,15 @@ class ReportDraft(BaseModel):
 
 
 class ReviewConcern(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     severity: Literal["info", "warning"]
     description: str = Field(max_length=400)
     related_ids: list[str]
 
 
 class ReviewResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     overall: Literal["no_concerns", "concerns"]
     concerns: list[ReviewConcern]

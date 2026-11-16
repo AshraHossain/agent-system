@@ -287,6 +287,27 @@ class Topology:
             evidence=evidence,
         )
 
+    def rank_shared_dependencies(self, res: DependencyResult, limit: int = 15) -> list[dict]:
+        """Rank shared components by specificity (fewest external dependents first)."""
+        ranked = []
+        examined = set(res.services)
+        for comp, svcs in res.shared_components.items():
+            others = {
+                s
+                for s in (n[4:] for n in self.dependents(comp) if n.startswith(SVC))
+                if s not in examined
+            }
+            ranked.append(
+                {
+                    "component_id": comp,
+                    "services": svcs,
+                    "other_dependents": len(others),
+                    "type": self.components[comp]["type"],
+                }
+            )
+        ranked.sort(key=lambda r: (r["other_dependents"], -len(r["services"]), r["component_id"]))
+        return ranked[:limit]
+
     def blast_radius(self, component_id: str) -> BlastRadius:
         if component_id not in self.components:
             raise NotFound(f"component {component_id} not in topology")

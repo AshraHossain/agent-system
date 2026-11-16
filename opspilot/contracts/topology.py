@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from opspilot.contracts.evidence import Evidence
 
@@ -13,6 +13,8 @@ Exposure = Literal["single_point", "redundant", "indirect"]
 
 
 class ComponentInfo(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     component_id: str
     type: str
     redundancy_group: str | None = None
@@ -24,6 +26,8 @@ class ComponentInfo(BaseModel):
 
 
 class DependencyResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     services: list[str]
     dependencies: dict[str, list[str]] = Field(
         description="service -> network components in its dependency closure"
@@ -37,6 +41,8 @@ class DependencyResult(BaseModel):
 
 
 class ServiceImpact(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     service: str
     tier: int
     exposure: Exposure
@@ -44,6 +50,8 @@ class ServiceImpact(BaseModel):
 
 
 class BlastRadius(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     component_id: str
     impacts: list[ServiceImpact]
     rules: list[str]

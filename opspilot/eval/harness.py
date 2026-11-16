@@ -57,6 +57,8 @@ COMPARED = (
     "tool_invocation_recall",
     "llm_calls_total",
     "latency_s_mean",
+    "latency_s_p50",
+    "latency_s_p95",
 )
 
 
@@ -351,6 +353,9 @@ def to_markdown(results: dict) -> str:
     else:
         lines += ["| Metric | Value |", "|---|---|"]
         lines += [f"| {k} | {v} |" for k, v in a.items() if not isinstance(v, dict)]
+        if "guardrails" in results:
+            rate = results["guardrails"].get("guardrail_detection_rate")
+            lines.append(f"| guardrail_detection_rate | {rate} |")
     if a.get("cost_by_agent"):
         lines += ["", f"| Agent | Cost ({a.get('cost_currency')}) |", "|---|---|"]
         lines += [f"| {agent} | {cost} |" for agent, cost in a["cost_by_agent"].items()]

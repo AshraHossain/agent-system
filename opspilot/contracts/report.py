@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from opspilot.contracts.findings import Hypothesis, ObservedAnomaly
 from opspilot.contracts.verification import VerificationResult
@@ -19,6 +19,8 @@ class InvestigationStatus(StrEnum):
 
 
 class EvidenceRef(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     evidence_id: str
     kind: str
     summary: str
@@ -27,30 +29,40 @@ class EvidenceRef(BaseModel):
 
 
 class DocRef(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     doc_id: str
     title: str
     note: str = ""
 
 
 class ServiceRisk(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     service: str
     tier: int | None
     impact: Literal["critical", "high", "medium", "low", "unknown"]
 
 
 class RiskAssessment(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     max_impact: Literal["critical", "high", "medium", "low", "none", "unknown"]
     services: list[ServiceRisk]
     narrative: str = Field(max_length=1000)
 
 
 class Escalation(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     level: Literal["none", "monitor", "escalate"]
     targets: list[Literal["network_oncall", "security_team"]]
     rationale: str
 
 
 class DiagnosticStep(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     order: int
     step: str
     rationale: str
@@ -59,12 +71,16 @@ class DiagnosticStep(BaseModel):
 
 
 class TokenUsage(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
 
 
 class RunMetrics(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     provider: str
     model: str
     llm_calls: int
@@ -93,6 +109,8 @@ class RunMetrics(BaseModel):
 
 
 class InvestigationReport(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     incident_id: str
     dataset_id: str
     generated_at: str

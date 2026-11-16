@@ -48,5 +48,8 @@ data/
 logs/
 *.log
 
-graphify-out/
+# Graphify temporary intermediate files (keep GRAPH_REPORT.md, graph.json, graph.html, cache/)
+graphify-out/.graphify_*
+graphify-out/.needs_update
+
 var/

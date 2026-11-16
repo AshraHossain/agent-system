@@ -1,0 +1,41 @@
+# SECURITY.md — Threat Model & Defense-in-Depth Architecture
+
+OpsPilot AI is a **read-only multi-agent network-operations investigation system**. Its strongest guarantees are **structural** (no mutating tools exist, datasets open in SQLite `mode=ro`, and final statuses/escalations are computed by deterministic Python rules in `opspilot/core/`), reinforced by defense-in-depth HTTP, tool, and prompt-injection guardrails aligned with the **OWASP API Security Top 10** and **OWASP Top 10 for LLM Applications**.
+
+---
+
+## 1. Threat Model & Mitigation Matrix
+
+| Threat Vector (OWASP API / LLM) | Defense-in-Depth Control | Implementation | Automated Verification |
+|---|---|---|---|
+| **LLM01: Direct Prompt Injection** (user request attempts to override system instructions or exfiltrate secrets) | Deterministic `IntakeAgent` normalizes NFKC, strips control chars, redacts secrets, and flags `injection_suspected`; `sanitize_user_content` replaces raw user message with `NEUTRAL_USER_TEXT` before any `LlmAgent` runs; forces `security_team` escalation | `opspilot/core/security.py`, `opspilot/adk/deterministic.py`, `opspilot/adk/callbacks.py` | `tests/test_security.py`, `tests/test_security_e2e.py::test_injection_in_the_request_is_flagged_not_followed` |
+| **LLM01: Indirect Prompt Injection** (malicious instructions inside runbooks, incidents, or OCR/tool data) | All retrieved/external text passes through `isolate_untrusted` / `wrap_untrusted_context`: strips spoofed `<untrusted_context>` and `<<untrusted_document>>` delimiters, redacts secrets, withholds suspected injection payloads, and wraps content in `<untrusted_context id="...">...</untrusted_context>`; marked `trusted=False` | `opspilot/core/security.py`, `opspilot/core/knowledge.py`, `opspilot/adk/prompts.py` | `tests/test_security.py::test_wrap_untrusted_context_sanitizes_control_chars_and_spoofed_tags`, `tests/test_security_e2e.py::test_malicious_document_cannot_steer_the_investigation` |
+| **LLM06: Excessive Agency & Unauthorized State Mutation** | Read-only by construction: zero write/shell/network tools exist; SQLite datasets open with `mode=ro` URI flag; `core/policy.py::check_step` enforces observational verbs (`show`, `check`, `review`, `compare`, ...) or change-approved human escalation; `finalizer` strips violations and forces `requires_human_review` | `opspilot/core/policy.py`, `opspilot/core/dataset.py`, `opspilot/core/report.py` | `tests/test_policy.py`, `tests/test_dataset.py::test_dataset_connection_is_read_only`, `tests/test_security_e2e.py::test_no_tool_can_mutate_state_outside_the_session` |
+| **LLM07 / API8: Cross-Agent Tool Misuse & Scope Tampering** | Each specialist only receives its dedicated tools (`AGENT_TOOLS`), backed by `BudgetPlugin.before_tool_callback` (`TOOL_ALLOWLIST`); tools never accept `dataset_id`, file paths, SQL, URLs, or commands from the model | `opspilot/adk/agents.py`, `opspilot/adk/plugins.py`, `opspilot/adk/tools.py` | `tests/test_security_e2e.py::test_cross_agent_tool_use_is_denied`, `test_tools_expose_no_dataset_path_or_command_parameters` |
+| **LLM09: Hallucinated Citations & Overreliance** | Content-addressed `Evidence` registry (`EV-(TEL\|TOP\|DOC\|INC\|DQ)-<sha256[:8]>`); deterministic `evidence_verifier` (`core/verification.py`) checks citation existence, entity alignment, metric sufficiency, rule-confidence ceilings, and `CERTAINTY_RE` lexicon before report assembly | `opspilot/contracts/evidence.py`, `opspilot/core/verification.py`, `opspilot/eval/verifier_matrix.py` | `tests/test_verification.py`, `tests/test_verifier_matrix.py` (93/93 planted defects caught, 0/45 false positives) |
+| **LLM02: Sensitive Information Disclosure / Secret Leakage** | Regex secret redaction (`AIza...`, `sk-...`, `AKIA...`, PEM private keys, `api_key=...`, emails) at intake, before embedding API calls, in retrieved docs, and in final reports; verifier flags `secret_in_output` and withholds tainted summaries; `Settings.api_token` has `repr=False` | `opspilot/core/security.py`, `opspilot/core/verification.py`, `opspilot/config.py`, `opspilot/adk/embeddings.py` | `tests/test_security_e2e.py::test_secrets_never_persist_in_session_state`, `tests/test_embeddings.py::test_secrets_are_redacted_before_text_leaves_the_process` |
+| **API2: Broken Authentication (`401 Unauthorized`)** | Timing-safe authentication in `BearerTokenAuth` accepting `Authorization: Bearer <token>` or `X-API-Key: <token>` (`OPSPILOT_API_TOKEN`, `OPSPILOT_API_TOKEN_SHA256`, or `API_AUTH_TOKEN`), verified across all SHA-256 digests with `hmac.compare_digest` (no early exit); `GET /health`, `GET /ready`, and `GET /readyz` remain open for container probes; non-loopback `opspilot serve` refuses startup without a token | `opspilot/core/auth.py`, `opspilot/api.py`, `opspilot/cli.py` | `tests/test_auth.py`, `tests/test_api.py::test_token_protects_adk_routes_and_run_lookup_via_bearer_or_api_key` |
+| **API4: Unrestricted Resource Consumption / Denial-of-Wallet (`429` / `413` / Budgets)** | `RateLimitMiddleware` (`SlidingWindowRateLimiter`, configurable via `RATE_LIMIT_PER_MINUTE`, default `120` req/min) returns HTTP `429` with `Retry-After: 60`; `InputBoundaryMiddleware` enforces `max_payload_bytes` (`413`); `BudgetPlugin` enforces hard caps on total LLM calls (`40`), per-agent iterations (`8`), tool calls (`60`), and wall-clock duration (`120s`) | `opspilot/api.py`, `opspilot/core/security.py`, `opspilot/adk/plugins.py`, `opspilot/adk/runner.py` | `tests/test_api.py::test_rate_limit_middleware_returns_429_with_retry_after`, `tests/test_failures.py` |
+| **API8: Security Misconfiguration, MIME & Path Traversal (`400` / `415` / Headers)** | `TelemetryMiddleware` attaches `X-Request-ID`, `X-Process-Time-Ms`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`; `InputBoundaryMiddleware` rejects path traversal (`..`, `%2e%2e`, `\x00`, `\`) with `400` and non-allowlisted MIME types with `415`; `sanitize_filename` strips directory components with `os.path.basename` + regex allowlist | `opspilot/api.py`, `opspilot/core/security.py`, `opspilot/core/dataset.py`, `opspilot/core/knowledge.py` | `tests/test_api.py::test_owasp_security_and_telemetry_headers_attached_to_responses`, `test_input_boundary_middleware_enforces_400_413_415`, `tests/test_security.py::test_sanitize_filename_strips_traversal_and_enforces_allowlist` |
+| **Data Integrity & Immutability** | Every Pydantic contract (`opspilot/contracts/*.py`) and core DTO (`opspilot/core/*.py`) enforces `ConfigDict(frozen=True)` or `@dataclass(frozen=True)`; ground-truth `labels`/`world` specs are isolated from datasets and agents | `opspilot/contracts/`, `opspilot/core/`, `opspilot/datasets/generate.py` | `tests/test_security.py::test_all_contracts_enforce_frozen_immutability`, `tests/test_dataset.py::test_ground_truth_never_stored`, `tests/test_evaluation.py::test_agents_never_receive_ground_truth` |
+
+---
+
+## 2. Static Security Analysis & Verification
+
+Static security analysis via `flake8-bandit` (`ruff` rule set `"S"`) is enabled across the root project and all sub-projects (`[tool.ruff.lint] select = [..., "S"]`).
+
+Run the complete offline security and guardrail verification suite with:
+
+```bash
+make check
+uv run pytest tests/test_security.py tests/test_security_e2e.py tests/test_auth.py tests/test_api.py tests/test_verifier_matrix.py
+```
+
+---
+
+## 3. Known Boundaries & Honest Limitations
+
+- **Regex Injection Heuristics**: `INJECTION_PATTERNS` in `opspilot/core/security.py` catch explicit instruction overrides, AI-addressed steering, approval bypasses, and secret exfiltration, but paraphrased or multilingual payloads can evade pattern matching. The primary defense is architectural: `<untrusted_context>` data framing, zero mutating tools, and deterministic rule-based verification/status calculation.
+- **Transport Encryption**: Bearer tokens and API keys travel in HTTP headers; always terminate TLS in front of `opspilot serve` when binding to non-loopback interfaces.
+- **Local Storage**: SQLite session state (`var/sessions.db`) is stored unencrypted on local disk; secrets are redacted before state persistence.

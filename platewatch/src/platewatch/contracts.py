@@ -26,6 +26,8 @@ class BoundingBox(BaseModel):
 class RawDetection(BaseModel):
     """What a detector returns: a box and its confidence."""
 
+    model_config = ConfigDict(frozen=True)
+
     box: BoundingBox
     confidence: float = Field(ge=0, le=1)
 
@@ -33,12 +35,14 @@ class RawDetection(BaseModel):
 class PlateRecord(BaseModel):
     """One detected, read and tagged plate. This is what the vector store persists."""
 
-    id: str = Field(description="Content-derived: sha256(image_sha256 + box)[:16]")
-    image_sha256: str
-    source: str = Field(description="Image file name relative to the inbox")
+    model_config = ConfigDict(frozen=True)
+
+    id: str = Field(max_length=64, description="Content-derived: sha256(image_sha256 + box)[:16]")
+    image_sha256: str = Field(max_length=64)
+    source: str = Field(max_length=256, description="Image file name relative to the inbox")
     box: BoundingBox
-    raw_text: str
-    plate_text: str = Field(description="Normalised: upper-case A-Z0-9 only")
+    raw_text: str = Field(max_length=256)
+    plate_text: str = Field(max_length=32, description="Normalised: upper-case A-Z0-9 only")
     detection_confidence: float = Field(ge=0, le=1)
     ocr_confidence: float = Field(ge=0, le=1)
     confidence: float = Field(ge=0, le=1, description="detection x ocr")
@@ -46,6 +50,8 @@ class PlateRecord(BaseModel):
 
 
 class SearchHit(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     plate_id: str
     plate_text: str
     source: str
@@ -59,6 +65,8 @@ class SearchHit(BaseModel):
 
 
 class ScanSummary(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     images_seen: int
     images_new: int
     images_failed: int
@@ -68,6 +76,8 @@ class ScanSummary(BaseModel):
 
 class PlateReport(BaseModel):
     """Structured answer returned by the PlateWatch agent."""
+
+    model_config = ConfigDict(frozen=True)
 
     summary: str = Field(max_length=800)
     scanned: ScanSummary | None = None

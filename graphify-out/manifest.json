@@ -1,0 +1,1862 @@
+{
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/settings.local.json": {
+    "mtime": 1793298918.3425384,
+    "seen": 1794797023.9770062,
+    "ast_hash": "10483a3d27ac352209faa4bd0a6a151c",
+    "semantic_hash": "10483a3d27ac352209faa4bd0a6a151c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/adk_apps/opspilot_ai/__init__.py": {
+    "mtime": 1793297475.9578378,
+    "seen": 1794797023.977011,
+    "ast_hash": "12d6c7988651f2d2b81b94014f7b3620",
+    "semantic_hash": "12d6c7988651f2d2b81b94014f7b3620"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/adk_apps/opspilot_ai/agent.py": {
+    "mtime": 1793297475.9579082,
+    "seen": 1794797023.977012,
+    "ast_hash": "cea4fe98343d8c6e6f974bda1936f70d",
+    "semantic_hash": "cea4fe98343d8c6e6f974bda1936f70d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/pyproject.toml": {
+    "mtime": 1794796332.0182881,
+    "seen": 1794797023.977013,
+    "ast_hash": "872a21031a02037417870dfa45629b7c",
+    "semantic_hash": "872a21031a02037417870dfa45629b7c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/__init__.py": {
+    "mtime": 1793297475.9585571,
+    "seen": 1794797023.977013,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/assertions.py": {
+    "mtime": 1793297475.9586434,
+    "seen": 1794797023.977014,
+    "ast_hash": "5987757722d4536ad74cbe117dac41b9",
+    "semantic_hash": "5987757722d4536ad74cbe117dac41b9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/client.py": {
+    "mtime": 1793297475.9587107,
+    "seen": 1794797023.977014,
+    "ast_hash": "f093ddcce868db6b59dadab87bb207d9",
+    "semantic_hash": "f093ddcce868db6b59dadab87bb207d9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/config.py": {
+    "mtime": 1793297475.9587739,
+    "seen": 1794797023.977015,
+    "ast_hash": "9fe446e3d4d72ec327c434c13e55bc3d",
+    "semantic_hash": "9fe446e3d4d72ec327c434c13e55bc3d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/contract.py": {
+    "mtime": 1793301963.664557,
+    "seen": 1794797023.977015,
+    "ast_hash": "4ff68333f0839ad89062e75e5422f3c1",
+    "semantic_hash": "4ff68333f0839ad89062e75e5422f3c1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/schemas.py": {
+    "mtime": 1794795950.4503717,
+    "seen": 1794797023.977015,
+    "ast_hash": "bd23e9c3ba42cddba21b8f1b6197b246",
+    "semantic_hash": "bd23e9c3ba42cddba21b8f1b6197b246"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/src/api_tests/server.py": {
+    "mtime": 1793297475.9589744,
+    "seen": 1794797023.977016,
+    "ast_hash": "3e41267cd102f504610480b5a5d4580b",
+    "semantic_hash": "3e41267cd102f504610480b5a5d4580b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/__init__.py": {
+    "mtime": 1793297475.9590368,
+    "seen": 1794797023.977016,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/conftest.py": {
+    "mtime": 1793297475.959147,
+    "seen": 1794797023.9770172,
+    "ast_hash": "4c915ce1d4b6a91fef174e6f33a9bd88",
+    "semantic_hash": "4c915ce1d4b6a91fef174e6f33a9bd88"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/contract/__init__.py": {
+    "mtime": 1793297475.9592264,
+    "seen": 1794797023.9770172,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/contract/test_openapi_fuzz.py": {
+    "mtime": 1793301963.6646793,
+    "seen": 1794797023.9770172,
+    "ast_hash": "45e25917808dedb4c540a5e6d3e72e0f",
+    "semantic_hash": "45e25917808dedb4c540a5e6d3e72e0f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/contract/test_spec.py": {
+    "mtime": 1793301963.6647565,
+    "seen": 1794797023.977018,
+    "ast_hash": "52a220b29d2dd5a2e5667fd28d29d71a",
+    "semantic_hash": "52a220b29d2dd5a2e5667fd28d29d71a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/functional/__init__.py": {
+    "mtime": 1793297475.9594033,
+    "seen": 1794797023.977018,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/functional/test_path_ask_stream.py": {
+    "mtime": 1793297475.9595182,
+    "seen": 1794797023.977018,
+    "ast_hash": "00e53dab50ca47dc9657361eea4b02ee",
+    "semantic_hash": "00e53dab50ca47dc9657361eea4b02ee"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/functional/test_reads.py": {
+    "mtime": 1793301963.6648865,
+    "seen": 1794797023.9770188,
+    "ast_hash": "6ccef309161f110b4fe0beacddf4705f",
+    "semantic_hash": "6ccef309161f110b4fe0beacddf4705f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/known_defects/__init__.py": {
+    "mtime": 1793297475.9596717,
+    "seen": 1794797023.9770188,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/known_defects/test_known_defects.py": {
+    "mtime": 1793301963.6650438,
+    "seen": 1794797023.9770188,
+    "ast_hash": "6df77c05121214a9a5a844bdcbb9f0b4",
+    "semantic_hash": "6df77c05121214a9a5a844bdcbb9f0b4"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/negative/__init__.py": {
+    "mtime": 1793297475.959845,
+    "seen": 1794797023.9770198,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/negative/test_errors.py": {
+    "mtime": 1793301963.6651978,
+    "seen": 1794797023.9770198,
+    "ast_hash": "c9d345f821ce2f343818197421ec34db",
+    "semantic_hash": "c9d345f821ce2f343818197421ec34db"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/perf/__init__.py": {
+    "mtime": 1793297475.959999,
+    "seen": 1794797023.977021,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/perf/test_latency.py": {
+    "mtime": 1793297475.9600906,
+    "seen": 1794797023.977021,
+    "ast_hash": "95729dd236e599b0cbe6209f451482b7",
+    "semantic_hash": "95729dd236e599b0cbe6209f451482b7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/security/__init__.py": {
+    "mtime": 1793297475.96016,
+    "seen": 1794797023.977021,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/security/test_hygiene.py": {
+    "mtime": 1793297475.960247,
+    "seen": 1794797023.977022,
+    "ast_hash": "830d969f6729a0c383c36aee73dc30af",
+    "semantic_hash": "830d969f6729a0c383c36aee73dc30af"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/smoke/__init__.py": {
+    "mtime": 1793297475.96031,
+    "seen": 1794797023.977022,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/tests/smoke/test_smoke.py": {
+    "mtime": 1793297475.9603941,
+    "seen": 1794797023.977022,
+    "ast_hash": "e529ce7c32e4a5023f7e7c5e3e2b3eb4",
+    "semantic_hash": "e529ce7c32e4a5023f7e7c5e3e2b3eb4"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/pyproject.toml": {
+    "mtime": 1794796330.743354,
+    "seen": 1794797023.977023,
+    "ast_hash": "34ced730139b93ae27d4c81869febed8",
+    "semantic_hash": "34ced730139b93ae27d4c81869febed8"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/__init__.py": {
+    "mtime": 1793297475.9637468,
+    "seen": 1794797023.977023,
+    "ast_hash": "4867131295172353fe6c2295851defc7",
+    "semantic_hash": "4867131295172353fe6c2295851defc7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/cli.py": {
+    "mtime": 1793297475.9638526,
+    "seen": 1794797023.977023,
+    "ast_hash": "6985d9744fc2ffa0856a4237ae0f35ad",
+    "semantic_hash": "6985d9744fc2ffa0856a4237ae0f35ad"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/p2p_api/__init__.py": {
+    "mtime": 1793297475.9639523,
+    "seen": 1794797023.977024,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/p2p_api/app.py": {
+    "mtime": 1793297475.9640927,
+    "seen": 1794797023.977024,
+    "ast_hash": "d4f8f22b3709ee3e7d6c1d0f3eb339c7",
+    "semantic_hash": "d4f8f22b3709ee3e7d6c1d0f3eb339c7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/p2p_api/bugs.py": {
+    "mtime": 1793297475.9642344,
+    "seen": 1794797023.977025,
+    "ast_hash": "d8b259522030e66d3ef9af4235708c78",
+    "semantic_hash": "d8b259522030e66d3ef9af4235708c78"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/__init__.py": {
+    "mtime": 1793297475.9643223,
+    "seen": 1794797023.977025,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/adversary.py": {
+    "mtime": 1793297475.9644954,
+    "seen": 1794797023.977025,
+    "ast_hash": "cc494de1ed05b90eccb8e19e8ee9a307",
+    "semantic_hash": "cc494de1ed05b90eccb8e19e8ee9a307"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/agentic.py": {
+    "mtime": 1793297475.9646335,
+    "seen": 1794797023.977026,
+    "ast_hash": "4da78b0b64c8dd4f38709be54e776d5d",
+    "semantic_hash": "4da78b0b64c8dd4f38709be54e776d5d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/brain.py": {
+    "mtime": 1793297475.9647498,
+    "seen": 1794797023.977026,
+    "ast_hash": "f1c6845829002acdd248b8860814e0a3",
+    "semantic_hash": "f1c6845829002acdd248b8860814e0a3"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/discovery.py": {
+    "mtime": 1793297475.964843,
+    "seen": 1794797023.977026,
+    "ast_hash": "fdfa71e75d3de97a61b9c40a0f4a3d9e",
+    "semantic_hash": "fdfa71e75d3de97a61b9c40a0f4a3d9e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/dspy_opt.py": {
+    "mtime": 1793297475.9649441,
+    "seen": 1794797023.9770272,
+    "ast_hash": "8f5b68ae1093d58e837afaee5e1505f6",
+    "semantic_hash": "8f5b68ae1093d58e837afaee5e1505f6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/explorer.py": {
+    "mtime": 1793297475.9650424,
+    "seen": 1794797023.9770272,
+    "ast_hash": "41ab49a24a774aea883ded62897e2124",
+    "semantic_hash": "41ab49a24a774aea883ded62897e2124"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/http.py": {
+    "mtime": 1793297475.965107,
+    "seen": 1794797023.9770281,
+    "ast_hash": "db16e2fcae14822ff61ed3969ae5301e",
+    "semantic_hash": "db16e2fcae14822ff61ed3969ae5301e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/judge.py": {
+    "mtime": 1793297475.965179,
+    "seen": 1794797023.9770281,
+    "ast_hash": "b1d5e6adc12b2dbc193a06d6352a4bb1",
+    "semantic_hash": "b1d5e6adc12b2dbc193a06d6352a4bb1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/labels.py": {
+    "mtime": 1793297475.9652596,
+    "seen": 1794797023.9770281,
+    "ast_hash": "a97775ca601018cbdd7fde5ff0161a39",
+    "semantic_hash": "a97775ca601018cbdd7fde5ff0161a39"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/models.py": {
+    "mtime": 1793297475.9653342,
+    "seen": 1794797023.977029,
+    "ast_hash": "32887709084cf1d19b89cb85a79829a1",
+    "semantic_hash": "32887709084cf1d19b89cb85a79829a1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/oracle.py": {
+    "mtime": 1793297475.965403,
+    "seen": 1794797023.977029,
+    "ast_hash": "74624d8b8bf3619220f95351e6fa8c6b",
+    "semantic_hash": "74624d8b8bf3619220f95351e6fa8c6b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/score.py": {
+    "mtime": 1793297475.9654784,
+    "seen": 1794797023.977029,
+    "ast_hash": "5c0e836c071fb1cafe11d4f79cc234d8",
+    "semantic_hash": "5c0e836c071fb1cafe11d4f79cc234d8"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/spec_diff.py": {
+    "mtime": 1793297475.9655561,
+    "seen": 1794797023.9770298,
+    "ast_hash": "fd02d7a35f4e0f1bfc3856e41b7f3e1e",
+    "semantic_hash": "fd02d7a35f4e0f1bfc3856e41b7f3e1e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/stress.py": {
+    "mtime": 1793297475.965669,
+    "seen": 1794797023.9770298,
+    "ast_hash": "2dabf07412dfcb8e29a6ad3b917ace8e",
+    "semantic_hash": "2dabf07412dfcb8e29a6ad3b917ace8e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/src/ledger_hound/qa/workflow.py": {
+    "mtime": 1793297475.965765,
+    "seen": 1794797023.9770298,
+    "ast_hash": "05fa2366a6b7e166c4f5f5fb90859732",
+    "semantic_hash": "05fa2366a6b7e166c4f5f5fb90859732"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/conftest.py": {
+    "mtime": 1793297475.9658723,
+    "seen": 1794797023.977031,
+    "ast_hash": "3503ec5e78c1027ebbb3d9395619a609",
+    "semantic_hash": "3503ec5e78c1027ebbb3d9395619a609"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_detection.py": {
+    "mtime": 1793297475.965945,
+    "seen": 1794797023.977031,
+    "ast_hash": "072982c89e19abe116d6a6ffcf97a0ea",
+    "semantic_hash": "072982c89e19abe116d6a6ffcf97a0ea"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_discovery_and_oracle.py": {
+    "mtime": 1793297475.9660218,
+    "seen": 1794797023.977031,
+    "ast_hash": "b89949f8a5340d52776b16e6fe061d53",
+    "semantic_hash": "b89949f8a5340d52776b16e6fe061d53"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_dspy_opt.py": {
+    "mtime": 1793297475.9660928,
+    "seen": 1794797023.977032,
+    "ast_hash": "727cb7b1d7c576a06b474e5042935667",
+    "semantic_hash": "727cb7b1d7c576a06b474e5042935667"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_labels.py": {
+    "mtime": 1793297475.9661689,
+    "seen": 1794797023.977032,
+    "ast_hash": "8e41e5460e058864f47a24d9f44adc14",
+    "semantic_hash": "8e41e5460e058864f47a24d9f44adc14"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_live_path.py": {
+    "mtime": 1793297475.9662573,
+    "seen": 1794797023.977032,
+    "ast_hash": "6111f8b1db3635281efc8ce7f78018fe",
+    "semantic_hash": "6111f8b1db3635281efc8ce7f78018fe"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_practice_api.py": {
+    "mtime": 1793297475.9663908,
+    "seen": 1794797023.977033,
+    "ast_hash": "e4a40e8d8244c5f9c76db3169cfdbe2f",
+    "semantic_hash": "e4a40e8d8244c5f9c76db3169cfdbe2f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_spec_diff.py": {
+    "mtime": 1793297475.9664888,
+    "seen": 1794797023.977033,
+    "ast_hash": "21c0ce8ba974794150814865ffc27cf5",
+    "semantic_hash": "21c0ce8ba974794150814865ffc27cf5"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/tests/test_stress.py": {
+    "mtime": 1793297475.9665992,
+    "seen": 1794797023.977033,
+    "ast_hash": "6d85eca6902433791f23e12e0f97bbfc",
+    "semantic_hash": "6d85eca6902433791f23e12e0f97bbfc"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/__init__.py": {
+    "mtime": 1793297475.9682422,
+    "seen": 1794797023.977034,
+    "ast_hash": "b6aed0345cf770f16042bb3466a3062f",
+    "semantic_hash": "b6aed0345cf770f16042bb3466a3062f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/__init__.py": {
+    "mtime": 1793297475.9683528,
+    "seen": 1794797023.977034,
+    "ast_hash": "669d44fa39d66413cce0d0b4da6ba22b",
+    "semantic_hash": "669d44fa39d66413cce0d0b4da6ba22b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/agents.py": {
+    "mtime": 1793297475.9684248,
+    "seen": 1794797023.977034,
+    "ast_hash": "a319e9d9ec033436d354bc4976de4cc3",
+    "semantic_hash": "a319e9d9ec033436d354bc4976de4cc3"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/callbacks.py": {
+    "mtime": 1793297475.9684901,
+    "seen": 1794797023.977035,
+    "ast_hash": "cf55026acc3b2907aca708db4f1e4856",
+    "semantic_hash": "cf55026acc3b2907aca708db4f1e4856"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/deterministic.py": {
+    "mtime": 1794795887.9135375,
+    "seen": 1794797023.977035,
+    "ast_hash": "5d044442295e6bf1ea0be0abde90d98f",
+    "semantic_hash": "5d044442295e6bf1ea0be0abde90d98f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/embeddings.py": {
+    "mtime": 1793297475.9686437,
+    "seen": 1794797023.977035,
+    "ast_hash": "e73474d8667bb670a997edac7f7f4803",
+    "semantic_hash": "e73474d8667bb670a997edac7f7f4803"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/mock_policies.py": {
+    "mtime": 1793297475.968725,
+    "seen": 1794797023.977036,
+    "ast_hash": "f22ce572a3d5132d6d9585e17d996d16",
+    "semantic_hash": "f22ce572a3d5132d6d9585e17d996d16"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/models.py": {
+    "mtime": 1794795890.4410293,
+    "seen": 1794797023.977036,
+    "ast_hash": "b69e98b5b2ff062f6e881b403e7009d9",
+    "semantic_hash": "b69e98b5b2ff062f6e881b403e7009d9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/plugins.py": {
+    "mtime": 1793297475.9689183,
+    "seen": 1794797023.977036,
+    "ast_hash": "54c193fa1c2ab51439cf26406fb0f855",
+    "semantic_hash": "54c193fa1c2ab51439cf26406fb0f855"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/prompts.py": {
+    "mtime": 1794796354.8900123,
+    "seen": 1794797023.977037,
+    "ast_hash": "eadf437f48f301404fcb9b8519b865bb",
+    "semantic_hash": "eadf437f48f301404fcb9b8519b865bb"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/rounds.py": {
+    "mtime": 1793297475.9690626,
+    "seen": 1794797023.977037,
+    "ast_hash": "a37aa6e1e8610e1e8cb1dba83fa09a17",
+    "semantic_hash": "a37aa6e1e8610e1e8cb1dba83fa09a17"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/runner.py": {
+    "mtime": 1794795889.2047262,
+    "seen": 1794797023.977037,
+    "ast_hash": "ce651b4b6788a3b2eebb72441fc52cfd",
+    "semantic_hash": "ce651b4b6788a3b2eebb72441fc52cfd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/runtime.py": {
+    "mtime": 1793297475.9692225,
+    "seen": 1794797023.9770381,
+    "ast_hash": "acff40cac8c8b0d5b6a5514378efd75b",
+    "semantic_hash": "acff40cac8c8b0d5b6a5514378efd75b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/adk/tools.py": {
+    "mtime": 1794795927.5058048,
+    "seen": 1794797023.9770381,
+    "ast_hash": "39dca7270f7c80418748ec08c8c80aaf",
+    "semantic_hash": "39dca7270f7c80418748ec08c8c80aaf"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/api.py": {
+    "mtime": 1794796510.353282,
+    "seen": 1794797023.9770381,
+    "ast_hash": "abb5f7bd6e4e7be30716ae5ff0104b16",
+    "semantic_hash": "abb5f7bd6e4e7be30716ae5ff0104b16"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/cli.py": {
+    "mtime": 1793297475.969507,
+    "seen": 1794797023.977039,
+    "ast_hash": "4db06eb134ceaadb2e688ae2a43f5a2e",
+    "semantic_hash": "4db06eb134ceaadb2e688ae2a43f5a2e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/config.py": {
+    "mtime": 1794796245.8190722,
+    "seen": 1794797023.977039,
+    "ast_hash": "464a6b0ee0163cddc52fd277b81dda83",
+    "semantic_hash": "464a6b0ee0163cddc52fd277b81dda83"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/__init__.py": {
+    "mtime": 1793297475.9696867,
+    "seen": 1794797023.977039,
+    "ast_hash": "1349ee2c31ff86d6feb4988c790fc957",
+    "semantic_hash": "1349ee2c31ff86d6feb4988c790fc957"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/evidence.py": {
+    "mtime": 1794795828.2875702,
+    "seen": 1794797023.9770398,
+    "ast_hash": "b31a98ec37c7b1e2bf118caa84458936",
+    "semantic_hash": "b31a98ec37c7b1e2bf118caa84458936"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/findings.py": {
+    "mtime": 1794795829.8975716,
+    "seen": 1794797023.9770398,
+    "ast_hash": "28fd3f17b04f7d13c189b86d8f2d3164",
+    "semantic_hash": "28fd3f17b04f7d13c189b86d8f2d3164"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/knowledge.py": {
+    "mtime": 1794795834.639109,
+    "seen": 1794797023.9770398,
+    "ast_hash": "aefcfdf67f233779bedf609dcc46d2df",
+    "semantic_hash": "aefcfdf67f233779bedf609dcc46d2df"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/report.py": {
+    "mtime": 1794795831.1063445,
+    "seen": 1794797023.977041,
+    "ast_hash": "20d414de19117b3c987a48931eda25b7",
+    "semantic_hash": "20d414de19117b3c987a48931eda25b7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/request.py": {
+    "mtime": 1794795826.8939564,
+    "seen": 1794797023.977041,
+    "ast_hash": "fb62d614027507da986b5736a38fa302",
+    "semantic_hash": "fb62d614027507da986b5736a38fa302"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/telemetry.py": {
+    "mtime": 1794795832.2114272,
+    "seen": 1794797023.977041,
+    "ast_hash": "cc743aba612d0c5d50c8a656cad8f637",
+    "semantic_hash": "cc743aba612d0c5d50c8a656cad8f637"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/topology.py": {
+    "mtime": 1794795833.7355208,
+    "seen": 1794797023.977042,
+    "ast_hash": "441ea9fd63bee74015e13a7530214b85",
+    "semantic_hash": "441ea9fd63bee74015e13a7530214b85"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/contracts/verification.py": {
+    "mtime": 1794795835.764354,
+    "seen": 1794797023.977042,
+    "ast_hash": "0c777025ac49d7f77afbae7bec4fab6b",
+    "semantic_hash": "0c777025ac49d7f77afbae7bec4fab6b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/__init__.py": {
+    "mtime": 1793297475.9703228,
+    "seen": 1794797023.977043,
+    "ast_hash": "5a4a24bbefabfe97b8cf783c3c3362d1",
+    "semantic_hash": "5a4a24bbefabfe97b8cf783c3c3362d1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/analysis.py": {
+    "mtime": 1794795878.287547,
+    "seen": 1794797023.977043,
+    "ast_hash": "fbd5f330774cf2f0596acefb71e6da83",
+    "semantic_hash": "fbd5f330774cf2f0596acefb71e6da83"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/auth.py": {
+    "mtime": 1794796163.376637,
+    "seen": 1794797023.977043,
+    "ast_hash": "49b2ce6039e27b92c1f7e44adeac944b",
+    "semantic_hash": "49b2ce6039e27b92c1f7e44adeac944b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/cost.py": {
+    "mtime": 1794795879.588533,
+    "seen": 1794797023.9770439,
+    "ast_hash": "79435972ce73183e8f0a0cc9fe2ebd39",
+    "semantic_hash": "79435972ce73183e8f0a0cc9fe2ebd39"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/dataset.py": {
+    "mtime": 1793297475.970621,
+    "seen": 1794797023.9770439,
+    "ast_hash": "b3494cddabd9ed070e9aebfefb299ec1",
+    "semantic_hash": "b3494cddabd9ed070e9aebfefb299ec1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/embedding_cache.py": {
+    "mtime": 1793297475.970681,
+    "seen": 1794797023.9770439,
+    "ast_hash": "9820d91c04c65243f4703d2a40ad86e2",
+    "semantic_hash": "9820d91c04c65243f4703d2a40ad86e2"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/errors.py": {
+    "mtime": 1793297475.9707422,
+    "seen": 1794797023.977045,
+    "ast_hash": "e85f90844de8d0acec3f4c3ff5fd41b6",
+    "semantic_hash": "e85f90844de8d0acec3f4c3ff5fd41b6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/knowledge.py": {
+    "mtime": 1794796295.324506,
+    "seen": 1794797023.977045,
+    "ast_hash": "5569cbcbdef9ade60b985c8866878586",
+    "semantic_hash": "5569cbcbdef9ade60b985c8866878586"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/policy.py": {
+    "mtime": 1793297475.9708822,
+    "seen": 1794797023.977045,
+    "ast_hash": "b610757e24ebfbdd208ee47abcefcd22",
+    "semantic_hash": "b610757e24ebfbdd208ee47abcefcd22"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/report.py": {
+    "mtime": 1793297475.97097,
+    "seen": 1794797023.977046,
+    "ast_hash": "58bb642d0d41573216e7c001799d843e",
+    "semantic_hash": "58bb642d0d41573216e7c001799d843e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/retrieval.py": {
+    "mtime": 1793297475.971059,
+    "seen": 1794797023.977046,
+    "ast_hash": "a1d30d14a3d7c14d75cb740edcb268c7",
+    "semantic_hash": "a1d30d14a3d7c14d75cb740edcb268c7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/security.py": {
+    "mtime": 1794796359.3485615,
+    "seen": 1794797023.977046,
+    "ast_hash": "6f1c156fda5b79318acc1ed2b2f752be",
+    "semantic_hash": "6f1c156fda5b79318acc1ed2b2f752be"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/telemetry.py": {
+    "mtime": 1793297475.971227,
+    "seen": 1794797023.977047,
+    "ast_hash": "f0f966fec7a26e7480acaa62fc6cd4cd",
+    "semantic_hash": "f0f966fec7a26e7480acaa62fc6cd4cd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/topology.py": {
+    "mtime": 1794795925.643224,
+    "seen": 1794797023.977047,
+    "ast_hash": "14879e7f04706184424cbf211baaf97c",
+    "semantic_hash": "14879e7f04706184424cbf211baaf97c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/core/verification.py": {
+    "mtime": 1794792807.8810096,
+    "seen": 1794797023.977047,
+    "ast_hash": "2b8cb6142955c9f0bcfd1c67fbc37ce7",
+    "semantic_hash": "2b8cb6142955c9f0bcfd1c67fbc37ce7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/__init__.py": {
+    "mtime": 1793297475.971511,
+    "seen": 1794797023.9770482,
+    "ast_hash": "5678ca18033c800f2be683f6337f0058",
+    "semantic_hash": "5678ca18033c800f2be683f6337f0058"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/generate.py": {
+    "mtime": 1793297475.9718046,
+    "seen": 1794797023.9770482,
+    "ast_hash": "c7ab38d88383106c6fc5fcd6a991fd7c",
+    "semantic_hash": "c7ab38d88383106c6fc5fcd6a991fd7c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/spec.py": {
+    "mtime": 1793297475.973444,
+    "seen": 1794797023.9770482,
+    "ast_hash": "41135964fa8143cc1af96d34a909840e",
+    "semantic_hash": "41135964fa8143cc1af96d34a909840e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/eval/__init__.py": {
+    "mtime": 1793297475.9736276,
+    "seen": 1794797023.977049,
+    "ast_hash": "123faf988c39f20247d49f94863d7e79",
+    "semantic_hash": "123faf988c39f20247d49f94863d7e79"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/eval/harness.py": {
+    "mtime": 1794796657.537628,
+    "seen": 1794797023.977049,
+    "ast_hash": "258a850b7c5d674cd66cd1fdcc750c64",
+    "semantic_hash": "258a850b7c5d674cd66cd1fdcc750c64"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/eval/metrics.py": {
+    "mtime": 1794795923.8346856,
+    "seen": 1794797023.977049,
+    "ast_hash": "888ca77e2c446fa6484a1e400cfc4183",
+    "semantic_hash": "888ca77e2c446fa6484a1e400cfc4183"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/eval/perturbations.py": {
+    "mtime": 1793297475.9739656,
+    "seen": 1794797023.977049,
+    "ast_hash": "f47adae6a48eb70e1038271b4c22d79a",
+    "semantic_hash": "f47adae6a48eb70e1038271b4c22d79a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/eval/verifier_matrix.py": {
+    "mtime": 1794792807.8812466,
+    "seen": 1794797023.97705,
+    "ast_hash": "7cfa521fa0afafe7b9328df890737048",
+    "semantic_hash": "7cfa521fa0afafe7b9328df890737048"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/observability.py": {
+    "mtime": 1793297475.9741578,
+    "seen": 1794797023.97705,
+    "ast_hash": "4ab9255aaef65592f24f7ebfc10b180f",
+    "semantic_hash": "4ab9255aaef65592f24f7ebfc10b180f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/pyproject.toml": {
+    "mtime": 1793297475.9743648,
+    "seen": 1794797023.97705,
+    "ast_hash": "e14dc2339a907db6b394130bc932ed70",
+    "semantic_hash": "e14dc2339a907db6b394130bc932ed70"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/__init__.py": {
+    "mtime": 1793297475.974495,
+    "seen": 1794797023.9770508,
+    "ast_hash": "148e58e7f6cc35780bc3583eb977a21b",
+    "semantic_hash": "148e58e7f6cc35780bc3583eb977a21b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/agent.py": {
+    "mtime": 1793297475.9745746,
+    "seen": 1794797023.9770508,
+    "ast_hash": "ab350725b96a2ac44d753a307509ec74",
+    "semantic_hash": "ab350725b96a2ac44d753a307509ec74"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/cli.py": {
+    "mtime": 1793297475.9746423,
+    "seen": 1794797023.9770508,
+    "ast_hash": "af1be79121d18814ef5b1c2caadc30ff",
+    "semantic_hash": "af1be79121d18814ef5b1c2caadc30ff"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/contracts.py": {
+    "mtime": 1794796314.7965589,
+    "seen": 1794797023.977052,
+    "ast_hash": "c0372e7eabb3e7b4d3f56f3ca36b20af",
+    "semantic_hash": "c0372e7eabb3e7b4d3f56f3ca36b20af"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/core/__init__.py": {
+    "mtime": 1793297475.974806,
+    "seen": 1794797023.977052,
+    "ast_hash": "cd13edebc948482a0e63f3dc58b35b00",
+    "semantic_hash": "cd13edebc948482a0e63f3dc58b35b00"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/core/embedding.py": {
+    "mtime": 1793297475.9748735,
+    "seen": 1794797023.977052,
+    "ast_hash": "53877a49bad8dc8540459e44cf8215f9",
+    "semantic_hash": "53877a49bad8dc8540459e44cf8215f9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/core/store.py": {
+    "mtime": 1793297475.9749444,
+    "seen": 1794797023.977053,
+    "ast_hash": "663562fa1b9a3e8dedebfb7e564f3db4",
+    "semantic_hash": "663562fa1b9a3e8dedebfb7e564f3db4"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/core/text.py": {
+    "mtime": 1794796313.3993258,
+    "seen": 1794797023.977053,
+    "ast_hash": "fc8b257afaf99e4fbca8a8032723c290",
+    "semantic_hash": "fc8b257afaf99e4fbca8a8032723c290"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/demo.py": {
+    "mtime": 1793297475.9750876,
+    "seen": 1794797023.977053,
+    "ast_hash": "f7a8e8c77fcf0a2309101fb83eb5fab6",
+    "semantic_hash": "f7a8e8c77fcf0a2309101fb83eb5fab6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/pipeline.py": {
+    "mtime": 1793297475.9751701,
+    "seen": 1794797023.9770539,
+    "ast_hash": "b4499b01099dac3145b45a758eb2b6ce",
+    "semantic_hash": "b4499b01099dac3145b45a758eb2b6ce"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/vision/__init__.py": {
+    "mtime": 1793297475.9752564,
+    "seen": 1794797023.9770539,
+    "ast_hash": "0c276819289349824d8136a913c4550f",
+    "semantic_hash": "0c276819289349824d8136a913c4550f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/vision/huggingface.py": {
+    "mtime": 1793297475.975336,
+    "seen": 1794797023.9770539,
+    "ast_hash": "63767e77375521120f4c9f79389843ba",
+    "semantic_hash": "63767e77375521120f4c9f79389843ba"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/vision/protocols.py": {
+    "mtime": 1793297475.9755228,
+    "seen": 1794797023.977055,
+    "ast_hash": "cf4f88fdf85ed65ebfed713518047648",
+    "semantic_hash": "cf4f88fdf85ed65ebfed713518047648"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/src/platewatch/vision/scripted.py": {
+    "mtime": 1793297475.975595,
+    "seen": 1794797023.977055,
+    "ast_hash": "fec130a47441508d19b2c180ba91b846",
+    "semantic_hash": "fec130a47441508d19b2c180ba91b846"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/tests/test_platewatch.py": {
+    "mtime": 1793297475.9757147,
+    "seen": 1794797023.977055,
+    "ast_hash": "e6e603acc5d2da4646ae7457b49dfb8a",
+    "semantic_hash": "e6e603acc5d2da4646ae7457b49dfb8a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/tests/test_platewatch_live.py": {
+    "mtime": 1794792807.8816206,
+    "seen": 1794797023.977056,
+    "ast_hash": "4d7db6c236bd267eeaca36a688042a6c",
+    "semantic_hash": "4d7db6c236bd267eeaca36a688042a6c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/prices.example.json": {
+    "mtime": 1793297475.9759457,
+    "seen": 1794797023.977056,
+    "ast_hash": "748e7d11bf8dc2cd064ac296411c511b",
+    "semantic_hash": "748e7d11bf8dc2cd064ac296411c511b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/pyproject.toml": {
+    "mtime": 1794796018.2097325,
+    "seen": 1794797023.977056,
+    "ast_hash": "4f855e8b484ecf8c3345b0c62f5e38a1",
+    "semantic_hash": "4f855e8b484ecf8c3345b0c62f5e38a1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/adk_helpers.py": {
+    "mtime": 1793297475.9761329,
+    "seen": 1794797023.977057,
+    "ast_hash": "54ae9b4d8797266830ee6c618ccb6ead",
+    "semantic_hash": "54ae9b4d8797266830ee6c618ccb6ead"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/conftest.py": {
+    "mtime": 1794796596.5390213,
+    "seen": 1794797023.977057,
+    "ast_hash": "51b90aff9e8aa3ddefa2890b0dba609a",
+    "semantic_hash": "51b90aff9e8aa3ddefa2890b0dba609a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/helpers.py": {
+    "mtime": 1794792807.8820171,
+    "seen": 1794797023.977057,
+    "ast_hash": "e63f6aed190aeae3e3bb0c1a8b9f9c35",
+    "semantic_hash": "e63f6aed190aeae3e3bb0c1a8b9f9c35"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_adk_contract.py": {
+    "mtime": 1793297475.976318,
+    "seen": 1794797023.977057,
+    "ast_hash": "2faed8dc40d7df3c88c89d72f8908e93",
+    "semantic_hash": "2faed8dc40d7df3c88c89d72f8908e93"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_adk_minimal.py": {
+    "mtime": 1793297475.9763784,
+    "seen": 1794797023.977058,
+    "ast_hash": "c94ad18fa381dc8e015933216e1b5d17",
+    "semantic_hash": "c94ad18fa381dc8e015933216e1b5d17"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_agents.py": {
+    "mtime": 1794796878.9410083,
+    "seen": 1794797023.977058,
+    "ast_hash": "8cd58856bde6526e2cf82745004f0643",
+    "semantic_hash": "8cd58856bde6526e2cf82745004f0643"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_analysis.py": {
+    "mtime": 1793297475.9765246,
+    "seen": 1794797023.977058,
+    "ast_hash": "b43fbb6131431968a9b184c42a85ad34",
+    "semantic_hash": "b43fbb6131431968a9b184c42a85ad34"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_api.py": {
+    "mtime": 1794796897.7592928,
+    "seen": 1794797023.9770591,
+    "ast_hash": "f621ce28a29b80dc0cea6f34dd1005b7",
+    "semantic_hash": "f621ce28a29b80dc0cea6f34dd1005b7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_auth.py": {
+    "mtime": 1793297475.9767497,
+    "seen": 1794797023.9770591,
+    "ast_hash": "c4602b715dce1f82a55933836468e2a8",
+    "semantic_hash": "c4602b715dce1f82a55933836468e2a8"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_cli.py": {
+    "mtime": 1793297475.9768517,
+    "seen": 1794797023.9770591,
+    "ast_hash": "4e36fa4f8c8b952fbd2f4171171a7e99",
+    "semantic_hash": "4e36fa4f8c8b952fbd2f4171171a7e99"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_cost.py": {
+    "mtime": 1793297475.9769444,
+    "seen": 1794797023.97706,
+    "ast_hash": "f10af0676a80a353972bd2b615b9a1be",
+    "semantic_hash": "f10af0676a80a353972bd2b615b9a1be"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_dataset.py": {
+    "mtime": 1793297475.9770129,
+    "seen": 1794797023.97706,
+    "ast_hash": "9a55a27967bdccbdbc1648fec7e2f711",
+    "semantic_hash": "9a55a27967bdccbdbc1648fec7e2f711"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_demo_and_app.py": {
+    "mtime": 1793297475.9770732,
+    "seen": 1794797023.97706,
+    "ast_hash": "2f0a0d6658649980031305801569fe02",
+    "semantic_hash": "2f0a0d6658649980031305801569fe02"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_embeddings.py": {
+    "mtime": 1793297475.9771512,
+    "seen": 1794797023.977061,
+    "ast_hash": "89f80311f74867d35875473b0cc91680",
+    "semantic_hash": "89f80311f74867d35875473b0cc91680"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_eval_repetitions.py": {
+    "mtime": 1793297475.9772198,
+    "seen": 1794797023.977061,
+    "ast_hash": "a66e8f6ad3988b437095a343ab12e46b",
+    "semantic_hash": "a66e8f6ad3988b437095a343ab12e46b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_evaluation.py": {
+    "mtime": 1793297475.9772782,
+    "seen": 1794797023.977061,
+    "ast_hash": "5a9735fea19ef148ba045277797d4013",
+    "semantic_hash": "5a9735fea19ef148ba045277797d4013"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_evidence.py": {
+    "mtime": 1793297475.9773636,
+    "seen": 1794797023.977062,
+    "ast_hash": "0570a1bb5b0c7fb0765c6590954ec9de",
+    "semantic_hash": "0570a1bb5b0c7fb0765c6590954ec9de"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_failures.py": {
+    "mtime": 1793297475.9774349,
+    "seen": 1794797023.977062,
+    "ast_hash": "32ab79c88fb68eddfe42c3ab3bb717a6",
+    "semantic_hash": "32ab79c88fb68eddfe42c3ab3bb717a6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_heldout_rules.py": {
+    "mtime": 1793297475.977505,
+    "seen": 1794797023.977062,
+    "ast_hash": "39e0fc86eca497e67d3ee1f19a154e09",
+    "semantic_hash": "39e0fc86eca497e67d3ee1f19a154e09"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_live.py": {
+    "mtime": 1793297475.9775743,
+    "seen": 1794797023.977063,
+    "ast_hash": "f4baae2b015ea57e8c371dca16817a9b",
+    "semantic_hash": "f4baae2b015ea57e8c371dca16817a9b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_orchestration.py": {
+    "mtime": 1793297475.9776435,
+    "seen": 1794797023.977063,
+    "ast_hash": "acdc6e2a6dc54f7751dc832a17cbaac6",
+    "semantic_hash": "acdc6e2a6dc54f7751dc832a17cbaac6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_output_compliance.py": {
+    "mtime": 1793297475.9777339,
+    "seen": 1794797023.977063,
+    "ast_hash": "8bc8e1d0650930f183aa4dd752f9af8e",
+    "semantic_hash": "8bc8e1d0650930f183aa4dd752f9af8e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_policy.py": {
+    "mtime": 1793297475.977876,
+    "seen": 1794797023.977063,
+    "ast_hash": "19265c9415b75e003797e352e14dda11",
+    "semantic_hash": "19265c9415b75e003797e352e14dda11"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_reinvestigation.py": {
+    "mtime": 1793297475.9779582,
+    "seen": 1794797023.977064,
+    "ast_hash": "07594255425ef6774753d45c4076436e",
+    "semantic_hash": "07594255425ef6774753d45c4076436e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_report.py": {
+    "mtime": 1793297475.9780257,
+    "seen": 1794797023.977064,
+    "ast_hash": "746a30acb40136cd86377f2a2c2d80ff",
+    "semantic_hash": "746a30acb40136cd86377f2a2c2d80ff"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_retrieval.py": {
+    "mtime": 1793297475.9780824,
+    "seen": 1794797023.977064,
+    "ast_hash": "6530cb7bf3fa2ccb262ee1007f973a81",
+    "semantic_hash": "6530cb7bf3fa2ccb262ee1007f973a81"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_security.py": {
+    "mtime": 1794796878.9398706,
+    "seen": 1794797023.9770648,
+    "ast_hash": "082674b1946e0f6f37e7bd15ce9bbe2d",
+    "semantic_hash": "082674b1946e0f6f37e7bd15ce9bbe2d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_security_e2e.py": {
+    "mtime": 1793297475.9782228,
+    "seen": 1794797023.9770648,
+    "ast_hash": "37c1491bd303a455a752699be5c88cd1",
+    "semantic_hash": "37c1491bd303a455a752699be5c88cd1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_sessions.py": {
+    "mtime": 1793297475.9782996,
+    "seen": 1794797023.9770648,
+    "ast_hash": "b859ec4ae569f498ebdea4d74976b399",
+    "semantic_hash": "b859ec4ae569f498ebdea4d74976b399"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_telemetry.py": {
+    "mtime": 1793297475.978363,
+    "seen": 1794797023.977066,
+    "ast_hash": "216c1aab3377947141a46b76ffd65e0c",
+    "semantic_hash": "216c1aab3377947141a46b76ffd65e0c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_topology.py": {
+    "mtime": 1793297475.9784343,
+    "seen": 1794797023.977066,
+    "ast_hash": "cbd1024f8a04615b4d170d3582bdbe4c",
+    "semantic_hash": "cbd1024f8a04615b4d170d3582bdbe4c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_tracing.py": {
+    "mtime": 1793297475.9785118,
+    "seen": 1794797023.977066,
+    "ast_hash": "a2e03d49e64ba7434d3c6a93e0d8a28e",
+    "semantic_hash": "a2e03d49e64ba7434d3c6a93e0d8a28e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_verification.py": {
+    "mtime": 1794792807.8822622,
+    "seen": 1794797023.977067,
+    "ast_hash": "a046729197bf068190f4d41bc044684a",
+    "semantic_hash": "a046729197bf068190f4d41bc044684a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/tests/test_verifier_matrix.py": {
+    "mtime": 1794796598.0307715,
+    "seen": 1794797023.977067,
+    "ast_hash": "537d2ef87a65ec7dc873480b830e796f",
+    "semantic_hash": "537d2ef87a65ec7dc873480b830e796f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/pyproject.toml": {
+    "mtime": 1793297475.980143,
+    "seen": 1794797023.977067,
+    "ast_hash": "3676de5973112d1c323e934a4f9532fc",
+    "semantic_hash": "3676de5973112d1c323e934a4f9532fc"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/conftest.py": {
+    "mtime": 1793297475.9802356,
+    "seen": 1794797023.977068,
+    "ast_hash": "54bf82c5d7cd29008e6b86dd74c8cbfd",
+    "semantic_hash": "54bf82c5d7cd29008e6b86dd74c8cbfd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_agents.py": {
+    "mtime": 1793297475.9803047,
+    "seen": 1794797023.977068,
+    "ast_hash": "d3cd6a00bfba857cafd579ef7935a43a",
+    "semantic_hash": "d3cd6a00bfba857cafd579ef7935a43a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_alert_store.py": {
+    "mtime": 1793297475.9803703,
+    "seen": 1794797023.977068,
+    "ast_hash": "b60a708eb1159138547b2079a3f7272a",
+    "semantic_hash": "b60a708eb1159138547b2079a3f7272a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_alerts.py": {
+    "mtime": 1793297475.9804363,
+    "seen": 1794797023.9770691,
+    "ast_hash": "3de20dd12c88db9e018d7917b34958e5",
+    "semantic_hash": "3de20dd12c88db9e018d7917b34958e5"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_api.py": {
+    "mtime": 1794792807.882557,
+    "seen": 1794797023.9770691,
+    "ast_hash": "023146c8debc33169cf1f226a09898c6",
+    "semantic_hash": "023146c8debc33169cf1f226a09898c6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_core.py": {
+    "mtime": 1793297475.9805784,
+    "seen": 1794797023.9770691,
+    "ast_hash": "e2e0753c4a099ab973f14bc77413c0ff",
+    "semantic_hash": "e2e0753c4a099ab973f14bc77413c0ff"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_eval.py": {
+    "mtime": 1793297475.9806402,
+    "seen": 1794797023.9770691,
+    "ast_hash": "ed4ea0365c8a7ed7af5a72e9450079ab",
+    "semantic_hash": "ed4ea0365c8a7ed7af5a72e9450079ab"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_forecast_ets.py": {
+    "mtime": 1793297475.9807036,
+    "seen": 1794797023.977071,
+    "ast_hash": "7de35d4f50772c4c23b3f3ee4e8b0772",
+    "semantic_hash": "7de35d4f50772c4c23b3f3ee4e8b0772"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_graph.py": {
+    "mtime": 1793297475.9807703,
+    "seen": 1794797023.977071,
+    "ast_hash": "d59867e2a7ec32e48daedbaead8e01fe",
+    "semantic_hash": "d59867e2a7ec32e48daedbaead8e01fe"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_live_feed.py": {
+    "mtime": 1793297475.980837,
+    "seen": 1794797023.977071,
+    "ast_hash": "1393ad499db5b504ece0f79f685ae351",
+    "semantic_hash": "1393ad499db5b504ece0f79f685ae351"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_replay.py": {
+    "mtime": 1793297475.9809246,
+    "seen": 1794797023.977071,
+    "ast_hash": "8f69122fd94ae85f49dd9874382671ed",
+    "semantic_hash": "8f69122fd94ae85f49dd9874382671ed"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_reports.py": {
+    "mtime": 1793297475.9809875,
+    "seen": 1794797023.9770722,
+    "ast_hash": "7bc226a5caa86463d3f90007bcf83dc0",
+    "semantic_hash": "7bc226a5caa86463d3f90007bcf83dc0"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/tests/test_ui.py": {
+    "mtime": 1793297475.9810581,
+    "seen": 1794797023.9770722,
+    "ast_hash": "04b1ae01793d5a71e1c7c86758fc4153",
+    "semantic_hash": "04b1ae01793d5a71e1c7c86758fc4153"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/__init__.py": {
+    "mtime": 1793297475.9811203,
+    "seen": 1794797023.9770722,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/__init__.py": {
+    "mtime": 1793297475.9812016,
+    "seen": 1794797023.977073,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/agents.py": {
+    "mtime": 1793297475.9812837,
+    "seen": 1794797023.977073,
+    "ast_hash": "8ee41436d86af7104e485b0ff9041ed4",
+    "semantic_hash": "8ee41436d86af7104e485b0ff9041ed4"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/deps.py": {
+    "mtime": 1793297475.9813454,
+    "seen": 1794797023.977073,
+    "ast_hash": "0a57b36b05c3cae4e958ae432c136a67",
+    "semantic_hash": "0a57b36b05c3cae4e958ae432c136a67"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/mock_models.py": {
+    "mtime": 1793297475.9814212,
+    "seen": 1794797023.977074,
+    "ast_hash": "b7353deb37fa53c99debc398d3feef25",
+    "semantic_hash": "b7353deb37fa53c99debc398d3feef25"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/pipeline.py": {
+    "mtime": 1793297475.9814935,
+    "seen": 1794797023.977074,
+    "ast_hash": "8db3bdd231c500bf66663e4f17f07208",
+    "semantic_hash": "8db3bdd231c500bf66663e4f17f07208"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/prompts.py": {
+    "mtime": 1793297475.9815624,
+    "seen": 1794797023.977074,
+    "ast_hash": "42a99b217b3000e48ffd8ce2479b46da",
+    "semantic_hash": "42a99b217b3000e48ffd8ce2479b46da"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/agents/tools.py": {
+    "mtime": 1793297475.981729,
+    "seen": 1794797023.9770749,
+    "ast_hash": "2350861a282341c13c7e2271f4d66e19",
+    "semantic_hash": "2350861a282341c13c7e2271f4d66e19"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/alerts/__init__.py": {
+    "mtime": 1793297475.9818227,
+    "seen": 1794797023.9770749,
+    "ast_hash": "2edb67aacb218b0e85aa90f291c912ec",
+    "semantic_hash": "2edb67aacb218b0e85aa90f291c912ec"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/alerts/monitor.py": {
+    "mtime": 1793297475.9818945,
+    "seen": 1794797023.9770749,
+    "ast_hash": "66c77bf25e0d86b0f196b1cee18f6aea",
+    "semantic_hash": "66c77bf25e0d86b0f196b1cee18f6aea"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/alerts/store.py": {
+    "mtime": 1793297475.9819627,
+    "seen": 1794797023.977076,
+    "ast_hash": "91ae5d1706793777aec02f7445ead9df",
+    "semantic_hash": "91ae5d1706793777aec02f7445ead9df"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/api.py": {
+    "mtime": 1794792807.882729,
+    "seen": 1794797023.977076,
+    "ast_hash": "d445521ddd9aac0c8d1e76f07b88921a",
+    "semantic_hash": "d445521ddd9aac0c8d1e76f07b88921a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/cli.py": {
+    "mtime": 1793297475.9821458,
+    "seen": 1794797023.977076,
+    "ast_hash": "ab12d1d235e163d9d67abc8ca581177a",
+    "semantic_hash": "ab12d1d235e163d9d67abc8ca581177a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/contracts/__init__.py": {
+    "mtime": 1793297475.9822385,
+    "seen": 1794797023.977077,
+    "ast_hash": "78dcdc9ae23d4060d1cb54a427e27668",
+    "semantic_hash": "78dcdc9ae23d4060d1cb54a427e27668"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/contracts/models.py": {
+    "mtime": 1794795930.093434,
+    "seen": 1794797023.977077,
+    "ast_hash": "288c73fb7b3bc1cbe9ba6b9827d5f329",
+    "semantic_hash": "288c73fb7b3bc1cbe9ba6b9827d5f329"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/__init__.py": {
+    "mtime": 1793297475.9824116,
+    "seen": 1794797023.977077,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/anomaly.py": {
+    "mtime": 1793297475.9824986,
+    "seen": 1794797023.977078,
+    "ast_hash": "8dbdd664448ec61433cba0d3a8bfe7fa",
+    "semantic_hash": "8dbdd664448ec61433cba0d3a8bfe7fa"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/backtest.py": {
+    "mtime": 1793297475.982563,
+    "seen": 1794797023.977078,
+    "ast_hash": "7ae9dbcdb76d617adf294ed9daaa8faf",
+    "semantic_hash": "7ae9dbcdb76d617adf294ed9daaa8faf"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/congestion.py": {
+    "mtime": 1793297475.982621,
+    "seen": 1794797023.977078,
+    "ast_hash": "faceb8aae0241ef480136f6a54c75b9c",
+    "semantic_hash": "faceb8aae0241ef480136f6a54c75b9c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/evaluation.py": {
+    "mtime": 1793297475.9826937,
+    "seen": 1794797023.9770792,
+    "ast_hash": "2c3d1235de16af3432748a07dbb57fc5",
+    "semantic_hash": "2c3d1235de16af3432748a07dbb57fc5"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/forecast.py": {
+    "mtime": 1793297475.982788,
+    "seen": 1794797023.9770792,
+    "ast_hash": "7ff89e434e9974f76be92910369f41aa",
+    "semantic_hash": "7ff89e434e9974f76be92910369f41aa"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/freshness.py": {
+    "mtime": 1793297475.982884,
+    "seen": 1794797023.9770792,
+    "ast_hash": "d148646f99d730f281b52ff892a4baaf",
+    "semantic_hash": "d148646f99d730f281b52ff892a4baaf"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/graph.py": {
+    "mtime": 1793297475.9829593,
+    "seen": 1794797023.9770792,
+    "ast_hash": "f59e3a4cc040f8375ea634cfed77082f",
+    "semantic_hash": "f59e3a4cc040f8375ea634cfed77082f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/selection.py": {
+    "mtime": 1793297475.983023,
+    "seen": 1794797023.97708,
+    "ast_hash": "fe2d28bfb8f7be1a6fc535dc64c2f3c2",
+    "semantic_hash": "fe2d28bfb8f7be1a6fc535dc64c2f3c2"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/simulate.py": {
+    "mtime": 1793297475.9830873,
+    "seen": 1794797023.97708,
+    "ast_hash": "cb5476c627a67ab3d78c27e11772ba7a",
+    "semantic_hash": "cb5476c627a67ab3d78c27e11772ba7a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/core/status.py": {
+    "mtime": 1793297475.9831433,
+    "seen": 1794797023.977081,
+    "ast_hash": "2185d3022346c505acc762b0ac85048f",
+    "semantic_hash": "2185d3022346c505acc762b0ac85048f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/data/__init__.py": {
+    "mtime": 1793297475.9831975,
+    "seen": 1794797023.977081,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/data/feed.py": {
+    "mtime": 1793297475.9832857,
+    "seen": 1794797023.977081,
+    "ast_hash": "002bec0bc58fd06fffc0946251a90b98",
+    "semantic_hash": "002bec0bc58fd06fffc0946251a90b98"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/data/live.py": {
+    "mtime": 1793297475.983379,
+    "seen": 1794797023.977081,
+    "ast_hash": "1167725751f5cfd3cca737cd3504a8d1",
+    "semantic_hash": "1167725751f5cfd3cca737cd3504a8d1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/data/replay.py": {
+    "mtime": 1793297475.9834528,
+    "seen": 1794797023.977082,
+    "ast_hash": "6b800c3589292a26976c79fe5d2f52d0",
+    "semantic_hash": "6b800c3589292a26976c79fe5d2f52d0"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/eval/__init__.py": {
+    "mtime": 1793297475.9835136,
+    "seen": 1794797023.977082,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/eval/runner.py": {
+    "mtime": 1793297475.9836488,
+    "seen": 1794797023.977082,
+    "ast_hash": "4074b1e435f51a037b9175d9a63a9583",
+    "semantic_hash": "4074b1e435f51a037b9175d9a63a9583"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/reports.py": {
+    "mtime": 1793297475.9837337,
+    "seen": 1794797023.977083,
+    "ast_hash": "aef8e6b86bc3d303740f74d20a3a6c5f",
+    "semantic_hash": "aef8e6b86bc3d303740f74d20a3a6c5f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/ui/__init__.py": {
+    "mtime": 1793297475.983793,
+    "seen": 1794797023.977083,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/ui/app.py": {
+    "mtime": 1793297475.983883,
+    "seen": 1794797023.977083,
+    "ast_hash": "3d9c655ffaa655cef191af1675e6dafd",
+    "semantic_hash": "3d9c655ffaa655cef191af1675e6dafd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/ui/plots.py": {
+    "mtime": 1793297475.983951,
+    "seen": 1794797023.977084,
+    "ast_hash": "bdfd2399eeacd10819888859e584d6be",
+    "semantic_hash": "bdfd2399eeacd10819888859e584d6be"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/rules/adk.md": {
+    "mtime": 1794795674.7530227,
+    "seen": 1794797023.977084,
+    "ast_hash": "139eaa5478170438336bc5e9d4b45cf2",
+    "semantic_hash": "139eaa5478170438336bc5e9d4b45cf2"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/rules/contracts.md": {
+    "mtime": 1794795670.8727636,
+    "seen": 1794797023.977084,
+    "ast_hash": "6426585b545866205fc4b1ef9258b74c",
+    "semantic_hash": "6426585b545866205fc4b1ef9258b74c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/rules/core.md": {
+    "mtime": 1794795673.044344,
+    "seen": 1794797023.9770849,
+    "ast_hash": "739a8ea9422a93dfb29b3e798b38e925",
+    "semantic_hash": "739a8ea9422a93dfb29b3e798b38e925"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/rules/tests.md": {
+    "mtime": 1794795675.919971,
+    "seen": 1794797023.9770849,
+    "ast_hash": "c13b5c82dccc0931d73b30abbdb312bc",
+    "semantic_hash": "c13b5c82dccc0931d73b30abbdb312bc"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/skills/add-llm-agent/SKILL.md": {
+    "mtime": 1794795717.637302,
+    "seen": 1794797023.9770849,
+    "ast_hash": "e5fb4c8b1b6e5523aec61a23da158b5d",
+    "semantic_hash": "e5fb4c8b1b6e5523aec61a23da158b5d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/skills/eval-dataset/SKILL.md": {
+    "mtime": 1794792807.8765779,
+    "seen": 1794797023.977086,
+    "ast_hash": "676d7e19beab0df823a5ed05daf5af25",
+    "semantic_hash": "676d7e19beab0df823a5ed05daf5af25"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/skills/llm-eval/SKILL.md": {
+    "mtime": 1794792807.8768358,
+    "seen": 1794797023.977086,
+    "ast_hash": "0fd5d9135adbc102ed2de6ed92c83025",
+    "semantic_hash": "0fd5d9135adbc102ed2de6ed92c83025"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/skills/llm-eval/references/rag-metrics.md": {
+    "mtime": 1794792807.8770025,
+    "seen": 1794797023.977086,
+    "ast_hash": "f06fb73131c6504102523c7e5cb7d6ab",
+    "semantic_hash": "f06fb73131c6504102523c7e5cb7d6ab"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/skills/new-agent-project/SKILL.md": {
+    "mtime": 1794792807.8771856,
+    "seen": 1794797023.977087,
+    "ast_hash": "d77b841401e026ed6133b1fcaf85df8d",
+    "semantic_hash": "d77b841401e026ed6133b1fcaf85df8d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.claude/skills/red-team/SKILL.md": {
+    "mtime": 1794792807.877359,
+    "seen": 1794797023.977087,
+    "ast_hash": "34db930e2236d59cb16f123da1786672",
+    "semantic_hash": "34db930e2236d59cb16f123da1786672"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.github/workflows/api-tests.yml": {
+    "mtime": 1793297475.9565434,
+    "seen": 1794797023.977087,
+    "ast_hash": "783824dd8d4aa512e6c6e97d9da02b56",
+    "semantic_hash": "783824dd8d4aa512e6c6e97d9da02b56"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.github/workflows/ci.yml": {
+    "mtime": 1794796661.5410938,
+    "seen": 1794797023.977088,
+    "ast_hash": "38558c36c70f26b3ad25c2a6d7dacfa9",
+    "semantic_hash": "38558c36c70f26b3ad25c2a6d7dacfa9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.github/workflows/ledger-hound.yml": {
+    "mtime": 1793297475.956696,
+    "seen": 1794797023.977088,
+    "ast_hash": "8e6db8b48ba5854f7f86a6970fbc5074",
+    "semantic_hash": "8e6db8b48ba5854f7f86a6970fbc5074"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.github/workflows/platewatch.yml": {
+    "mtime": 1794792807.8782458,
+    "seen": 1794797023.977088,
+    "ast_hash": "c6dc6979ccc7b5b6bbf5e6852d4f3275",
+    "semantic_hash": "c6dc6979ccc7b5b6bbf5e6852d4f3275"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/.github/workflows/trafficflow.yml": {
+    "mtime": 1793297475.9568572,
+    "seen": 1794797023.977089,
+    "ast_hash": "71c83365343934391c0e0116fe1b5c2f",
+    "semantic_hash": "71c83365343934391c0e0116fe1b5c2f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/AGENTS.md": {
+    "mtime": 1794795640.9910343,
+    "seen": 1794797023.977089,
+    "ast_hash": "009e708f2455de52763bcaacd0f69291",
+    "semantic_hash": "009e708f2455de52763bcaacd0f69291"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ARCHITECTURE.md": {
+    "mtime": 1794796837.4276156,
+    "seen": 1794797023.977089,
+    "ast_hash": "d0b2bb576725a89d62506e64ad40a4af",
+    "semantic_hash": "d0b2bb576725a89d62506e64ad40a4af"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/CLAUDE.md": {
+    "mtime": 1794795642.840934,
+    "seen": 1794797023.9770901,
+    "ast_hash": "c3e773b33aee9b33cb3303b30283355c",
+    "semantic_hash": "c3e773b33aee9b33cb3303b30283355c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/CONTRIBUTING.md": {
+    "mtime": 1793297475.9572294,
+    "seen": 1794797023.9770901,
+    "ast_hash": "2f8656ef9bd4e193e9a453b5c2fa536b",
+    "semantic_hash": "2f8656ef9bd4e193e9a453b5c2fa536b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/GEMINI.md": {
+    "mtime": 1794795641.9238398,
+    "seen": 1794797023.9770901,
+    "ast_hash": "52e766ffbd4ef296b5237337a8e7ee7a",
+    "semantic_hash": "52e766ffbd4ef296b5237337a8e7ee7a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/PLAN.md": {
+    "mtime": 1794796838.4399872,
+    "seen": 1794797023.9770901,
+    "ast_hash": "cfc0719d3c15d53f778bd283244c6e04",
+    "semantic_hash": "cfc0719d3c15d53f778bd283244c6e04"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/README.md": {
+    "mtime": 1794796836.125637,
+    "seen": 1794797023.977091,
+    "ast_hash": "0fa08e519b82ab03d03456ef2a0f9eca",
+    "semantic_hash": "0fa08e519b82ab03d03456ef2a0f9eca"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/SECURITY.md": {
+    "mtime": 1794796715.0315607,
+    "seen": 1794797023.977091,
+    "ast_hash": "f4e234af85ad5ef625aee27394caa382",
+    "semantic_hash": "f4e234af85ad5ef625aee27394caa382"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/TASK.md": {
+    "mtime": 1794792807.879294,
+    "seen": 1794797023.977091,
+    "ast_hash": "cf8341a2e1eed205d953b5bd1c689cdd",
+    "semantic_hash": "cf8341a2e1eed205d953b5bd1c689cdd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/CLAUDE.md": {
+    "mtime": 1793297475.9580808,
+    "seen": 1794797023.977092,
+    "ast_hash": "66984c861d0170993edcdee831f7706d",
+    "semantic_hash": "66984c861d0170993edcdee831f7706d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/PLAN.md": {
+    "mtime": 1793301963.6641135,
+    "seen": 1794797023.977092,
+    "ast_hash": "1f2b1e1d597e54c6ebe822def3abba5d",
+    "semantic_hash": "1f2b1e1d597e54c6ebe822def3abba5d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/README.md": {
+    "mtime": 1793301963.6642687,
+    "seen": 1794797023.977092,
+    "ast_hash": "fd9149e6ca6cbdcd9601ecda5c5f3ac1",
+    "semantic_hash": "fd9149e6ca6cbdcd9601ecda5c5f3ac1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/api-tests/docs/FINDINGS.md": {
+    "mtime": 1794792807.8794408,
+    "seen": 1794797023.9770932,
+    "ast_hash": "030d99e0ab34e857fb94ed995e8438cc",
+    "semantic_hash": "030d99e0ab34e857fb94ed995e8438cc"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0001-google-adk.md": {
+    "mtime": 1793297475.9612274,
+    "seen": 1794797023.9770932,
+    "ast_hash": "6dbef0f71cc512472a7e5aaa18e352d4",
+    "semantic_hash": "6dbef0f71cc512472a7e5aaa18e352d4"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0002-fixed-workflow-tree.md": {
+    "mtime": 1793297475.9613116,
+    "seen": 1794797023.9770932,
+    "ast_hash": "5efc33872b64a272b13fdcaa9df60e76",
+    "semantic_hash": "5efc33872b64a272b13fdcaa9df60e76"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0003-evidence-in-session-state.md": {
+    "mtime": 1793297475.9614098,
+    "seen": 1794797023.977094,
+    "ast_hash": "442868482e7757f05ff5c37e37e8f8cd",
+    "semantic_hash": "442868482e7757f05ff5c37e37e8f8cd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0004-sqlite-database-session-service.md": {
+    "mtime": 1793297475.961487,
+    "seen": 1794797023.977094,
+    "ast_hash": "8a6671b325e04828f7a885fc8474dfe1",
+    "semantic_hash": "8a6671b325e04828f7a885fc8474dfe1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0005-hybrid-retrieval.md": {
+    "mtime": 1793297475.961562,
+    "seen": 1794797023.977094,
+    "ast_hash": "ccbc7827783ec5b458634b156f18184a",
+    "semantic_hash": "ccbc7827783ec5b458634b156f18184a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0006-categorical-confidence.md": {
+    "mtime": 1793297475.9616296,
+    "seen": 1794797023.977095,
+    "ast_hash": "ad05326e6f1f283576c1523eb50f3ad1",
+    "semantic_hash": "ad05326e6f1f283576c1523eb50f3ad1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0007-replace-langgraph-scaffold.md": {
+    "mtime": 1793297475.9617,
+    "seen": 1794797023.977095,
+    "ast_hash": "d82a5b6bff08b4926cc5a0d4189f59ed",
+    "semantic_hash": "d82a5b6bff08b4926cc5a0d4189f59ed"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0008-no-custom-fastapi.md": {
+    "mtime": 1793297475.9617667,
+    "seen": 1794797023.977095,
+    "ast_hash": "e47dc1c87f2aea3247d8f51d73b029d8",
+    "semantic_hash": "e47dc1c87f2aea3247d8f51d73b029d8"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0009-deterministic-mock-model.md": {
+    "mtime": 1793297475.9618378,
+    "seen": 1794797023.9770958,
+    "ast_hash": "0e456a968873b33629c989dfaa50666a",
+    "semantic_hash": "0e456a968873b33629c989dfaa50666a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0010-read-only-run-lookup.md": {
+    "mtime": 1793297475.9619117,
+    "seen": 1794797023.9770958,
+    "ast_hash": "ae24a2f9af5adb4e215f1caca4ab6295",
+    "semantic_hash": "ae24a2f9af5adb4e215f1caca4ab6295"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0011-optional-gemini-embeddings.md": {
+    "mtime": 1793297475.961986,
+    "seen": 1794797023.9770958,
+    "ast_hash": "a668bf4069f3947ba2301a43c819cc48",
+    "semantic_hash": "a668bf4069f3947ba2301a43c819cc48"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0012-otlp-exporter-not-locked.md": {
+    "mtime": 1793297475.9620583,
+    "seen": 1794797023.977097,
+    "ast_hash": "3f37414e21e57a2f9e0e5037aa634a4c",
+    "semantic_hash": "3f37414e21e57a2f9e0e5037aa634a4c"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/0013-bearer-token-authentication.md": {
+    "mtime": 1793297475.9621348,
+    "seen": 1794797023.977097,
+    "ast_hash": "c34202d498ce98ec45cfd98e53b60a65",
+    "semantic_hash": "c34202d498ce98ec45cfd98e53b60a65"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/adr/README.md": {
+    "mtime": 1793297475.9622064,
+    "seen": 1794797023.977097,
+    "ast_hash": "ec2f1b7f37f5edb3664e864e7dc2d85a",
+    "semantic_hash": "ec2f1b7f37f5edb3664e864e7dc2d85a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/agent_catalog.md": {
+    "mtime": 1793297475.962284,
+    "seen": 1794797023.977098,
+    "ast_hash": "befb5b322b4bc001e4a4eb3ba0b19166",
+    "semantic_hash": "befb5b322b4bc001e4a4eb3ba0b19166"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/deployment.md": {
+    "mtime": 1793297475.9623637,
+    "seen": 1794797023.977098,
+    "ast_hash": "94aabbf222e3b181a3a273480da449dd",
+    "semantic_hash": "94aabbf222e3b181a3a273480da449dd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/eval_results_heldout.md": {
+    "mtime": 1793297475.9624336,
+    "seen": 1794797023.977098,
+    "ast_hash": "a8a66ec8a15308e36a2caa15563cc355",
+    "semantic_hash": "a8a66ec8a15308e36a2caa15563cc355"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/eval_results_offline.md": {
+    "mtime": 1793297475.9625041,
+    "seen": 1794797023.977099,
+    "ast_hash": "cc26f11ba20bf59133106fe27ac96a90",
+    "semantic_hash": "cc26f11ba20bf59133106fe27ac96a90"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/eval_results_verifier.md": {
+    "mtime": 1794792807.8796632,
+    "seen": 1794797023.977099,
+    "ast_hash": "ba40acf0dcc6d98e9cdcbbe8016636e3",
+    "semantic_hash": "ba40acf0dcc6d98e9cdcbbe8016636e3"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/evaluation.md": {
+    "mtime": 1794792807.8798716,
+    "seen": 1794797023.977099,
+    "ast_hash": "d561acbe6dfecf072c02834cbe6dfc7e",
+    "semantic_hash": "d561acbe6dfecf072c02834cbe6dfc7e"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/model_configuration.md": {
+    "mtime": 1794792807.8800082,
+    "seen": 1794797023.9771001,
+    "ast_hash": "c4d88aeca3a3b783a64fc8cab3babd66",
+    "semantic_hash": "c4d88aeca3a3b783a64fc8cab3babd66"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/observability.md": {
+    "mtime": 1793297475.9628327,
+    "seen": 1794797023.9771001,
+    "ast_hash": "f49f2eb7fb8409f2a94b9b71c459fd47",
+    "semantic_hash": "f49f2eb7fb8409f2a94b9b71c459fd47"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/orchestration.md": {
+    "mtime": 1793297475.9629097,
+    "seen": 1794797023.9771001,
+    "ast_hash": "6b7b3175ede6029a2c967a2cea6dee8d",
+    "semantic_hash": "6b7b3175ede6029a2c967a2cea6dee8d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/review.md": {
+    "mtime": 1794792807.8806264,
+    "seen": 1794797023.977101,
+    "ast_hash": "e4ea92aeac753833527c947201457781",
+    "semantic_hash": "e4ea92aeac753833527c947201457781"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/security.md": {
+    "mtime": 1794796839.6979637,
+    "seen": 1794797023.977101,
+    "ast_hash": "f711d16df98e7becb5e9ed0fdd6a9689",
+    "semantic_hash": "f711d16df98e7becb5e9ed0fdd6a9689"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/session_management.md": {
+    "mtime": 1793297475.9631813,
+    "seen": 1794797023.977101,
+    "ast_hash": "77203301b19c099f85a2e71429122a5a",
+    "semantic_hash": "77203301b19c099f85a2e71429122a5a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/docs/tool_contracts.md": {
+    "mtime": 1793297475.9632626,
+    "seen": 1794797023.977102,
+    "ast_hash": "d84011ce3fc8b2645742e315beedeb28",
+    "semantic_hash": "d84011ce3fc8b2645742e315beedeb28"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/ledger-hound/README.md": {
+    "mtime": 1793297475.9635477,
+    "seen": 1794797023.977102,
+    "ast_hash": "990747ea72fe1656c3669082c90e04f0",
+    "semantic_hash": "990747ea72fe1656c3669082c90e04f0"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/cases/cases.yaml": {
+    "mtime": 1793297475.9716249,
+    "seen": 1794797023.977102,
+    "ast_hash": "01a09aa78c74df6b8c3bf0d16d90ac8a",
+    "semantic_hash": "01a09aa78c74df6b8c3bf0d16d90ac8a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/cases/heldout.yaml": {
+    "mtime": 1793297475.9716952,
+    "seen": 1794797023.977103,
+    "ast_hash": "8e5f5f0d45babb7c91dd41af43cb38f2",
+    "semantic_hash": "8e5f5f0d45babb7c91dd41af43cb38f2"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/DOC-001.md": {
+    "mtime": 1793297475.9718955,
+    "seen": 1794797023.977103,
+    "ast_hash": "264b57817a97b5b73c7378d80679cf28",
+    "semantic_hash": "264b57817a97b5b73c7378d80679cf28"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/DOC-002.md": {
+    "mtime": 1793297475.971958,
+    "seen": 1794797023.977103,
+    "ast_hash": "e898bfa61f6baad6429df0b77c294ecb",
+    "semantic_hash": "e898bfa61f6baad6429df0b77c294ecb"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/DOC-003.md": {
+    "mtime": 1793297475.9720201,
+    "seen": 1794797023.977104,
+    "ast_hash": "18621b2f53ac69d263b062a795bd96a7",
+    "semantic_hash": "18621b2f53ac69d263b062a795bd96a7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2024-0107.md": {
+    "mtime": 1793297475.9720905,
+    "seen": 1794797023.977104,
+    "ast_hash": "a6e339fb99d4bc037d2caceef594e071",
+    "semantic_hash": "a6e339fb99d4bc037d2caceef594e071"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2024-0315.md": {
+    "mtime": 1793297475.9721558,
+    "seen": 1794797023.977104,
+    "ast_hash": "0bdf05aa1a2d1b88f2185b1194bd5edf",
+    "semantic_hash": "0bdf05aa1a2d1b88f2185b1194bd5edf"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2024-0620.md": {
+    "mtime": 1793297475.9722126,
+    "seen": 1794797023.977105,
+    "ast_hash": "d6da6588b781c76e767309f3bfc5e874",
+    "semantic_hash": "d6da6588b781c76e767309f3bfc5e874"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2024-0904.md": {
+    "mtime": 1793297475.972275,
+    "seen": 1794797023.977105,
+    "ast_hash": "3dbabd58c9f5ac4040ac2d2054878782",
+    "semantic_hash": "3dbabd58c9f5ac4040ac2d2054878782"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2025-0110.md": {
+    "mtime": 1793297475.9723346,
+    "seen": 1794797023.977105,
+    "ast_hash": "da54728f532b0b86a816df9696d5e70b",
+    "semantic_hash": "da54728f532b0b86a816df9696d5e70b"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2025-0412.md": {
+    "mtime": 1793297475.9724023,
+    "seen": 1794797023.9771059,
+    "ast_hash": "50a4d31c5cdfd571ced6952b89e63f62",
+    "semantic_hash": "50a4d31c5cdfd571ced6952b89e63f62"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2025-0718.md": {
+    "mtime": 1793297475.9724722,
+    "seen": 1794797023.9771059,
+    "ast_hash": "818d18443f0786c7235f47f569c15187",
+    "semantic_hash": "818d18443f0786c7235f47f569c15187"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/INC-2025-0902.md": {
+    "mtime": 1793297475.9725428,
+    "seen": 1794797023.9771059,
+    "ast_hash": "89489a9b6ae451e22f6a97583a7c0d46",
+    "semantic_hash": "89489a9b6ae451e22f6a97583a7c0d46"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-001.md": {
+    "mtime": 1793297475.9726114,
+    "seen": 1794797023.977107,
+    "ast_hash": "8a736c519735413d5cba39cba2d98389",
+    "semantic_hash": "8a736c519735413d5cba39cba2d98389"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-002.md": {
+    "mtime": 1793297475.9726872,
+    "seen": 1794797023.977107,
+    "ast_hash": "0480bbe31ff22ffe5f87c9a040aab322",
+    "semantic_hash": "0480bbe31ff22ffe5f87c9a040aab322"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-003.md": {
+    "mtime": 1793297475.972775,
+    "seen": 1794797023.977107,
+    "ast_hash": "9f70b18a1bacb38a11ddc03b2db593b7",
+    "semantic_hash": "9f70b18a1bacb38a11ddc03b2db593b7"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-004.md": {
+    "mtime": 1793297475.9728417,
+    "seen": 1794797023.977107,
+    "ast_hash": "2b1ab05a9e129c6a3ff78e2fca59092a",
+    "semantic_hash": "2b1ab05a9e129c6a3ff78e2fca59092a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-005.md": {
+    "mtime": 1793297475.972915,
+    "seen": 1794797023.977108,
+    "ast_hash": "53cc1b3e407440bd282544f66ddbfaa9",
+    "semantic_hash": "53cc1b3e407440bd282544f66ddbfaa9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-006.md": {
+    "mtime": 1793297475.972987,
+    "seen": 1794797023.977108,
+    "ast_hash": "b36cf29d6969221a0f3f6d0e11558387",
+    "semantic_hash": "b36cf29d6969221a0f3f6d0e11558387"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-007.md": {
+    "mtime": 1793297475.9730585,
+    "seen": 1794797023.977108,
+    "ast_hash": "9a512224901d51f10affef0740be5dd6",
+    "semantic_hash": "9a512224901d51f10affef0740be5dd6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge/RB-008.md": {
+    "mtime": 1793297475.9731247,
+    "seen": 1794797023.977109,
+    "ast_hash": "07a2e0243d6dc9c7a9f458135e2afff9",
+    "semantic_hash": "07a2e0243d6dc9c7a9f458135e2afff9"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge_extra/DOC-666.md": {
+    "mtime": 1793297475.9732406,
+    "seen": 1794797023.977109,
+    "ast_hash": "01870ffef15dfcb2dcbc0be19b34060a",
+    "semantic_hash": "01870ffef15dfcb2dcbc0be19b34060a"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge_extra/INC-2026-0001.md": {
+    "mtime": 1793297475.9733083,
+    "seen": 1794797023.977109,
+    "ast_hash": "19e34e0dff57531fe7b8f2ee457e8c3d",
+    "semantic_hash": "19e34e0dff57531fe7b8f2ee457e8c3d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/knowledge_extra/RB-090.md": {
+    "mtime": 1793297475.9733765,
+    "seen": 1794797023.97711,
+    "ast_hash": "c75bd6a47db874ae79a00ff7ce56ff9f",
+    "semantic_hash": "c75bd6a47db874ae79a00ff7ce56ff9f"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/opspilot/datasets/topology.yaml": {
+    "mtime": 1793297475.9735138,
+    "seen": 1794797023.97711,
+    "ast_hash": "7e80d72d8aa054c4ad643cb8ca1cdd38",
+    "semantic_hash": "7e80d72d8aa054c4ad643cb8ca1cdd38"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/CLAUDE.md": {
+    "mtime": 1794792807.8813736,
+    "seen": 1794797023.97711,
+    "ast_hash": "2536785a98bd594b1b84a8a1b5b1d846",
+    "semantic_hash": "2536785a98bd594b1b84a8a1b5b1d846"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/platewatch/README.md": {
+    "mtime": 1794792807.8815181,
+    "seen": 1794797023.977111,
+    "ast_hash": "2d84d43daeae87659d5cbef6531d51e2",
+    "semantic_hash": "2d84d43daeae87659d5cbef6531d51e2"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/ARCHITECTURE.md": {
+    "mtime": 1793297475.9789193,
+    "seen": 1794797023.977111,
+    "ast_hash": "426e4ede30adbac240ffd6d0997e3be1",
+    "semantic_hash": "426e4ede30adbac240ffd6d0997e3be1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/CLAUDE.md": {
+    "mtime": 1793297475.9789848,
+    "seen": 1794797023.977111,
+    "ast_hash": "e706f1ff929317f90c87d7ce30921701",
+    "semantic_hash": "e706f1ff929317f90c87d7ce30921701"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/PLAN.md": {
+    "mtime": 1793297475.979198,
+    "seen": 1794797023.977112,
+    "ast_hash": "1c3224dd783de6f91269c2d7439a5ed6",
+    "semantic_hash": "1c3224dd783de6f91269c2d7439a5ed6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/README.md": {
+    "mtime": 1793297475.9792907,
+    "seen": 1794797023.977112,
+    "ast_hash": "644ae650ffe2eaabfcb7f161396cc8c1",
+    "semantic_hash": "644ae650ffe2eaabfcb7f161396cc8c1"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/TASK.md": {
+    "mtime": 1793297475.9794407,
+    "seen": 1794797023.977112,
+    "ast_hash": "d52a27617cfa6a917573d720b1c268cd",
+    "semantic_hash": "d52a27617cfa6a917573d720b1c268cd"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docker-compose.yml": {
+    "mtime": 1793297475.979512,
+    "seen": 1794797023.977113,
+    "ast_hash": "91b691a229958293c70dab021450eeac",
+    "semantic_hash": "91b691a229958293c70dab021450eeac"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/adr/0001-pydanticai-with-deterministic-core.md": {
+    "mtime": 1793297475.979649,
+    "seen": 1794797023.977113,
+    "ast_hash": "dcb90f77e85ad158cc5af37faa4ed91d",
+    "semantic_hash": "dcb90f77e85ad158cc5af37faa4ed91d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/adr/0002-fixed-pipeline.md": {
+    "mtime": 1793297475.9797192,
+    "seen": 1794797023.977113,
+    "ast_hash": "6e383fe1a37092514c6ee9736ffafcf6",
+    "semantic_hash": "6e383fe1a37092514c6ee9736ffafcf6"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/adr/0003-deterministic-mock-models.md": {
+    "mtime": 1793297475.9797893,
+    "seen": 1794797023.9771142,
+    "ast_hash": "4169be855775e53abd1e539aceda3f10",
+    "semantic_hash": "4169be855775e53abd1e539aceda3f10"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/adr/0004-pemsd7-data-assumptions.md": {
+    "mtime": 1793297475.97986,
+    "seen": 1794797023.9771142,
+    "ast_hash": "388df85db50652a3c38721ec4bcc8122",
+    "semantic_hash": "388df85db50652a3c38721ec4bcc8122"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/adr/0005-pems08-data-assumptions.md": {
+    "mtime": 1793297475.9799232,
+    "seen": 1794797023.9771142,
+    "ast_hash": "42072a35fe785850b486ddba4e1d5bac",
+    "semantic_hash": "42072a35fe785850b486ddba4e1d5bac"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/adr/README.md": {
+    "mtime": 1793297475.979988,
+    "seen": 1794797023.977115,
+    "ast_hash": "e28906fd512dabec5c6ea8d4eb80542d",
+    "semantic_hash": "e28906fd512dabec5c6ea8d4eb80542d"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/docs/eval_results_pems.md": {
+    "mtime": 1793297475.9800808,
+    "seen": 1794797023.977115,
+    "ast_hash": "2e4960bbe53d7624481a13d629588a99",
+    "semantic_hash": "2e4960bbe53d7624481a13d629588a99"
+  },
+  "/Users/ashraf-macbookair/projects/agent-system/traffic-flow-analyzer/trafficflow/eval/cases.yaml": {
+    "mtime": 1793297475.983588,
+    "seen": 1794797023.977115,
+    "ast_hash": "252b0dec1534056bf476c76222fd2946",
+    "semantic_hash": "252b0dec1534056bf476c76222fd2946"
+  }
+}

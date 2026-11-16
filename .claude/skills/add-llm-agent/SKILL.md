@@ -10,12 +10,12 @@ suite green and the live run broken, or the reverse.
 
 ## Checklist
 
-1. **Output contract.** A Pydantic model for what the agent returns. Fields that code will act on
+1. **Output contract.** A frozen Pydantic model (`model_config = ConfigDict(frozen=True)`) for what the agent returns. Fields that code will act on
    are enums or bounded numbers, not free text. Every claim field carries the evidence ids it
    relies on.
 2. **Instructions.** A prompt provider that renders only what this agent may see. It never
    includes labels, answer keys or another agent's hidden state. Retrieved documents are passed as
-   untrusted data, not as instructions.
+   untrusted data inside `<untrusted_context>` tags, not as instructions.
 3. **Tools and allowlist.** Give the agent the smallest set of tools that does the job and add it
    to the allowlist. A tool the agent does not have is the only reliable way to stop it being used.
 4. **Mock policy and failed output.** A deterministic policy that reads the rendered prompt and

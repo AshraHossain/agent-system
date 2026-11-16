@@ -8,7 +8,70 @@ produces a validated, evidence-linked investigation report that separates
 infrastructure — it has no tool capable of doing so.
 
 This document explains *why* the system is shaped the way it is. The *how* is
-in [ARCHITECTURE.md](ARCHITECTURE.md) and `docs/`.
+in [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md), and `docs/`.
+
+---
+
+## 0. Architectural Blueprint & Runtime Choreography
+
+### Layered System Architecture (`flowchart LR`)
+
+```mermaid
+flowchart LR
+    subgraph Client["Client & CI Surface"]
+        U["CLI / API Caller"]
+        EV["Eval & Red-Team Harness (make check)"]
+    end
+    subgraph Edge["Edge & Guardrails (opspilot/api.py)"]
+        MW["Telemetry + RateLimit (429) + Bearer/API-Key Auth (401) + Boundary (400/413/415)"]
+    end
+    subgraph Core["Deterministic Pure Core (opspilot/core)"]
+        PURE["Telemetry Stats / Topology BFS / Hybrid RRF / Hypothesis Rules / EvidenceVerifier"]
+    end
+    subgraph Adapters["Isolated ADK Service Adapters (opspilot/adk)"]
+        SVC["ADK Workflow Tree + Validated FunctionTools + Session Store"]
+    end
+    subgraph Backends["Live Cloud vs. Offline Fallback"]
+        LIVE[("Live Cloud: Gemini 2.5 Flash / Vertex AI")]
+        MOCK[("Deterministic Offline Mock: ScriptedLlm + SQLite mode=ro")]
+    end
+    U & EV --> MW --> PURE & SVC
+    SVC -. "Live Mode (--live)" .-> LIVE
+    SVC -. "Mock Mode (default)" .-> MOCK
+```
+
+### End-to-End Investigation Sequence (`sequenceDiagram`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client / Eval Harness
+    participant G as Edge Guardrails & IntakeAgent
+    participant P as Parallel Specialists (ADK)
+    participant K as Pure Core (opspilot/core)
+    participant S as Incident Analyst & Drafter
+    participant V as EvidenceVerifier & Finalizer
+
+    rect rgb(235, 245, 255)
+        C->>G: Submit incident request (+ X-Request-ID, Bearer / X-API-Key)
+        G->>K: Validate request, redact secrets, scan injection, compute time windows
+        K-->>G: Frozen InvestigationScope
+    end
+    rect rgb(240, 255, 240)
+        G->>P: Fan-out Telemetry, Topology & Knowledge specialists
+        P->>K: Execute read-only tools & wrap docs in <untrusted_context>
+        K-->>P: Deterministic metrics + content-addressed EV-* records
+    end
+    rect rgb(255, 248, 235)
+        P->>S: Reconcile findings & generate rule-based hypothesis candidates
+        S->>K: Validate cited EV-* IDs & read-only recommendation policy
+    end
+    rect rgb(252, 240, 255)
+        S->>V: Verify citations, entity alignment, metric sufficiency & certainty bounds
+        V->>K: Compute deterministic status & escalation (build_report)
+        K-->>C: Return frozen InvestigationReport + OWASP & latency headers
+    end
+```
 
 ---
 

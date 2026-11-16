@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TimeWindow(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     start: datetime
     end: datetime
 
@@ -16,6 +18,8 @@ class TimeWindow(BaseModel):
 
 
 class InvestigationScope(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     investigation_id: str
     dataset_id: str
     request_text: str = Field(max_length=4000, description="Validated, redacted request")

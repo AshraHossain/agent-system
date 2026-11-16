@@ -18,7 +18,7 @@ LEVEL_ORDER: dict[str, int] = {"free": 0, "moderate": 1, "heavy": 2, "severe": 3
 
 
 class Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class Segment(Strict):
@@ -80,6 +80,8 @@ class ErrorDetail(Strict):
 
 
 class ValidationIssue(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     type: str
     loc: list[str | int]
     msg: str

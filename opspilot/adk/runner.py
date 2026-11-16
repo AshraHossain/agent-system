@@ -35,14 +35,14 @@ APP_NAME = "opspilot"
 USER_ID = "operator"
 
 
-@dataclass
+@dataclass(frozen=True)
 class TraceStep:
     author: str
     tool_calls: list[str]
     text: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class Outcome:
     session_id: str
     report: InvestigationReport

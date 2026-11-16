@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from opspilot.contracts.evidence import Evidence
 from opspilot.contracts.findings import Hypothesis, HypothesisCategory
@@ -78,6 +78,8 @@ CHECKS = {
 
 
 class CandidateSet(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     hypotheses: list[Hypothesis]
     affected_services: list[str]
     unexplained_observations: list[str]
@@ -87,6 +89,8 @@ class CandidateSet(BaseModel):
 
 
 class IncidentComparison(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     incident_id: str
     title: str
     incident_category: str | None

@@ -1,52 +1,24 @@
-# CLAUDE.md — agent-system
+# CLAUDE.md — agent-system (Repo Specifics)
 
-A workspace of independent GenAI projects: agents, multi-agent orchestration, RAG, LLM
-evaluation and red teaming. Nothing here is production-ready; never claim it is.
+Read [AGENTS.md](AGENTS.md) for the full project map, verified commands, module layout, and layering rules. Global workflow, TDD, immutability, and commit rules from `~/.claude/CLAUDE.md` and `~/.claude/AGENTS.md` apply automatically; only repository-specific constraints are listed below.
 
-## Projects
-
-| Path | What | Stack | Detail |
-|---|---|---|---|
-| `opspilot/`, `adk_apps/`, `tests/` (repo root) | Multi-agent network-ops investigation, evidence-linked report | Google ADK 2.11.0 (pinned), Gemini / Vertex AI | `.claude/rules/opspilot.md`, [PLAN.md](PLAN.md), [ARCHITECTURE.md](ARCHITECTURE.md) |
-| `ledger-hound/` | Agentic QA / red team of a Purchase-to-Pay API | OpenAI Agents SDK, DSPy, FastAPI | its README |
-| `traffic-flow-analyzer/` | Congestion forecasting agents + dashboard | PydanticAI, Gradio | its CLAUDE.md |
-| `platewatch/` | Licence-plate detection, tagging, vector search | PydanticAI, Hugging Face | its CLAUDE.md |
-| `api-tests/` | Black-box API tests for the Traffic Flow API | pytest, httpx, schemathesis | its CLAUDE.md |
-
-Each sub-project has its own `pyproject.toml`, `uv.lock`, tests and a path-filtered workflow in
-`.github/workflows/`. Run its commands from inside its folder.
-
-## Root commands (OpsPilot)
+## Quick Verification
 
 ```bash
-uv sync                                   # uv only; never raw pip
-uv run pytest                             # offline suite; live tests are excluded by default
-uv run ruff check . && uv run ruff format --check .
-uv run opspilot demo --case C03           # end-to-end, mock model
-uv run opspilot eval --guardrails         # evaluation -> var/eval/
-uv run pytest -m live                     # needs GOOGLE_API_KEY (AI Studio) or Vertex AI ADC
+make check                                # ruff lint/format + offline pytest + guardrail eval
+uv run opspilot demo --case C03           # offline end-to-end run (ScriptedLlm)
+uv run opspilot eval --guardrails         # scorecard + guardrail perturbations -> var/eval/
 ```
 
-## Rules for every project
+## Repo-Specific Constraints
 
-- **Projects stay independent.** No project imports another. Never add a sub-project to the root
-  uv workspace, the root `pyproject.toml`, the root CI job or a root `conftest.py` to make
-  something pass; fix it inside the project.
-- **Agents interpret, code calculates.** Numbers, thresholds, status, ranking and escalation are
-  deterministic Python in a framework-free `core/`; `contracts/` and `core/` never import the
-  agent framework. Never move a calculation into a prompt.
-- **Tools are narrow.** Validated arguments, read-only unless the project says otherwise, and no
-  paths, URLs, SQL or commands taken from the model.
-- **Offline by default.** Every project runs and tests with a deterministic mock model and no
-  credentials. Live-model tests carry the `live` marker. Never assert a live model's exact output.
-- **Ground truth never reaches an agent.** Labels, answer keys and held-back data are read only by
-  generators and evaluation code; keep the tests that guard this.
-- **Report results as measured.** State the model, the number of runs and the spread. A mock result
-  measures the pipeline, not the model. Never skip, loosen or delete a test to get green.
-- **Secrets** come from the environment or ADC; never commit keys or put them in prompts or logs.
-- Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.
+- **Sub-project isolation**: `ledger-hound/`, `traffic-flow-analyzer/`, `platewatch/`, and `api-tests/` each have their own `pyproject.toml`, `uv.lock`, and CI workflow. Run their commands from inside their respective directories; never add them to the root `pyproject.toml`, `uv.lock`, or `conftest.py`.
+- **Google ADK 2.11.0 is pinned** in root `pyproject.toml`. Verify ADK behavioral contracts via `tests/test_adk_contract.py` whenever changing `opspilot/adk/`.
+- **Ground-truth separation**: Case `labels` and `world` definitions in `opspilot/datasets/cases/*.yaml` are read exclusively by `opspilot/datasets/generate.py` and `opspilot/eval/`. Never expose them to tools, session state, or prompts (`tests/test_dataset.py` and `tests/test_evaluation.py` enforce this).
+- **Honest reporting**: Offline runs use `ScriptedLlm` and measure deterministic pipeline, tool, and verifier invariants — never claim mock evaluation scores measure live LLM reasoning quality.
+- **Tracing & OTLP**: `opentelemetry-exporter-otlp-proto-http==1.42.1` is pinned in `dev` dependencies to match `google-adk==2.11.0`'s `opentelemetry-sdk<=1.42.1` bound so all OTLP trace tests in `tests/test_tracing.py` run offline without skipping.
 
-## Where the procedures are
+## Scoped Rules & Skills
 
-Multi-step work is in skills under `.claude/skills/` (also readable by Antigravity through
-`.agents/skills/`): `new-agent-project`, `add-llm-agent`, `llm-eval`, `eval-dataset`, `red-team`.
+- **Path rules** (`.claude/rules/`): `contracts.md`, `core.md`, `adk.md`, `tests.md`
+- **Repo skills** (`.claude/skills/`): `add-llm-agent`, `eval-dataset`, `llm-eval`, `red-team`, `new-agent-project`

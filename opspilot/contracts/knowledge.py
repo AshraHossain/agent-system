@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from opspilot.contracts.evidence import Evidence
 
@@ -12,6 +12,8 @@ DocFlag = Literal["deprecated", "superseded", "suspected_injection", "redacted",
 
 
 class DocumentHit(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     doc_id: str
     doc_type: Literal["runbook", "tech_doc", "incident_report"]
     title: str
@@ -28,6 +30,8 @@ class DocumentHit(BaseModel):
 
 
 class SearchResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     query: str
     doc_type: str
     hits: list[DocumentHit]

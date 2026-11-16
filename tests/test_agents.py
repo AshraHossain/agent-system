@@ -127,3 +127,78 @@ async def test_telemetry_reports_failure_explicitly(settings):
     f = TelemetryFinding.model_validate(state["telemetry_finding"])
     assert f.status == "failed" and "data_unavailable" in f.errors[0]
     assert "service_health_unavailable" in state["scope"]["request_flags"]
+
+
+def test_direct_tool_wrappers_and_error_handling(settings):
+    """Exercise tool wrappers in opspilot/adk/tools.py directly (compare_to_baseline,
+    get_telemetry, lookup_component, get_document, trace_dependency_paths, error branches)."""
+    from types import SimpleNamespace
+
+    from opspilot.adk import tools as T
+    from opspilot.adk.runtime import register, unregister
+    from opspilot.core.telemetry import default_windows
+
+    rt = register("inv-tools-test", settings, "C03")
+    try:
+        w, b = default_windows(rt.dataset.reported_at)
+        scope = {
+            "investigation_id": "inv-tools-test",
+            "dataset_id": "C03",
+            "request_text": "test",
+            "reported_at": rt.dataset.reported_at.isoformat(),
+            "window": {"start": w.start.isoformat(), "end": w.end.isoformat()},
+            "baseline": {"start": b.start.isoformat(), "end": b.end.isoformat()},
+            "candidate_services": ["checkout"],
+            "search_query": "packet loss",
+        }
+
+        class FakeState(dict):
+            def to_dict(self):
+                return dict(self)
+
+        # Uninitialised scope returns invalid_argument error
+        empty_ctx = SimpleNamespace(state=FakeState({"investigation_id": "inv-tools-test"}))
+        res_no_scope = T.summarize_anomalies(empty_ctx)
+        assert (
+            res_no_scope["status"] == "error" and res_no_scope["error_type"] == "invalid_argument"
+        )
+
+        ctx = SimpleNamespace(
+            state=FakeState({"investigation_id": "inv-tools-test", "scope": scope})
+        )
+
+        # compare_to_baseline
+        cmp_ok = T.compare_to_baseline("lnk-l3-s2", "error_rate", ctx)
+        assert cmp_ok["status"] == "ok" and cmp_ok["verdict"] == "critical"
+        cmp_bad = T.compare_to_baseline("lnk-l3-s2", "not_a_metric", ctx)
+        assert cmp_bad["status"] == "error" and cmp_bad["error_type"] == "invalid_argument"
+
+        # get_telemetry
+        tel_ok = T.get_telemetry("lnk-l3-s2", ctx, metrics=["error_rate"])
+        assert tel_ok["status"] == "ok" and "error_rate" in tel_ok["metrics"]
+
+        # lookup_component
+        comp_ok = T.lookup_component("leaf-3", ctx)
+        assert comp_ok["status"] == "ok" and comp_ok["type"] == "switch"
+        comp_unknown = T.lookup_component("leaf-99", ctx)
+        assert comp_unknown["status"] == "ok" and comp_unknown["known"] is False
+
+        # trace_dependency_paths unknown service
+        bad_path = T.trace_dependency_paths("unknown-svc", "leaf-3", ctx)
+        assert bad_path["status"] == "error" and bad_path["error_type"] == "invalid_argument"
+
+        # get_document
+        doc_ok = T.get_document("RB-002", ctx)
+        assert doc_ok["status"] == "ok" and doc_ok["doc_id"] == "RB-002"
+
+        # Unexpected exception inside _call is caught without leaking internals
+        err_res = T._call(
+            ctx, lambda _rt, _sc: (_ for _ in ()).throw(RuntimeError("secret db err"))
+        )
+        assert err_res == {
+            "status": "error",
+            "error_type": "internal_error",
+            "message": "unexpected tool failure",
+        }
+    finally:
+        unregister("inv-tools-test")

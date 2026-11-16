@@ -4,18 +4,22 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 Severity = Literal["info", "warning", "error"]
 
 
 class Check(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     name: str
     passed: bool
     details: str = ""
 
 
 class VerificationIssue(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     severity: Severity
     code: str
     message: str
@@ -23,6 +27,8 @@ class VerificationIssue(BaseModel):
 
 
 class VerificationResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     checks: list[Check]
     issues: list[VerificationIssue]
     invalid_citations: list[str]

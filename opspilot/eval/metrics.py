@@ -37,7 +37,7 @@ LLM_AGENTS = (
 FALLBACK_REASONS = ("invalid_output", "budget", "model_error")
 
 
-@dataclass
+@dataclass(frozen=True)
 class CaseScore:
     case_id: str
     tags: list[str]
@@ -298,6 +298,7 @@ def aggregate(scores: list[CaseScore]) -> dict:
         }
         or None,
         "latency_s_mean": _mean(lat),
+        "latency_s_p50": round(statistics.median(lat), 4) if lat else None,
         "latency_s_p95": lat[min(len(lat) - 1, int(0.95 * len(lat)))] if lat else None,
     }
 

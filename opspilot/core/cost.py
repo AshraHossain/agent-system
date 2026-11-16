@@ -41,6 +41,8 @@ class PriceTable(BaseModel):
 
 
 class CostEstimate(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     currency: str
     input_tokens: int
     output_tokens: int
