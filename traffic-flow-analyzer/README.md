@@ -1,23 +1,77 @@
-# Traffic Flow Analyzer
+# Traffic Flow Analyzer — Multi-Agent Congestion Forecasting & Dashboard
 
-Congestion forecasting with PydanticAI agents and an interactive Gradio + Plotly dashboard.
+[![CI](https://github.com/AshraHossain/agent-system/actions/workflows/trafficflow.yml/badge.svg)](../.github/workflows/trafficflow.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
+[![PydanticAI](https://img.shields.io/badge/PydanticAI-1.0%2B-E92063.svg)](pyproject.toml)
+[![Gradio](https://img.shields.io/badge/Gradio%20%2B%20Plotly-Dashboard-FF7C00.svg)](trafficflow/ui/app.py)
 
+Road congestion forecasting with parallel **PydanticAI** specialist agents, a deterministic statistical forecasting core, a FastAPI REST/SSE service, and an interactive **Gradio + Plotly** dashboard.
+
+### Layered System Architecture (`flowchart LR`)
+
+```mermaid
+flowchart LR
+    subgraph Feeds["Data Feeds (trafficflow/data)"]
+        SYN["SyntheticFeed / CsvFeed / ReplayFeed (PeMSD7, PEMS08)"]
+        LIVEFEED["LiveFeedBuffer (TomTom / HERE / MockLiveFeed)"]
+    end
+
+    subgraph Core["Deterministic Pure Core (trafficflow/core — Zero AI/UI Imports)"]
+        FC["forecast.py + backtest.py + selection.py (Seasonal Median, ETS, MAE Selection)"]
+        ANOM["anomaly.py + congestion.py + status.py + freshness.py (Robust Z-Score & Rules)"]
+    end
+
+    subgraph Agents["PydanticAI Agent Pipeline (trafficflow/agents)"]
+        TOOLS["Validated Read-Only Tools (TrafficDeps.record Evidence)"]
+        PAR["Forecast Analyst + Incident Analyst (Parallel)"]
+        WRITER["Brief Writer + Deterministic Verifier (verify_brief)"]
+    end
+
+    subgraph Surface["Delivery Surfaces"]
+        UI["Gradio + Plotly Dashboard (:7860)"]
+        API["FastAPI REST + SSE Stream (:8000)"]
+        MON["AlertMonitor + SQLite Report Store"]
+    end
+
+    subgraph Backends["Live LLM vs. Offline Deterministic Mock"]
+        CLOUD[("Live LLM: Gemini / OpenAI / Anthropic")]
+        MOCK[("Offline Default: Deterministic Mock Models")]
+    end
+
+    SYN & LIVEFEED --> FC & ANOM --> TOOLS --> PAR --> WRITER --> UI & API & MON
+    PAR & WRITER -. "TRAFFICFLOW_MODEL=<provider:model>" .-> CLOUD
+    PAR & WRITER -. "Default (mock)" .-> MOCK
 ```
-SyntheticFeed / CsvFeed / ReplayFeed / LiveFeed
-        |
-        v
-core (forecast, anomaly, congestion, status, selection, freshness)   ← no AI imports
-        |
-        v
-read-only tools (validated, evidence-recording, stale-aware)
-        |
-        v
-Forecast Analyst \   (parallel PydanticAI agents)
-Incident Analyst /-> Brief Writer -> verifier (citations + numbers)
-                                  -> TrafficReport (status by rule)
-                                  -> Gradio dashboard (history, map, Ask, briefing history)
-                                  -> FastAPI REST layer  (optional)
-                                  -> AlertMonitor / webhooks  (optional)
+
+### End-to-End Briefing & Verification Sequence (`sequenceDiagram`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Operator / Dashboard / API
+    participant P as Agent Pipeline (pipeline.py)
+    participant A as Forecast & Incident Analysts
+    participant C as Pure Core (trafficflow/core)
+    participant W as Brief Writer Agent
+    participant V as Deterministic Verifier (verify_brief)
+
+    rect rgb(235, 245, 255)
+        Note over U,C: Phase 1 — Feed Freshness Check & Parallel Specialist Analysis
+        U->>P: Request network briefing (horizon=60m)
+        P->>C: Check segment freshness & compute rule-based NetworkStatus
+        P->>A: Run Forecast Analyst & Incident Analyst concurrently
+        A->>C: Call forecast_segment / detect_anomalies / network_overview tools
+        C-->>A: Frozen SegmentForecast & Anomaly DTOs + recorded EV-* evidence IDs
+    end
+
+    rect rgb(240, 255, 240)
+        Note over A,U: Phase 2 — Brief Synthesis, Numeric/Citation Verification & Persistence
+        A-->>W: Structured ForecastFinding + IncidentFinding
+        W-->>P: Draft TrafficBrief citing EV-* IDs
+        P->>V: verify_brief(brief, recorded_evidence) (check citations & numeric claims)
+        V-->>P: Verified issues list + rule-derived NetworkStatus
+        P-->>U: Frozen TrafficReport (persisted to SQLite reports store)
+    end
 ```
 
 ## Quick start

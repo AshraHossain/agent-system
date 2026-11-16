@@ -1,29 +1,118 @@
-# PlateWatch
+# PlateWatch — Vision & PydanticAI Licence-Plate Indexing
 
-Detect vehicle plates in images, read and tag them, store them in a searchable vector index, and
-query them through a PydanticAI agent. A self-contained project (own `pyproject.toml`, `uv.lock`,
-tests and CI workflow); run commands from inside this folder.
+[![CI](https://github.com/AshraHossain/agent-system/actions/workflows/platewatch.yml/badge.svg)](../.github/workflows/platewatch.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
+[![PydanticAI](https://img.shields.io/badge/PydanticAI-1.0%2B-E92063.svg)](pyproject.toml)
+[![Contracts](https://img.shields.io/badge/contracts-frozen%20Pydantic-success.svg)](src/platewatch/contracts.py)
 
+Detect vehicle licence plates in images, read and normalize OCR text, tag confidence/format anomalies, persist embeddings in a searchable SQLite vector store, and query them through a grounded **PydanticAI** agent. Self-contained project (own `pyproject.toml`, `uv.lock`, test suite, and CI workflow); run commands from inside `platewatch/`.
+
+---
+
+## 1. System Architecture
+
+### Layered System Architecture (`flowchart LR`)
+
+```mermaid
+flowchart LR
+    subgraph Client["Client & CI Surface"]
+        CLI["platewatch CLI (demo, ingest, search, ask)"]
+        PYTEST["Offline Test Suite (pytest)"]
+    end
+
+    subgraph Edge["Ingestion & Boundary Guards"]
+        PIPE["PlatePipeline (Per-Image 30s Timeout, 25MP Bomb Guard, SHA-256 Dedup)"]
+        AG["PydanticAI Agent + Grounded Output Validator"]
+    end
+
+    subgraph Core["Deterministic Pure Core (platewatch/core — Zero AI/Torch Imports)"]
+        TXT["text.py (normalize_plate, plausible_format, tag_plate, sanitize_ocr_text)"]
+        EMB["embedding.py (HashingEmbedder with OCR-Confusable Folding O/0, I/1, B/8)"]
+        STORE["store.py (SQLite PlateStore + Cosine Vector Search + Sightings Counter)"]
+    end
+
+    subgraph Adapters["Vision Protocol Adapters (platewatch/vision)"]
+        PROT["Detector & Reader Protocols"]
+    end
+
+    subgraph Backends["Live Hugging Face vs. Deterministic Offline Mock"]
+        LIVE[("Live Mode: YOLOS Detector + TrOCR Reader + Live LLM")]
+        MOCK[("Mock Mode: ScriptedVision + FunctionModel Mock Agent")]
+    end
+
+    CLI & PYTEST --> PIPE & AG
+    PIPE --> PROT & TXT & EMB & STORE
+    AG --> PIPE & STORE
+    PROT -. "Live (--with transformers/torch)" .-> LIVE
+    PROT -. "Offline Default (ScriptedVision)" .-> MOCK
+    AG -. "Mock Default (FunctionModel)" .-> MOCK
 ```
-image -> Detector (HF object detection) -> crop -> Reader (TrOCR) -> normalise -> tag -> PlateStore
-                                                                                     ^
-PydanticAI agent tools: scan_new_images · search_plates · list_needs_review ----------+
+
+### End-to-End Ingestion & Search Sequence (`sequenceDiagram`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Operator / CLI
+    participant A as PydanticAI Agent (agent.py)
+    participant P as PlatePipeline (pipeline.py)
+    participant V as Vision Adapter (Detector + Reader)
+    participant C as Pure Core (text.py + embedding.py)
+    participant S as PlateStore (SQLite + Vectors)
+
+    rect rgb(235, 245, 255)
+        Note over U,S: Phase 1 — Idempotent Image Ingestion & OCR Normalization
+        U->>A: Ask "Scan inbox and find plate ABC 123"
+        A->>P: Call tool scan_new_images() (inbox path fixed in PlateDeps)
+        P->>S: Check has_image(image_sha256)
+        P->>V: detect(image) -> BoundingBox list (isolated per 30s timeout)
+        P->>V: read(crop, box) -> raw_text, ocr_confidence
+        P->>C: normalize_plate(raw_text) + tag_plate(plate, confidence)
+        C-->>P: Normalized plate + tags (plausible-format / odd-format / needs-review)
+        P->>S: Persist frozen PlateRecord + L2-normalized n-gram vector
+        P-->>A: Return frozen ScanSummary
+    end
+
+    rect rgb(240, 255, 240)
+        Note over A,U: Phase 2 — Fuzzy Vector Search & Output Grounding Check
+        A->>S: Call tool search_plates(plate_text="ABC 123")
+        S->>C: Embed query (folding OCR-confusable characters)
+        S-->>A: Ranked SearchHit list (exact matches first, cosine score, sightings count)
+        A->>S: Call tool list_needs_review()
+        S-->>A: Plate IDs flagged needs-review
+        A->>A: Run @agent.output_validator (reject any plate_id not returned by a tool)
+        A-->>U: Return validated frozen PlateReport
+    end
 ```
 
-- `core/` is framework-free: normalisation, tagging thresholds, hashing embedder, SQLite store.
-- Tools take no paths/URLs/SQL from the model; the inbox is fixed in deps. The output validator
-  rejects plate ids no tool returned.
-- Setup: `uv sync`. Offline: `uv run platewatch demo` (scripted detector/OCR + mock agent).
-  Tests: `uv run pytest`; lint: `uv run ruff check . && uv run ruff format --check .`.
-- Real models: `uv run --with transformers --with torch platewatch ingest <dir>`. Defaults
-  (`nickmuchi/yolos-small-finetuned-license-plate-detection`, `microsoft/trocr-base-printed`) are
-  **untested** here; override with `PLATEWATCH_DETECTOR_MODEL` / `PLATEWATCH_OCR_MODEL`.
-- Live model check (your own labelled photos, needs network to huggingface.co): `PLATEWATCH_LIVE_DIR=<dir>
-  uv run --with transformers --with torch pytest -m live tests/test_platewatch_live.py -s`.
-  Name each photo after its plate (`ABC1234.jpg`).
-- Ingestion is isolated per image (`PLATEWATCH_IMAGE_TIMEOUT` seconds, default 30, `0` disables)
-  and per detection; failures are counted in the scan summary. Search hits carry `sightings`.
-- Live agent: `PLATEWATCH_AGENT_MODEL=<provider:model>`.
+---
 
-Limits: the embedder is lexical (n-grams with OCR-confusable folding), not learned; search is a
-brute-force scan (fine to ~10^5 plates); format rules are region-agnostic; not production-ready.
+## 2. Quick Start & Commands
+
+```bash
+cd platewatch
+uv sync
+uv run ruff check . && uv run ruff format --check .
+uv run pytest                                  # 100% offline suite (ScriptedVision + FunctionModel)
+uv run platewatch demo                         # end-to-end offline ingestion + search + agent demo
+```
+
+### Live Hugging Face Vision & Live Agent (Optional)
+
+```bash
+# Ingest a directory of images with real Hugging Face YOLOS + TrOCR models
+uv run --with transformers --with torch platewatch ingest <image_dir>
+
+# Run live model accuracy evaluation against your own labelled photos (named <PLATE>.jpg)
+PLATEWATCH_LIVE_DIR=<photos_dir> uv run --with transformers --with torch \
+  pytest -m live tests/test_platewatch_live.py -s
+```
+
+---
+
+## 3. Architectural Invariants & Honest Limits
+
+- **Framework-Free Pure Core**: `src/platewatch/core/` never imports `pydantic_ai`, `torch`, `transformers`, or `google` (enforced by `tests/test_platewatch.py`).
+- **Frozen Contracts**: Every model in `src/platewatch/contracts.py` (`BoundingBox`, `RawDetection`, `PlateRecord`, `SearchHit`, `ScanSummary`, `PlateReport`) enforces `ConfigDict(frozen=True)`.
+- **No Model-Supplied Paths/SQL**: Agent tools take no file paths, URLs, or SQL from the model; the inbox directory is fixed in `PlateDeps`, and `@agent.output_validator` rejects any `plate_id` not returned by a tool in the current run.
+- **Honest Limits**: Default Hugging Face model weights (`nickmuchi/yolos-small-finetuned-license-plate-detection`, `microsoft/trocr-base-printed`) require live photo evaluation before quoting accuracy; the offline embedder is lexical (character n-grams with OCR-confusable folding), and search is an exact cosine scan suited for up to ~10^5 plates.

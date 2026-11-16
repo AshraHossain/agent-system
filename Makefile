@@ -1,6 +1,14 @@
-.PHONY: check lint format test test-unit test-integration eval demo build-data clean
+.PHONY: check check-all check-subprojects lint format test test-unit test-integration eval demo build-data clean
 
 check: lint test eval
+
+check-all: check check-subprojects
+
+check-subprojects:
+	cd platewatch && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
+	cd traffic-flow-analyzer && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
+	cd ledger-hound && uv run ruff check . && uv run ruff format --check . && uv run --extra dspy pytest -q
+	cd api-tests && uv run ruff check . && uv run ruff format --check . && uv run pytest -m smoke -x -q
 
 lint:
 	uv run ruff check .

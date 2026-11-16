@@ -1,10 +1,66 @@
-# api-tests
+# api-tests — Black-Box Contract, Fuzzing & Security Test Suite
+
+[![CI](https://github.com/AshraHossain/agent-system/actions/workflows/api-tests.yml/badge.svg)](../.github/workflows/api-tests.yml)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
+[![Schemathesis](https://img.shields.io/badge/Schemathesis-OpenAPI%20Fuzzing-6B4FBB.svg)](pyproject.toml)
+[![Schemas](https://img.shields.io/badge/schemas-frozen%20%2B%20extra%3Dforbid-success.svg)](src/api_tests/schemas.py)
 
 A black-box API test suite for the **Traffic Flow API** (`../traffic-flow-analyzer`,
 `trafficflow serve-api`). It talks to the service over HTTP only and imports none of its
 code, so the same suite runs against a local process, a container or a deployed instance.
 
 > Practice project. Not production software.
+
+### Layered Test Harness Architecture (`flowchart LR`)
+
+```mermaid
+flowchart LR
+    subgraph Runner["Pytest Marker Suites (tests/)"]
+        SMK["smoke (Liveness & Spec Coverage)"]
+        FNC["functional + negative (Invariants & 4xx Shapes)"]
+        CON["contract (Schemathesis Property Fuzzing)"]
+        SEC["security + perf (Hygiene, Auth, p95 Budgets)"]
+    end
+
+    subgraph Core["Black-Box Client & Independent Contracts (src/api_tests)"]
+        CL["client.py (Bounded Timeouts, Bearer Token, Last-5 Exchange Ring Buffer)"]
+        SCH["schemas.py (Frozen Pydantic Models with extra=forbid)"]
+        AST["assertions.py + contract.py (Domain Invariants & Tagged Spec Patches)"]
+    end
+
+    subgraph Target["Target Under Test"]
+        SPAWN[("Local Subprocess Fixture (trafficflow serve-api)")]
+        REMOTE[("External Container / Deployment (API_BASE_URL)")]
+    end
+
+    SMK & FNC & CON & SEC --> CL & SCH & AST
+    CL -. "Default (Local)" .-> SPAWN
+    CL -. "API_BASE_URL" .-> REMOTE
+```
+
+### End-to-End Black-Box Verification Sequence (`sequenceDiagram`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Pytest Runner
+    participant S as Server Fixture (server.py)
+    participant C as ApiClient (client.py)
+    participant T as Traffic Flow API Target
+    participant V as Independent Schema & Invariant Verifier
+
+    rect rgb(235, 245, 255)
+        P->>S: Start session fixture (or connect to API_BASE_URL)
+        S->>T: Spawn trafficflow serve-api & poll /openapi.json until ready
+    end
+    rect rgb(240, 255, 240)
+        P->>C: Execute smoke, functional, negative, security & Schemathesis fuzz requests
+        C->>T: Send HTTP request with strict timeout & optional Bearer token
+        T-->>C: HTTP response (status, headers, JSON/SSE payload)
+        C->>V: Validate against frozen Strict schemas (extra=forbid) & domain invariants
+        V-->>P: Pass or attach last 5 HTTP exchanges to failure report
+    end
+```
 
 ## Quick start
 

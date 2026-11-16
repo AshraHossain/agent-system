@@ -1,4 +1,9 @@
-# Ledger Hound
+# Ledger Hound — Agentic QA & Financial-Control Red-Team Harness
+
+[![CI](https://github.com/AshraHossain/agent-system/actions/workflows/ledger-hound.yml/badge.svg)](../.github/workflows/ledger-hound.yml)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
+[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI%20Agents%20SDK-%2B%20DSPy-412991.svg)](pyproject.toml)
+[![Planted Bugs Caught](https://img.shields.io/badge/planted%20bugs%20caught-26%2F26%20(100%25)-brightgreen.svg)](src/ledger_hound/qa/score.py)
 
 An agentic QA system for a **Purchase-to-Pay (P2P) API**. It explores the
 API, attacks its financial controls, and writes a judge report saying which
@@ -9,6 +14,69 @@ so the agent can be scored: *it catches 26/26 planted bugs, with 0 false
 alarms on the clean API.*
 
 > Practice project for an agentic-QA interview challenge. Not production software.
+
+### Layered System Architecture (`flowchart LR`)
+
+```mermaid
+flowchart LR
+    subgraph Client["CLI & CI Surface"]
+        CLI["ledger-hound CLI (run, score, stress, diff, grade, dspy)"]
+    end
+
+    subgraph Agents["Agentic QA & Red-Team Layer (ledger_hound/qa)"]
+        DISC["discovery.py + spec_diff.py (OpenAPI Role Mapping & Breaking Diff)"]
+        EXP["explorer.py + agentic.py (Happy-Path P2P Walk & Guarded call_api Tool)"]
+        ADV["adversary.py + stress.py (28 Targeted Probes + Seeded Property Stress & Shrinking)"]
+        BRAIN["brain.py + dspy_opt.py (Plan/Explain Brain + Optional DSPy Classifier)"]
+    end
+
+    subgraph Core["Deterministic Financial Oracle (qa/oracle.py + judge.py)"]
+        ORA["Decimal GL Balance, 3-Way Match, Sub-Cent Drift & Exposure Checks (LLM Never Decides Pass/Fail)"]
+    end
+
+    subgraph Target["System Under Test & LLM Backends"]
+        P2P[("Practice P2P FastAPI Server (26 Switchable Bugs)")]
+        LLM[("Live OpenAI-Compatible Brain vs. Deterministic Mock Brain")]
+    end
+
+    CLI --> DISC & EXP & ADV & BRAIN
+    EXP & ADV --> ORA --> CLI
+    EXP & ADV --> P2P
+    BRAIN -. "Live / Mock" .-> LLM
+```
+
+### End-to-End Exploration, Attack & Oracle Grading Sequence (`sequenceDiagram`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Operator / CI
+    participant J as Judge Orchestrator (judge.py)
+    participant D as Discovery & Spec Diff
+    participant E as Explorer & Adversary (28 Probes)
+    participant P as Target P2P API
+    participant O as Decimal Financial Oracle (oracle.py)
+    participant B as Brain (LLM or Deterministic Mock)
+
+    rect rgb(235, 245, 255)
+        U->>J: ledger-hound run (--local-bugs or --base-url)
+        J->>D: Fetch /openapi.json, map operations to P2P roles & diff against previous surface
+        D-->>J: Discovered API surface + breaking/non-breaking changes
+    end
+    rect rgb(240, 255, 240)
+        J->>E: Walk P2P happy path (Vendor -> PO -> Submit -> Receive -> Invoice -> Match -> Approve -> Pay)
+        E->>P: Execute HTTP lifecycle calls with isolated run tag
+        E->>O: Verify Decimal GL balance & AP subledger at every transition
+        J->>E: Run 28 targeted adversarial probes (3-way match, UoM, race, duplicate, float drift)
+        E->>P: Send adversarial payloads & re-read ledger state
+        E->>O: Compute deterministic pass/breach verdict per control rule
+    end
+    rect rgb(252, 240, 255)
+        J->>B: Annotate impact & summarize verified control breaches
+        B-->>J: Executive narrative + API diff explanation
+        J-->>U: Write JSON report (var/reports/latest.json) & exit 1 on any breach
+    end
+```
 
 ## Quick start
 
