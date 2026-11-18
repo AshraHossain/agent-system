@@ -126,6 +126,9 @@ def main(argv: list[str] | None = None) -> int:
     sa.add_argument("--provider", choices=["mock", "tomtom", "here"], default="mock")
     sa.add_argument("--api-key", default="")
     sa.add_argument("--model", default=None, help="model for /ask endpoint")
+    sa.add_argument(
+        "--token", default="", help="require Authorization: Bearer <token> on every request"
+    )
 
     a = p.parse_args(argv)
 
@@ -224,7 +227,8 @@ def main(argv: list[str] | None = None) -> int:
             feed = SyntheticFeed()
             feed.advance(12)
         model = a.model or os.environ.get("TRAFFICFLOW_MODEL")
-        app = build_api_app(feed, model=model)
+        token = a.token or os.environ.get("TRAFFICFLOW_API_TOKEN")
+        app = build_api_app(feed, model=model, api_token=token or None)
         uvicorn.run(app, host=a.host, port=a.port)
     else:
         from trafficflow.ui.app import build_app

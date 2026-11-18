@@ -14,7 +14,8 @@ with evidence instead of being hidden.
 - **Black-box over HTTP.** `API_BASE_URL` selects the server; without it a session fixture
   starts one on a free port. No target imports.
 - **Stack:** pytest, httpx, Pydantic (response models), schemathesis (OpenAPI fuzzing),
-  pytest-timeout, pytest-xdist, ruff, uv.
+  Hypothesis (call-sequence state machine), pytest-timeout, pytest-xdist, ruff, uv; Locust for
+  the separate load test (`--group load`, not a default dependency).
 - **Defects become strict xfails** with IDs in `docs/FINDINGS.md`, so a fix is noticed.
 
 ## Phases
@@ -27,8 +28,16 @@ with evidence instead of being hidden.
    changes to `api-tests/` or `traffic-flow-analyzer/`, with the target started by the session
    fixture (not the docker-compose image, which also installs the `ml` extra and is much slower
    to build). JUnit XML and the server log are uploaded as an artifact.
-6. ☐ Stateful/link-based fuzzing if the API gains write endpoints; load testing (e.g. Locust)
-   kept separate from this suite.
+6. ✅ Request-sequence fuzzing: `tests/stateful/` runs a Hypothesis rule-based state machine —
+   long random sequences of calls against one live server, checking invariants that only hold
+   across a sequence (the segment list doesn't change mid-run, the feed's clock never runs
+   backwards). The API is still read-only, so there is no create/update/delete chain to test as
+   a *stateful* sequence in the CRUD sense; that stays pending if the API gains write endpoints.
+   Load testing: `loadtest/locustfile.py` (Locust, kept out of the pytest suite and its default
+   deps — see `docs/LOADTEST.md`). It found a real bottleneck in `/status` under concurrent
+   load, documented there rather than fixed in this suite.
+7. ☐ Fix the `/status`/`/forecast` concurrency bottleneck `docs/LOADTEST.md` found, in
+   `traffic-flow-analyzer` (out of this suite's scope; see that doc's recommendations).
 
 ## Out of scope
 

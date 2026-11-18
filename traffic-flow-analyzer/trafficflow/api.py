@@ -9,6 +9,10 @@ Start with::
     uv run trafficflow serve-api --live     # MockLiveFeed (no API key needed)
     TOMTOM_API_KEY=... uv run trafficflow serve-api --live --provider tomtom
 
+With ``TRAFFICFLOW_API_TOKEN`` set (or ``--token``), every route requires
+``Authorization: Bearer <token>`` (``trafficflow.core.auth``). Unset, the API is
+open, as before.
+
 Or programmatically::
 
     import uvicorn
@@ -151,12 +155,14 @@ class PathOut(_BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def build_app(feed: Feed, model: str | None = None) -> FastAPI:
+def build_app(feed: Feed, model: str | None = None, *, api_token: str | None = None) -> FastAPI:
     """Return a FastAPI app backed by *feed*.
 
-    All routes are read-only; the feed is never mutated by the API.
+    All routes are read-only; the feed is never mutated by the API. With
+    *api_token* set, every route requires a matching bearer token.
     """
     from trafficflow.core.anomaly import detect
+    from trafficflow.core.auth import BearerTokenAuth, hash_token
     from trafficflow.core.congestion import congestion_index, level_for
     from trafficflow.core.forecast import forecast_segment
     from trafficflow.core.freshness import stale_segments
@@ -167,6 +173,8 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         description="Read-only congestion forecasting endpoints.",
         version="0.1.0",
     )
+    if api_token:
+        app.add_middleware(BearerTokenAuth, digest=hash_token(api_token))
 
     @app.get("/", include_in_schema=False)
     def root():

@@ -225,3 +225,50 @@ def test_root_redirects_to_docs(client):
 
 def test_root_is_not_in_the_openapi_schema(client):
     assert "/" not in client.get("/openapi.json").json()["paths"]
+
+
+# -- bearer-token auth (off by default; on when a token is configured) -------
+
+TOKEN = "s3cret-test-token"
+
+
+@pytest.fixture(scope="module")
+def auth_client():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    return TestClient(build_app(feed, api_token=TOKEN))
+
+
+def test_auth_off_by_default(client):
+    assert client.get("/segments").status_code == 200
+
+
+def test_auth_rejects_missing_token(auth_client):
+    r = auth_client.get("/segments")
+    assert r.status_code == 401
+    assert "www-authenticate" in r.headers
+
+
+def test_auth_rejects_wrong_token(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 401
+
+
+def test_auth_rejects_malformed_header(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": TOKEN})  # no "Bearer "
+    assert r.status_code == 401
+
+
+def test_auth_accepts_the_configured_token(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": f"Bearer {TOKEN}"})
+    assert r.status_code == 200
+
+
+def test_auth_covers_docs_and_openapi(auth_client):
+    assert auth_client.get("/docs").status_code == 401
+    assert auth_client.get("/openapi.json").status_code == 401
+
+
+def test_auth_401_does_not_echo_the_configured_token(auth_client):
+    r = auth_client.get("/segments")
+    assert TOKEN not in r.text
