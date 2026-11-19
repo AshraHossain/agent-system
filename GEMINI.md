@@ -6,6 +6,7 @@ This file configures **Google Antigravity (AGY)** for the `agent-system` workspa
 
 - **Repository Architecture & Commands**: Read [AGENTS.md](AGENTS.md) first for the project map, verified CLI/Makefile commands, module boundaries, and layering invariants.
 - **Design & System Diagrams**: Read [ARCHITECTURE.md](ARCHITECTURE.md), [PLAN.md](PLAN.md), and [SECURITY.md](SECURITY.md) before modifying agent orchestration, tools, or verification logic.
+- **Planning Workflow**: [PLANNING.md](PLANNING.md) (GSD roadmap → Superpowers plan → Ruflo execution) applies to the root project and every sub-project; the backlog is [TASK.md](TASK.md).
 - **Global Antigravity Plugin**: Follows `~/.gemini/config/plugins/gemini-core-workflow/rules/AGENTS.md` and `~/.gemini/config/plugins/gemini-core-workflow/skills/enterprise-readme-architecture/SKILL.md`.
 
 ## 2. Path-Specific Rules (`.agents/rules/` -> `.claude/rules/`)

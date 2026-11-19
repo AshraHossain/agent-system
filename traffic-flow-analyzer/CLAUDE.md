@@ -51,3 +51,7 @@ TRAFFICFLOW_MODEL=<provider:model> uv run trafficflow demo   # live model (needs
 - Conventional commits: `feat|fix|test|refactor|docs|chore(scope): ...`.
 - Keep the mock deterministic; never assert live-model outputs exactly.
 - Default model is `mock`; no model name is hardcoded, use `TRAFFICFLOW_MODEL`.
+
+## Planning
+
+Plan non-trivial work with GSD → Superpowers → Ruflo as set out in [../PLANNING.md](../PLANNING.md); run every check inside this directory.

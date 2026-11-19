@@ -35,3 +35,7 @@ uv run ruff check . && uv run ruff format --check .
 
 - Conventional commits, scope `api-tests`: `test(api-tests): ...`, `docs(api-tests): ...`.
 - Do not claim production readiness.
+
+## Planning
+
+Plan non-trivial work with GSD → Superpowers → Ruflo as set out in [../PLANNING.md](../PLANNING.md); run every check inside this directory.

@@ -49,3 +49,7 @@ uv run pytest -m live                     # Live Gemini suite (requires GOOGLE_A
 3. **Content-Addressed Evidence & Ground-Truth Isolation**: Every tool registers deterministic `EV-(TEL|TOP|DOC|INC|DQ)-<sha256[:8]>` records in session state (`evidence:<ID>`). Case `labels` and `world` specs never enter SQLite datasets, tool outputs, or prompts.
 4. **Untrusted Data Quarantine (`<untrusted_context>`)**: Retrieved documents and external texts are normalized, secret-redacted, scanned for prompt injection, and wrapped in `<untrusted_context id="...">...</untrusted_context>` (with legacy `<<untrusted_document>>` spoofing stripped). Suspected injections are withheld and trigger `security_team` escalation.
 5. **Read-Only by Construction**: No tool can mutate infrastructure or files; datasets open with SQLite `mode=ro`; `core/policy.py` strips any non-observational recommendation.
+
+## Planning
+
+Root and every sub-project plan non-trivial work with GSD → Superpowers → Ruflo: see [PLANNING.md](PLANNING.md). Backlog: [TASK.md](TASK.md).

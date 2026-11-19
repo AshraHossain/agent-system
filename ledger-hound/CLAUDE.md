@@ -20,3 +20,7 @@ uv run ledger-hound stress --local-bugs silent_partial --shrink 1
 - **Deterministic Offline Mock**: Without `BYNARA_API_KEY` (or with `--mock`), `qa/brain.py` uses a deterministic mock brain and `tests/test_dspy_opt.py` uses `DummyLM`.
 - **Ground-Truth Isolation**: Planted bug names and blind-practice answer keys are never passed to the explorer, adversary, or classifier inputs (`tests/test_labels.py` guards this).
 - **Sub-Project Independence**: Never import from the root `opspilot` package or other sibling projects.
+
+## Planning
+
+Plan non-trivial work with GSD → Superpowers → Ruflo as set out in [../PLANNING.md](../PLANNING.md); run every check inside this directory.
