@@ -18,6 +18,10 @@ uv run opspilot eval --guardrails         # scorecard + guardrail perturbations 
 - **Honest reporting**: Offline runs use `ScriptedLlm` and measure deterministic pipeline, tool, and verifier invariants — never claim mock evaluation scores measure live LLM reasoning quality.
 - **Tracing & OTLP**: `opentelemetry-exporter-otlp-proto-http==1.42.1` is pinned in `dev` dependencies to match `google-adk==2.11.0`'s `opentelemetry-sdk<=1.42.1` bound so all OTLP trace tests in `tests/test_tracing.py` run offline without skipping.
 
+## Planning
+
+Plan non-trivial work in every project (root and sub-projects) with GSD (roadmap) → Superpowers (`brainstorming`, `writing-plans`) → Ruflo (parallel execution), as set out in [PLANNING.md](PLANNING.md). Record outcomes in [TASK.md](TASK.md) and the project's `PLAN.md` phase table. If a plugin is missing in the session, follow the same steps by hand.
+
 ## Scoped Rules & Skills
 
 - **Path rules** (`.claude/rules/`): `contracts.md`, `core.md`, `adk.md`, `tests.md`

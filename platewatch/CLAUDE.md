@@ -26,3 +26,7 @@ PLATEWATCH_LIVE_DIR=<photos> uv run --with transformers --with torch \
   are covered only by `-m live`. Offline tests use `ScriptedVision`.
 - The Hugging Face defaults have never been run against real photos; do not report accuracy for
   them until the live test has been run and its numbers recorded.
+
+## Planning
+
+Plan non-trivial work with GSD → Superpowers → Ruflo as set out in [../PLANNING.md](../PLANNING.md); run every check inside this directory.
