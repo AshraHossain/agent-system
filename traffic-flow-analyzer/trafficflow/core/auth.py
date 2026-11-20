@@ -35,8 +35,35 @@ def parse_bearer(authorization_values: Sequence[str]) -> str | None:
     return token
 
 
+def parse_api_key(api_key_values: Sequence[str]) -> str | None:
+    """The token from exactly one well-formed `X-API-Key: <token>` header."""
+    if len(api_key_values) != 1:
+        return None
+    token = api_key_values[0].strip()
+    if not token or any(ch.isspace() for ch in token) or len(token) > MAX_TOKEN_CHARS:
+        return None
+    return token
+
+
+def extract_request_token(
+    authorization_values: Sequence[str],
+    api_key_values: Sequence[str] = (),
+) -> str | None:
+    """Extract a single credential from either `Authorization: Bearer` or `X-API-Key`.
+
+    Refuses ambiguous requests that supply both headers simultaneously.
+    """
+    if authorization_values and api_key_values:
+        return None
+    if authorization_values:
+        return parse_bearer(authorization_values)
+    if api_key_values:
+        return parse_api_key(api_key_values)
+    return None
+
+
 class BearerTokenAuth:
-    """Require `Authorization: Bearer <token>` on every HTTP request.
+    """Require `Authorization: Bearer <token>` or `X-API-Key: <token>` on every HTTP request.
 
     Plain ASGI, not `BaseHTTPMiddleware`: it must run before FastAPI's own routing
     (a bad token never reaches a handler) and must not buffer the streaming
@@ -52,8 +79,10 @@ class BearerTokenAuth:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        values = [v.decode("latin-1") for k, v in scope["headers"] if k.lower() == b"authorization"]
-        token = parse_bearer(values)
+        headers = [(k.lower(), v.decode("latin-1")) for k, v in scope["headers"]]
+        auth_values = [v for k, v in headers if k == b"authorization"]
+        api_key_values = [v for k, v in headers if k == b"x-api-key"]
+        token = extract_request_token(auth_values, api_key_values)
         if token is not None and verify_token(token, self.digest):
             await self.app(scope, receive, send)
             return

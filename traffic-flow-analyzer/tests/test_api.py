@@ -264,6 +264,18 @@ def test_auth_accepts_the_configured_token(auth_client):
     assert r.status_code == 200
 
 
+def test_auth_accepts_the_configured_token_via_x_api_key(auth_client):
+    r = auth_client.get("/segments", headers={"X-API-Key": TOKEN})
+    assert r.status_code == 200
+
+
+def test_auth_refuses_both_bearer_and_api_key_headers_at_once(auth_client):
+    r = auth_client.get(
+        "/segments", headers={"Authorization": f"Bearer {TOKEN}", "X-API-Key": TOKEN}
+    )
+    assert r.status_code == 401
+
+
 def test_auth_covers_docs_and_openapi(auth_client):
     assert auth_client.get("/docs").status_code == 401
     assert auth_client.get("/openapi.json").status_code == 401

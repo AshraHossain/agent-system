@@ -10,8 +10,8 @@ Start with::
     TOMTOM_API_KEY=... uv run trafficflow serve-api --live --provider tomtom
 
 With ``TRAFFICFLOW_API_TOKEN`` set (or ``--token``), every route requires
-``Authorization: Bearer <token>`` (``trafficflow.core.auth``). Unset, the API is
-open, as before.
+``Authorization: Bearer <token>`` or ``X-API-Key: <token>``, never both
+(``trafficflow.core.auth``). Unset, the API is open, as before.
 
 Or programmatically::
 
