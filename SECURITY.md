@@ -39,3 +39,15 @@ uv run pytest tests/test_security.py tests/test_security_e2e.py tests/test_auth.
 - **Regex Injection Heuristics**: `INJECTION_PATTERNS` in `opspilot/core/security.py` catch explicit instruction overrides, AI-addressed steering, approval bypasses, and secret exfiltration, but paraphrased or multilingual payloads can evade pattern matching. The primary defense is architectural: `<untrusted_context>` data framing, zero mutating tools, and deterministic rule-based verification/status calculation.
 - **Transport Encryption**: Bearer tokens and API keys travel in HTTP headers; always terminate TLS in front of `opspilot serve` when binding to non-loopback interfaces.
 - **Local Storage**: SQLite session state (`var/sessions.db`) is stored unencrypted on local disk; secrets are redacted before state persistence.
+- **`ledger-hound/p2p_api` is deliberately exempt from this threat model.** It is a
+  *system under test*, not a service: a practice Purchase-to-Pay API carrying 26
+  switchable, intentionally planted financial-integrity bugs that Ledger Hound's own
+  QA agent is scored against (26/26 detection, 0 false alarms). Adding authentication,
+  rate limiting or input sanitization to it would invalidate that scoring harness and
+  break its suite. It binds to loopback for local practice runs only, is never
+  deployed, and must not be treated as an example of hardened service code — the
+  hardened reference is `opspilot/api.py`.
+- **`traffic-flow-analyzer/trafficflow/api.py` is not yet hardened.** It currently has
+  no authentication, rate limiting or OWASP response headers; the middleware stack
+  applied to `opspilot/api.py` has not been ported to it. Terminate TLS and restrict
+  network exposure in front of it until that work lands.
