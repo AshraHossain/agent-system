@@ -81,7 +81,7 @@ sequenceDiagram
 ## Quick start
 
 ```bash
-uv sync
+uv sync --extra dspy
 uv run pytest                                  # 130 offline tests, no API key needed
 uv run ledger-hound attacks                    # list attacks and plantable bugs
 uv run ledger-hound run --local-bugs dup_case  # explore + attack + judge (in-process API)
