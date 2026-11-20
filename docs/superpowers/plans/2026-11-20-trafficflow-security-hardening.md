@@ -58,22 +58,28 @@
 # tests/test_security.py
 from trafficflow.core.auth import extract_request_token, parse_api_key, parse_bearer
 
+
 def test_parse_api_key_accepts_exactly_one_well_formed_header():
     assert parse_api_key(["abc123"]) == "abc123"
+
 
 def test_parse_api_key_rejects_empty_whitespace_or_duplicate_headers():
     assert parse_api_key([""]) is None
     assert parse_api_key(["a b"]) is None
     assert parse_api_key(["a", "b"]) is None
 
+
 def test_extract_request_token_prefers_bearer_when_only_bearer_present():
     assert extract_request_token(["Bearer tok"], []) == "tok"
+
 
 def test_extract_request_token_prefers_api_key_when_only_api_key_present():
     assert extract_request_token([], ["tok"]) == "tok"
 
+
 def test_extract_request_token_refuses_both_headers_present():
     assert extract_request_token(["Bearer tok"], ["tok"]) is None
+
 
 def test_extract_request_token_returns_none_when_neither_present():
     assert extract_request_token([], []) is None
@@ -103,6 +109,7 @@ In `trafficflow/core/auth.py`, change the header extraction: collect `x-api-key`
 def test_auth_accepts_the_configured_token_via_x_api_key(auth_client):
     r = auth_client.get("/segments", headers={"X-API-Key": TOKEN})
     assert r.status_code == 200
+
 
 def test_auth_refuses_both_bearer_and_api_key_headers_at_once(auth_client):
     r = auth_client.get(
@@ -150,11 +157,13 @@ git commit -m "feat(trafficflow): accept X-API-Key as an alternative to Authoriz
 # tests/test_security.py (extend)
 from trafficflow.core.security import SlidingWindowRateLimiter
 
+
 def test_rate_limiter_disabled_by_default_always_allows():
     limiter = SlidingWindowRateLimiter(limit_per_minute=0)
     for _ in range(1000):
         allowed, retry_after = limiter.allow("client-a")
         assert allowed and retry_after == 0
+
 
 def test_rate_limiter_allows_up_to_the_limit_then_blocks():
     limiter = SlidingWindowRateLimiter(limit_per_minute=2, window_s=60.0)
@@ -163,10 +172,12 @@ def test_rate_limiter_allows_up_to_the_limit_then_blocks():
     allowed, retry_after = limiter.allow("client-a", now=2.0)
     assert not allowed and retry_after == 60
 
+
 def test_rate_limiter_tracks_clients_independently():
     limiter = SlidingWindowRateLimiter(limit_per_minute=1, window_s=60.0)
     assert limiter.allow("client-a", now=0.0) == (True, 0)
     assert limiter.allow("client-b", now=0.0) == (True, 0)
+
 
 def test_rate_limiter_window_slides_and_frees_capacity():
     limiter = SlidingWindowRateLimiter(limit_per_minute=1, window_s=60.0)
@@ -229,7 +240,9 @@ if rate_limit_per_minute > 0:
 In the `serve-api` subparser (alongside the existing `--token` argument), add:
 ```python
 sa.add_argument(
-    "--rate-limit", type=int, default=0,
+    "--rate-limit",
+    type=int,
+    default=0,
     help="requests/minute per client before 429 (0 = disabled; env TRAFFICFLOW_RATE_LIMIT_PER_MINUTE)",
 )
 ```
@@ -277,6 +290,7 @@ EXPECTED_HEADERS = {
     "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
 }
 
+
 def test_every_response_carries_owasp_and_telemetry_headers(client):
     r = client.get("/segments")
     assert "x-request-id" in r.headers
@@ -284,11 +298,13 @@ def test_every_response_carries_owasp_and_telemetry_headers(client):
     for name, value in EXPECTED_HEADERS.items():
         assert r.headers[name] == value
 
+
 def test_docs_and_openapi_omit_the_strict_csp_but_keep_other_headers(client):
     for path in ("/docs", "/redoc", "/openapi.json"):
         r = client.get(path)
         assert "content-security-policy" not in r.headers
         assert r.headers["x-content-type-options"] == "nosniff"
+
 
 def test_a_429_response_still_carries_telemetry_headers():
     feed = SyntheticFeed(days=21)
