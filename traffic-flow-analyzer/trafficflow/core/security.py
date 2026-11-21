@@ -106,6 +106,39 @@ class TelemetryMiddleware:
         await self.app(scope, receive, send_with_telemetry)
 
 
+MAX_REQUEST_BYTES: int = 64 * 1024
+
+
+class PayloadSizeGuard:
+    """ASGI middleware rejecting oversized POST bodies with HTTP 413.
+
+    Checks only the `Content-Length` header, not actual bytes received
+    (Design Decision 7): a chunked-transfer-encoding request with no, or a
+    lying, `Content-Length` bypasses this guard. Building chunked-body byte
+    counting is explicitly out of scope for this port.
+    """
+
+    def __init__(self, app, max_bytes: int = MAX_REQUEST_BYTES):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] != "POST":
+            await self.app(scope, receive, send)
+            return
+        for k, v in scope.get("headers") or ():
+            if k.lower() == b"content-length":
+                try:
+                    content_length = int(v)
+                except ValueError:
+                    break
+                if content_length > self.max_bytes:
+                    await _json_error(send, 413, f"payload exceeds {self.max_bytes} bytes")
+                    return
+                break
+        await self.app(scope, receive, send)
+
+
 class SlidingWindowRateLimiter:
     """Deterministic sliding-window rate limiter keyed by client identifier."""
 

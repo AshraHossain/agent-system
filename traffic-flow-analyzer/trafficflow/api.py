@@ -164,12 +164,15 @@ def build_app(
 ) -> FastAPI:
     """Return a FastAPI app backed by *feed*.
 
-    All routes are read-only; the feed is never mutated by the API. With
-    *api_token* set, every route requires a matching bearer token. With
-    *rate_limit_per_minute* set above 0, each client is capped to that many
-    requests per minute, past which requests get HTTP 429 with `Retry-After`.
-    Every response, including 401s and 429s, always carries OWASP security
-    headers plus `X-Request-ID`/`X-Process-Time-Ms` telemetry (see
+    All routes are read-only; the feed is never mutated by the API. Every POST
+    body over 64 KiB (`trafficflow.core.security.PayloadSizeGuard`) is always
+    rejected with HTTP 413, checked by `Content-Length` before auth or rate
+    limiting run. With *api_token* set, every route requires a matching
+    bearer token. With *rate_limit_per_minute* set above 0, each client is
+    capped to that many requests per minute, past which requests get HTTP 429
+    with `Retry-After`. Every response, including 401s, 413s, and 429s,
+    always carries OWASP security headers plus
+    `X-Request-ID`/`X-Process-Time-Ms` telemetry (see
     `trafficflow.core.security.TelemetryMiddleware`).
     """
     from trafficflow.core.anomaly import detect
@@ -177,7 +180,11 @@ def build_app(
     from trafficflow.core.congestion import congestion_index, level_for
     from trafficflow.core.forecast import forecast_segment
     from trafficflow.core.freshness import stale_segments
-    from trafficflow.core.security import RateLimitMiddleware, TelemetryMiddleware
+    from trafficflow.core.security import (
+        PayloadSizeGuard,
+        RateLimitMiddleware,
+        TelemetryMiddleware,
+    )
     from trafficflow.core.status import network_status
 
     app = FastAPI(
@@ -185,6 +192,7 @@ def build_app(
         description="Read-only congestion forecasting endpoints.",
         version="0.1.0",
     )
+    app.add_middleware(PayloadSizeGuard)
     if api_token:
         app.add_middleware(BearerTokenAuth, digest=hash_token(api_token))
     if rate_limit_per_minute > 0:

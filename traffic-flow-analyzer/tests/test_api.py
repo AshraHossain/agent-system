@@ -305,6 +305,15 @@ def test_rate_limit_is_disabled_by_default(client):
         assert client.get("/segments").status_code == 200
 
 
+# -- payload-size guard (always on) -----------------------------------------
+
+
+def test_oversized_post_body_is_rejected_with_413(client):
+    big_question = "x" * (65 * 1024)  # just over the 64 KiB cap
+    r = client.post("/ask", json={"question": big_question})
+    assert r.status_code == 413
+
+
 # -- OWASP + telemetry response headers (always on) ------------------------
 
 EXPECTED_HEADERS = {
