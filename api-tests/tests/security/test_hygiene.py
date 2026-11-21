@@ -66,6 +66,11 @@ def test_large_question_does_not_crash_the_service(api):
     assert response.status_code < 500, response.status_code
 
 
+def test_oversized_ask_question_is_rejected_with_413(api):
+    response = api.post("/ask", json={"question": "x" * (65 * 1024)})
+    assert response.status_code == 413
+
+
 def test_server_header_does_not_disclose_a_version(api):
     server = api.get("/segments").headers.get("server", "")
     assert not re.search(r"\d+\.\d+", server), f"server header discloses a version: {server!r}"
