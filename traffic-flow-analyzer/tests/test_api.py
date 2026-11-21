@@ -314,6 +314,15 @@ def test_oversized_post_body_is_rejected_with_413(client):
     assert r.status_code == 413
 
 
+def test_oversized_body_is_rejected_before_auth_runs():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, api_token=TOKEN))
+    big_question = "x" * (65 * 1024)
+    r = client.post("/ask", json={"question": big_question})  # no Authorization header
+    assert r.status_code == 413  # not 401 - size guard ran before auth
+
+
 # -- OWASP + telemetry response headers (always on) ------------------------
 
 EXPECTED_HEADERS = {
