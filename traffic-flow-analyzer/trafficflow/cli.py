@@ -129,6 +129,15 @@ def main(argv: list[str] | None = None) -> int:
     sa.add_argument(
         "--token", default="", help="require Authorization: Bearer <token> on every request"
     )
+    sa.add_argument(
+        "--rate-limit",
+        type=int,
+        default=0,
+        help=(
+            "requests/minute per client before 429 "
+            "(0 = disabled; env TRAFFICFLOW_RATE_LIMIT_PER_MINUTE)"
+        ),
+    )
 
     a = p.parse_args(argv)
 
@@ -228,7 +237,10 @@ def main(argv: list[str] | None = None) -> int:
             feed.advance(12)
         model = a.model or os.environ.get("TRAFFICFLOW_MODEL")
         token = a.token or os.environ.get("TRAFFICFLOW_API_TOKEN")
-        app = build_api_app(feed, model=model, api_token=token or None)
+        rate_limit = a.rate_limit or int(os.environ.get("TRAFFICFLOW_RATE_LIMIT_PER_MINUTE", "0"))
+        app = build_api_app(
+            feed, model=model, api_token=token or None, rate_limit_per_minute=rate_limit
+        )
         uvicorn.run(app, host=a.host, port=a.port)
     else:
         from trafficflow.ui.app import build_app

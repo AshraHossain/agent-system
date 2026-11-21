@@ -284,3 +284,22 @@ def test_auth_covers_docs_and_openapi(auth_client):
 def test_auth_401_does_not_echo_the_configured_token(auth_client):
     r = auth_client.get("/segments")
     assert TOKEN not in r.text
+
+
+# -- sliding-window rate limiting (off by default; on when configured) ------
+
+
+def test_rate_limit_returns_429_with_retry_after_once_exceeded(monkeypatch):
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, rate_limit_per_minute=2))
+    assert client.get("/segments").status_code == 200
+    assert client.get("/segments").status_code == 200
+    r = client.get("/segments")
+    assert r.status_code == 429
+    assert r.headers["retry-after"] == "60"
+
+
+def test_rate_limit_is_disabled_by_default(client):
+    for _ in range(10):
+        assert client.get("/segments").status_code == 200

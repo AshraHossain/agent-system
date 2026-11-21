@@ -155,17 +155,26 @@ class PathOut(_BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def build_app(feed: Feed, model: str | None = None, *, api_token: str | None = None) -> FastAPI:
+def build_app(
+    feed: Feed,
+    model: str | None = None,
+    *,
+    api_token: str | None = None,
+    rate_limit_per_minute: int = 0,
+) -> FastAPI:
     """Return a FastAPI app backed by *feed*.
 
     All routes are read-only; the feed is never mutated by the API. With
-    *api_token* set, every route requires a matching bearer token.
+    *api_token* set, every route requires a matching bearer token. With
+    *rate_limit_per_minute* set above 0, each client is capped to that many
+    requests per minute, past which requests get HTTP 429 with `Retry-After`.
     """
     from trafficflow.core.anomaly import detect
     from trafficflow.core.auth import BearerTokenAuth, hash_token
     from trafficflow.core.congestion import congestion_index, level_for
     from trafficflow.core.forecast import forecast_segment
     from trafficflow.core.freshness import stale_segments
+    from trafficflow.core.security import RateLimitMiddleware
     from trafficflow.core.status import network_status
 
     app = FastAPI(
@@ -175,6 +184,8 @@ def build_app(feed: Feed, model: str | None = None, *, api_token: str | None = N
     )
     if api_token:
         app.add_middleware(BearerTokenAuth, digest=hash_token(api_token))
+    if rate_limit_per_minute > 0:
+        app.add_middleware(RateLimitMiddleware, limit_per_minute=rate_limit_per_minute)
 
     @app.get("/", include_in_schema=False)
     def root():
