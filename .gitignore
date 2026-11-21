@@ -53,3 +53,4 @@ graphify-out/.graphify_*
 graphify-out/.needs_update
 
 var/
+.superpowers/

@@ -29,6 +29,10 @@ jobs:
         run: |
           uv run pytest -m smoke -x
           uv run pytest --junitxml=reports/junit.xml
+      - name: Auth (the started server is run with a token too; exercises real end-to-end auth)
+        run: API_TOKEN=$(openssl rand -hex 32) uv run pytest -m "smoke or security"
+      - name: Request-sequence fuzzing (opt-in marker; run here so a regression is caught)
+        run: uv run pytest -m stateful
       - name: Upload report and server log
         if: always()
         uses: actions/upload-artifact@v4

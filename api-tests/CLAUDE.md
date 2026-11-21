@@ -10,7 +10,9 @@ uv sync
 uv run pytest                     # starts the target locally; everything except perf
 uv run pytest -m smoke -x         # fast gate
 uv run pytest -m perf             # opt-in latency budgets
+uv run pytest -m stateful         # opt-in random call-sequence fuzzing
 uv run ruff check . && uv run ruff format --check .
+uv sync --group load && uv run locust -f loadtest/locustfile.py --host <url>  # load test, not pytest
 ```
 
 ## Rules
@@ -30,6 +32,8 @@ uv run ruff check . && uv run ruff format --check .
   (`/stream`) are read with `api.stream(...)` and stopped explicitly, and are excluded from fuzzing.
 - New endpoint ⇒ add it to `EXPECTED_PATHS` and the smoke test, a response model, functional
   invariants, negative cases, and (if it is endless or slow) a fuzzing exclusion or bound.
+- `loadtest/` is a Locust load test, not a pytest test: no assertions, read the numbers. Keep it
+  out of `tests/` and out of the default `uv sync` (its own dependency group, `--group load`).
 
 ## Conventions
 

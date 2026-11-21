@@ -66,6 +66,11 @@ def test_large_question_does_not_crash_the_service(api):
     assert response.status_code < 500, response.status_code
 
 
+def test_oversized_ask_question_is_rejected_with_413(api):
+    response = api.post("/ask", json={"question": "x" * (65 * 1024)})
+    assert response.status_code == 413
+
+
 def test_server_header_does_not_disclose_a_version(api):
     server = api.get("/segments").headers.get("server", "")
     assert not re.search(r"\d+\.\d+", server), f"server header discloses a version: {server!r}"
@@ -76,10 +81,22 @@ def test_cors_does_not_allow_any_origin(api):
     assert response.headers.get("access-control-allow-origin") not in ("*", "https://evil.example")
 
 
-def test_auth_is_enforced_when_a_token_is_configured(settings, base_url):
+def test_auth_is_enforced_when_a_token_is_configured(settings, base_url, segment_ids):
+    """With API_TOKEN set, the session fixture also protects the server it starts
+    (see api_tests.server), so this exercises real end-to-end auth, not just a flag.
+    """
     if not settings.token:
         pytest.skip("API_TOKEN not set; the target runs without auth")
     import httpx
 
-    response = httpx.get(f"{base_url}/segments", timeout=settings.timeout_s)
-    assert response.status_code in (401, 403)
+    no_header = httpx.get(f"{base_url}/segments", timeout=settings.timeout_s)
+    assert no_header.status_code in (401, 403)
+
+    wrong_token = httpx.get(
+        f"{base_url}/segments",
+        headers={"Authorization": "Bearer not-the-configured-token"},
+        timeout=settings.timeout_s,
+    )
+    assert wrong_token.status_code in (401, 403)
+
+    assert segment_ids  # the `api` fixture's own token did get it past auth

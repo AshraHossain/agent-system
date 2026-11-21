@@ -37,11 +37,20 @@ services:
       - "8000:8000"
     environment:
       - TRAFFICFLOW_MODEL=${TRAFFICFLOW_MODEL:-mock}
+      - TRAFFICFLOW_API_TOKEN=${TRAFFICFLOW_API_TOKEN:-}
       - TOMTOM_API_KEY=${TOMTOM_API_KEY:-}
       - HERE_API_KEY=${HERE_API_KEY:-}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/segments')"]
+      # Sends the configured token too, so setting TRAFFICFLOW_API_TOKEN doesn't
+      # make the container look unhealthy.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request as u; r = u.Request('http://localhost:8000/segments'); t = os.environ.get('TRAFFICFLOW_API_TOKEN'); r.add_header('Authorization', f'Bearer {t}') if t else None; u.urlopen(r)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
