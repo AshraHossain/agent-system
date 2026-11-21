@@ -276,7 +276,13 @@ class ReinvestigationGateAgent(BaseAgent):
 
 def metrics_from_counters(c: RunCounters, settings: Settings, state: dict) -> RunMetrics:
     rounds = rounds_info(state)
-    model = settings.model if settings.provider == "gemini" else "scripted-mock"
+    model = (
+        settings.model
+        if settings.provider == "gemini"
+        else settings.openrouter_model
+        if settings.provider == "openrouter"
+        else "scripted-mock"
+    )
     cost = estimate_cost(
         settings.prices,
         model,

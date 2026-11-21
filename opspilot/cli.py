@@ -227,15 +227,16 @@ async def _eval(args, settings: Settings) -> int:
     s = with_provider(settings, args.live)
     if args.verifier_matrix:
         return await _verifier_matrix(args, s)
+    is_live = s.provider != "mock"
     results = await run_eval(
         s,
         args.cases or None,
         split=args.split,
         repeat=args.repeat,
-        baseline=args.live,
+        baseline=is_live,
         progress=lambda line: print(line, file=sys.stderr, flush=True),
     )
-    if args.guardrails and not args.live:
+    if args.guardrails and not is_live:
         results["guardrails"] = await run_guardrail_eval(s)
     jpath, mpath = write_results(results, Path(args.out))
     print(to_markdown(results))

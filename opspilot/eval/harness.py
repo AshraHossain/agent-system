@@ -165,7 +165,13 @@ async def run_eval(
         "config": {
             "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
             "provider": settings.provider,
-            "model": settings.model if settings.provider == "gemini" else "scripted-mock",
+            "model": (
+                settings.model
+                if settings.provider == "gemini"
+                else settings.openrouter_model
+                if settings.provider == "openrouter"
+                else "scripted-mock"
+            ),
             "embedder": settings.embedding.label,
             "google_adk": version("google-adk"),
             "dataset_generator_version": generate.GENERATOR_VERSION,

@@ -186,7 +186,7 @@ Generated deterministically via `make eval` (`uv run opspilot eval --guardrails 
 | **Verifier Red-Team Matrix** | `catch` + `blind_spot` (93 runs) / `benign` (45 runs) | **100.0%** (`93/93` caught), **0/45** FP | Swapped rankings, inflated confidence, wrong metric facts, certainty lexicon |
 | **Pipeline Latency (`p50` / `p95` / `mean`)** | Main (`C01–C14`, offline SQLite + ADK) | **0.41s** / **0.48s** / **0.37s** | Full 7-stage ADK orchestration + SQLite queries + deterministic verification |
 
-Detailed evaluation methodology and held-out pre-fix baselines: [docs/evaluation.md](docs/evaluation.md) and [docs/eval_results_verifier.md](docs/eval_results_verifier.md).
+Detailed evaluation methodology, live multi-run results, and held-out pre-fix baselines: [docs/evaluation.md](docs/evaluation.md), [docs/eval_results_offline.md](docs/eval_results_offline.md), [docs/eval_results_live.md](docs/eval_results_live.md), and [docs/eval_results_verifier.md](docs/eval_results_verifier.md).
 
 ---
 
