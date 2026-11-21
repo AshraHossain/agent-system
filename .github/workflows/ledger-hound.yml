@@ -16,4 +16,4 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen --extra dspy
       - run: uv run ruff check . && uv run ruff format --check .
-      - run: uv run pytest
+      - run: uv run pytest --cov=src/ledger_hound --cov-report=term-missing

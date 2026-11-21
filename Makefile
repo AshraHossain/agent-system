@@ -7,7 +7,7 @@ check-all: check check-subprojects
 check-subprojects:
 	cd platewatch && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
 	cd traffic-flow-analyzer && uv run ruff check . && uv run ruff format --check . && uv run pytest -q
-	cd ledger-hound && uv run ruff check . && uv run ruff format --check . && uv run --extra dspy pytest -q
+	cd ledger-hound && uv run ruff check . && uv run ruff format --check . && uv run --extra dspy pytest -q --cov=src/ledger_hound --cov-report=term-missing --cov-fail-under=80
 	cd api-tests && uv run ruff check . && uv run ruff format --check . && uv run pytest -m smoke -x -q
 
 lint:

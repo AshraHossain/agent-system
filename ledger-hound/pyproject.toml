@@ -22,7 +22,7 @@ dspy = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "ruff"]
+dev = ["pytest", "pytest-asyncio", "pytest-cov", "ruff"]
 
 [build-system]
 requires = ["hatchling"]
@@ -34,6 +34,27 @@ packages = ["src/ledger_hound"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/ledger_hound"]
+branch = true
+
+[tool.coverage.report]
+# 80 is a floor below the current 83% actual (branch coverage on), so it catches
+# regressions without being brittle. Known-thin spots are the manual/terminal paths:
+# cli.py (~48%), judge.py (~64%) and score.py (~52%) are exercised end-to-end by the
+# CLI rather than by unit tests.
+# Kept here rather than in `addopts` (matching the root project) so that running a
+# single test file locally is not failed by a partial-run coverage figure; CI passes
+# the --cov flags explicitly.
+fail_under = 80
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.\\s*$",
+]
 
 [tool.ruff]
 line-length = 100
