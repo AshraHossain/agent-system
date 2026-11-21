@@ -50,6 +50,18 @@ uv run pytest -m live                     # Live Gemini suite (requires GOOGLE_A
 4. **Untrusted Data Quarantine (`<untrusted_context>`)**: Retrieved documents and external texts are normalized, secret-redacted, scanned for prompt injection, and wrapped in `<untrusted_context id="...">...</untrusted_context>` (with legacy `<<untrusted_document>>` spoofing stripped). Suspected injections are withheld and trigger `security_team` escalation.
 5. **Read-Only by Construction**: No tool can mutate infrastructure or files; datasets open with SQLite `mode=ro`; `core/policy.py` strips any non-observational recommendation.
 
+## Workflow Conventions
+
+These live here, not in a personal `~/.claude` file, so every session has them: cloud sessions
+and other tools never see files outside the repository.
+
+- **Conventional commits**: `feat|fix|test|refactor|docs|chore(scope): ...`.
+- **Branch and PR**: develop on a branch, push, and open a pull request; let CI pass before
+  merging. Never push straight to `master`.
+- **Tests before green**: never skip, loosen, quarantine or delete a test to make a check pass;
+  fix the cause. Run `make check` before claiming anything passes.
+- **Secrets**: from the environment or ADC only; never committed, never in prompts or logs.
+
 ## Planning
 
 Root and every sub-project plan non-trivial work with GSD → Superpowers → Ruflo: see [PLANNING.md](PLANNING.md). Backlog: [TASK.md](TASK.md).

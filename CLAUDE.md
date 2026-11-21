@@ -1,6 +1,15 @@
 # CLAUDE.md — agent-system (Repo Specifics)
 
-Read [AGENTS.md](AGENTS.md) for the full project map, verified commands, module layout, and layering rules. Global workflow, TDD, immutability, and commit rules from `~/.claude/CLAUDE.md` and `~/.claude/AGENTS.md` apply automatically; only repository-specific constraints are listed below.
+@AGENTS.md
+
+The import above loads the full project map, verified commands, module layout and layering
+rules. It is required: a project `CLAUDE.md` means Claude Code reads it *instead of* `AGENTS.md`,
+so without the import none of that reaches the session. Only repository-specific constraints are
+listed below.
+
+A personal `~/.claude/CLAUDE.md` is loaded alongside this file when it exists, but it is not in
+version control and is absent from cloud sessions, so no rule this repository depends on may live
+there alone. (`~/.claude/AGENTS.md` is never read by Claude Code.)
 
 ## Quick Verification
 

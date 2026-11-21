@@ -62,7 +62,8 @@ test for every framework behaviour the design relies on (see `tests/test_adk_con
 
 ## 4. Wire it in, and nothing more
 
-- Add the workflow file and one row to the Projects table in the root `CLAUDE.md` and `README.md`.
+- Add the workflow file and one row to the Workspace Projects table in `AGENTS.md`, and to the
+  projects table in `README.md`.
 - Do not edit the root `pyproject.toml`, `uv.lock`, `conftest.py` or `ci.yml`.
 
 ## 5. Verify before reporting done
