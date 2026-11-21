@@ -170,7 +170,13 @@ def build_app(
     limiting run (`PayloadSizeGuard` is added after the `BearerTokenAuth`/
     `RateLimitMiddleware` blocks so it sits outside both in the middleware
     stack: Starlette's `add_middleware` makes the most-recently-added
-    middleware outermost, i.e. first to see the request). With *api_token*
+    middleware outermost, i.e. first to see the request). The full middleware
+    depth, outermost to innermost, is `TelemetryMiddleware` ->
+    `PayloadSizeGuard` -> `RateLimitMiddleware` -> `BearerTokenAuth` ->
+    router: rate limiting therefore runs before auth, so a request that fails
+    auth still counts against that client's rate-limit budget. This is
+    intentional, not an oversight — it throttles credential-guessing floods
+    before any digest-comparison work is spent on them. With *api_token*
     set, every route requires a matching bearer token. With
     *rate_limit_per_minute* set above 0, each client is capped to that many
     requests per minute, past which requests get HTTP 429 with

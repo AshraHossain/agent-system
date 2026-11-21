@@ -2,15 +2,20 @@
 
 Rate limiting is opt-in (off unless configured); the OWASP security headers and
 `X-Request-ID`/`X-Process-Time-Ms` telemetry added by `TelemetryMiddleware` are
-always on and wrap every response, including ones short-circuited by auth or
-rate-limiting with 401/429. The strict `Content-Security-Policy` header is
-omitted on `/docs`, `/redoc`, and `/openapi.json` (`CSP_EXEMPT_PATHS`) because
-Swagger UI/ReDoc load inline scripts and styles that `default-src 'none'`
-would block; every other response still gets the CSP header.
+always on and wrap every response the app produces, including ones
+short-circuited by auth, the payload guard, or rate-limiting with 401/413/429.
+An uncaught exception from a route handler is turned into a 500 by Starlette's
+own `ServerErrorMiddleware`, which sits outside all user middleware including
+`TelemetryMiddleware`, so that response does not carry these headers. The
+strict `Content-Security-Policy` header is omitted on `/docs`, `/redoc`, and
+`/openapi.json` (`CSP_EXEMPT_PATHS`) because Swagger UI/ReDoc load inline
+scripts and styles that `default-src 'none'` would block; every other response
+still gets the CSP header.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -40,7 +45,7 @@ async def _json_error(
     detail: str,
     extra_headers: Sequence[tuple[bytes, bytes]] = (),
 ) -> None:
-    body = f'{{"detail":"{detail}"}}'.encode()
+    body = json.dumps({"detail": detail}).encode()
     headers = [
         (b"content-type", b"application/json"),
         (b"content-length", str(len(body)).encode()),

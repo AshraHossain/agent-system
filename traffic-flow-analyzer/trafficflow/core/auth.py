@@ -86,7 +86,7 @@ class BearerTokenAuth:
         if token is not None and verify_token(token, self.digest):
             await self.app(scope, receive, send)
             return
-        body = b'{"detail":"missing or invalid bearer token"}'
+        body = b'{"detail":"missing or invalid bearer token or API key"}'
         headers = [
             (b"content-type", b"application/json"),
             (b"content-length", str(len(body)).encode()),

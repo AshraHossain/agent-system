@@ -323,6 +323,41 @@ def test_oversized_body_is_rejected_before_auth_runs():
     assert r.status_code == 413  # not 401 - size guard ran before auth
 
 
+# -- combined middleware stack (final whole-branch review regression) ------
+#
+# Pins the real middleware depth, outermost to innermost: TelemetryMiddleware
+# -> PayloadSizeGuard -> RateLimitMiddleware -> BearerTokenAuth -> router.
+
+
+def test_combined_auth_and_rate_limit_and_payload_guard_stack_together():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    combined_client = TestClient(build_app(feed, api_token=TOKEN, rate_limit_per_minute=2))
+
+    r1 = combined_client.get("/segments")  # no credentials
+    assert r1.status_code == 401
+    assert "x-request-id" in r1.headers
+
+    r2 = combined_client.get("/segments")  # no credentials
+    assert r2.status_code == 401
+    assert "x-request-id" in r2.headers
+
+    # The two failed-auth attempts above counted against the rate-limit budget,
+    # because rate limiting runs before auth: proves it did not stay 401 forever.
+    r3 = combined_client.get("/segments")
+    assert r3.status_code == 429
+    assert "x-request-id" in r3.headers
+
+    # Fresh app/client so this request's rate-limit window is untouched by the
+    # GETs above; pins that the payload guard runs regardless of auth/rate-limit
+    # state (it sits outside both, just inside TelemetryMiddleware).
+    fresh_client = TestClient(build_app(feed, api_token=TOKEN, rate_limit_per_minute=2))
+    big_question = "x" * (65 * 1024)
+    r4 = fresh_client.post("/ask", json={"question": big_question})  # no credentials
+    assert r4.status_code == 413
+    assert "x-request-id" in r4.headers
+
+
 # -- OWASP + telemetry response headers (always on) ------------------------
 
 EXPECTED_HEADERS = {
