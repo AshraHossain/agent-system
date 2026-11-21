@@ -13,7 +13,12 @@ import pytest
 
 pytestmark = pytest.mark.live
 
-HAS_CREDS = bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_GENAI_USE_VERTEXAI"))
+HAS_CREDS = bool(
+    os.getenv("GOOGLE_API_KEY")
+    or os.getenv("GEMINI_API_KEY")
+    or os.getenv("GOOGLE_GENAI_USE_VERTEXAI")
+    or os.getenv("OPENROUTER_API_KEY")
+)
 
 
 @pytest.mark.skipif(not HAS_CREDS, reason="no Gemini credentials")

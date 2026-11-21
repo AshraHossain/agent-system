@@ -122,8 +122,9 @@ class EmbeddingConfig:
 
 @dataclass(frozen=True)
 class Settings:
-    provider: Literal["mock", "gemini"] = "mock"
+    provider: Literal["mock", "gemini", "openrouter"] = "mock"
     model: str = "gemini-2.5-flash"
+    openrouter_model: str = "google/gemini-2.5-flash"
     data_dir: Path = REPO_ROOT / "var" / "datasets"
     session_db_url: str = f"sqlite+aiosqlite:///{REPO_ROOT / 'var' / 'sessions.db'}"
     default_dataset: str = "C02"
@@ -145,13 +146,19 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         provider = os.getenv("OPSPILOT_MODEL_PROVIDER", "mock").lower()
-        if provider not in ("mock", "gemini"):
+        if provider not in ("mock", "gemini", "openrouter"):
             raise ValueError(
-                f"OPSPILOT_MODEL_PROVIDER must be 'mock' or 'gemini', got {provider!r}"
+                "OPSPILOT_MODEL_PROVIDER must be 'mock', 'gemini', or 'openrouter', "
+                f"got {provider!r}"
             )
+        model = os.getenv("OPSPILOT_MODEL", cls.model)
+        default_or_model = (
+            model if "/" in model else os.getenv("OPSPILOT_OPENROUTER_MODEL", cls.openrouter_model)
+        )
         return cls(
             provider=provider,  # type: ignore[arg-type]
-            model=os.getenv("OPSPILOT_MODEL", cls.model),
+            model=model,
+            openrouter_model=default_or_model,
             data_dir=Path(os.getenv("OPSPILOT_DATA_DIR", str(cls.data_dir))),
             session_db_url=os.getenv("OPSPILOT_SESSION_DB", cls.session_db_url),
             default_dataset=os.getenv("OPSPILOT_DEFAULT_DATASET", cls.default_dataset),
