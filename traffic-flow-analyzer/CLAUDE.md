@@ -7,6 +7,8 @@ OpsPilot project (see `../CLAUDE.md`) but uses **PydanticAI** and **Gradio**, wi
 Read [PLAN.md](PLAN.md) and [ARCHITECTURE.md](ARCHITECTURE.md) before changing code; open work is in
 [TASK.md](TASK.md).
 
+See [SECURITY.md](SECURITY.md) for the API's auth, rate-limit, and header guarantees.
+
 ## What this is
 
 Forecasts road congestion from a (simulated) real-time speed feed. PydanticAI agents call
