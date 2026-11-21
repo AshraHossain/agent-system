@@ -303,3 +303,40 @@ def test_rate_limit_returns_429_with_retry_after_once_exceeded(monkeypatch):
 def test_rate_limit_is_disabled_by_default(client):
     for _ in range(10):
         assert client.get("/segments").status_code == 200
+
+
+# -- OWASP + telemetry response headers (always on) ------------------------
+
+EXPECTED_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+}
+
+
+def test_every_response_carries_owasp_and_telemetry_headers(client):
+    r = client.get("/segments")
+    assert "x-request-id" in r.headers
+    assert "x-process-time-ms" in r.headers
+    for name, value in EXPECTED_HEADERS.items():
+        assert r.headers[name] == value
+
+
+def test_docs_and_openapi_omit_the_strict_csp_but_keep_other_headers(client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        r = client.get(path)
+        assert "content-security-policy" not in r.headers
+        assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_a_429_response_still_carries_telemetry_headers():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, rate_limit_per_minute=1))
+    client.get("/segments")
+    r = client.get("/segments")
+    assert r.status_code == 429
+    assert "x-request-id" in r.headers
+    assert r.headers["x-content-type-options"] == "nosniff"
