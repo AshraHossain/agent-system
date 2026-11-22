@@ -59,9 +59,26 @@ def test_recognised_plates_are_tagged_with_their_region():
 
 
 def test_unrecognised_but_plausible_plate_has_no_region_tag():
-    tags = tag_plate("ABC123", 0.9)
+    # 2 letters + 4 digits (Northern Ireland shape) matches no pattern in the table.
+    tags = tag_plate("AB1234", 0.9)
     assert not [t for t in tags if t.startswith("region:")]
-    assert "plausible-format" in tags
+    assert "plausible-format" in tags and "needs-review" not in tags
+
+
+def test_overlapping_patterns_report_every_match():
+    """New York's pattern is a subset of Texas's, so both must be reported, not one."""
+    assert match_regions("KAA1000") == ("us-ny", "us-tx")
+
+
+def test_germany_is_absent_by_design():
+    """Normalisation makes the German format unrecoverable; see the note in formats.py.
+
+    "BAB1234" is German `B-AB 1234`, but once the separators are gone it is three letters and
+    four digits, which is also an ordinary New York or Texas plate. Nothing in the string says
+    which, so the table claims no German region and the US patterns match instead.
+    """
+    assert "de" not in known_region_codes()
+    assert match_regions("BAB1234") == ("us-ny", "us-tx")
 
 
 # --- strict mode: only the enforced regions count as plausible -------------------------
