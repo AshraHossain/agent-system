@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
+
+from platewatch.core.formats import enforced_regions, match_regions
 
 LOW_CONFIDENCE = 0.5
 MIN_LEN, MAX_LEN = 4, 8
@@ -23,11 +26,8 @@ def normalize_plate(raw: str) -> str:
     return _NON_ALNUM.sub("", raw.upper())
 
 
-def plausible_format(plate: str) -> bool:
-    """Generic shape check: 4-8 chars with at least one letter and one digit.
-
-    Deliberately region-agnostic; regional formats belong in a pluggable rule set.
-    """
+def generic_format(plate: str) -> bool:
+    """Region-agnostic shape check: 4-8 chars with at least one letter and one digit."""
     return (
         MIN_LEN <= len(plate) <= MAX_LEN
         and any(c.isalpha() for c in plate)
@@ -35,8 +35,22 @@ def plausible_format(plate: str) -> bool:
     )
 
 
-def tag_plate(plate: str, confidence: float) -> list[str]:
-    tags = ["plausible-format" if plausible_format(plate) else "odd-format"]
+def plausible_format(plate: str, regions: Collection[str] | None = None) -> bool:
+    """Whether `plate` has an acceptable shape.
+
+    With regions enforced (argument, or `PLATEWATCH_REGIONS`), only those regions' ordinary
+    passenger-car patterns count. With none enforced, a plate passes on either a known regional
+    pattern or the generic shape check, so enabling the rules never rejects what it used to accept.
+    """
+    wanted = enforced_regions(regions)
+    if wanted:
+        return bool(set(match_regions(plate)) & set(wanted))
+    return bool(match_regions(plate)) or generic_format(plate)
+
+
+def tag_plate(plate: str, confidence: float, regions: Collection[str] | None = None) -> list[str]:
+    tags = ["plausible-format" if plausible_format(plate, regions) else "odd-format"]
+    tags += [f"region:{code}" for code in match_regions(plate)]
     if confidence < LOW_CONFIDENCE:
         tags.append("low-confidence")
     if "odd-format" in tags or "low-confidence" in tags:
