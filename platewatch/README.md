@@ -27,6 +27,7 @@ flowchart LR
 
     subgraph Core["Deterministic Pure Core (platewatch/core — Zero AI/Torch Imports)"]
         TXT["text.py (normalize_plate, plausible_format, tag_plate, sanitize_ocr_text)"]
+        FMT["formats.py (9 source-cited regional patterns, match_regions, PLATEWATCH_REGIONS)"]
         EMB["embedding.py (HashingEmbedder with OCR-Confusable Folding O/0, I/1, B/8)"]
         STORE["store.py (SQLite PlateStore + Cosine Vector Search + Sightings Counter)"]
     end
@@ -42,6 +43,7 @@ flowchart LR
 
     CLI & PYTEST --> PIPE & AG
     PIPE --> PROT & TXT & EMB & STORE
+    TXT --> FMT
     AG --> PIPE & STORE
     PROT -. "Live (--with transformers/torch)" .-> LIVE
     PROT -. "Offline Default (ScriptedVision)" .-> MOCK
@@ -97,6 +99,21 @@ uv run pytest                                  # 100% offline suite (ScriptedVis
 uv run platewatch demo                         # end-to-end offline ingestion + search + agent demo
 ```
 
+### Regional Plate Formats (Optional)
+
+Recognised plates gain a `region:<code>` tag. Nine regions are covered, each with its source cited
+in `src/platewatch/core/formats.py`: `gb`, `fr`, `es`, `it`, `nl`, `us-ca`, `us-ny`, `us-tx`,
+`us-fl`.
+
+```bash
+uv run platewatch demo                         # no region enforced: generic shape check unchanged
+PLATEWATCH_REGIONS=gb,fr uv run platewatch demo   # only these regions count as plausible
+```
+
+With no region named, a plate passes on either a regional pattern or the generic shape check, so
+enabling the table never rejects a plate the old check accepted. Naming regions makes the check
+strict: anything outside them is tagged `odd-format` and `needs-review`.
+
 ### Live Hugging Face Vision & Live Agent (Optional)
 
 ```bash
@@ -115,4 +132,11 @@ PLATEWATCH_LIVE_DIR=<photos_dir> uv run --with transformers --with torch \
 - **Framework-Free Pure Core**: `src/platewatch/core/` never imports `pydantic_ai`, `torch`, `transformers`, or `google` (enforced by `tests/test_platewatch.py`).
 - **Frozen Contracts**: Every model in `src/platewatch/contracts.py` (`BoundingBox`, `RawDetection`, `PlateRecord`, `SearchHit`, `ScanSummary`, `PlateReport`) enforces `ConfigDict(frozen=True)`.
 - **No Model-Supplied Paths/SQL**: Agent tools take no file paths, URLs, or SQL from the model; the inbox directory is fixed in `PlateDeps`, and `@agent.output_validator` rejects any `plate_id` not returned by a tool in the current run.
+- **A Format Pattern Is a Signal, Never a Gate**: a regex cannot be correct for any of these
+  regions. Every one keeps older sequential formats legally on the road, issues personalised marks
+  of arbitrary shape, and runs separate schemes for motorcycles, trailers, dealers, government and
+  diplomatic vehicles, so any pattern narrow enough to carry information will reject legitimate
+  plates. `tag_plate` therefore flags and never discards. Germany is deliberately absent: once
+  separators are normalised away, `B-AB 1234` and `BA-B 1234` are the same string, and what remains
+  collides with the New York, Texas and Florida patterns.
 - **Honest Limits**: Default Hugging Face model weights (`nickmuchi/yolos-small-finetuned-license-plate-detection`, `microsoft/trocr-base-printed`) require live photo evaluation before quoting accuracy; the offline embedder is lexical (character n-grams with OCR-confusable folding), and search is an exact cosine scan suited for up to ~10^5 plates.

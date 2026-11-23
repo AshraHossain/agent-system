@@ -36,6 +36,6 @@
 - [x] Live Hugging Face test for user-supplied labelled photos (#16) — **never run against real models**
 - [x] Per-image timeout and per-detection exception isolation; sightings count in search results
 - [ ] Run the live test; tune model ids and the 80%/50% floors from real output
-- [ ] Region-specific plate format rules (US states, EU) replacing the generic shape check
+- [x] Region-specific plate format rules: 9 source-cited patterns in `platewatch/core/formats.py`, `region:<code>` tags, optional strict mode via `PLATEWATCH_REGIONS`; Germany excluded (normalisation destroys its format)
 - [ ] Learned embeddings and an ANN index (Qdrant/pgvector) beyond ~10^5 plates
 - [ ] Read-only `GET /plates/search` API; detection/OCR evaluation harness on a labelled set
