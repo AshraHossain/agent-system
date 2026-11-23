@@ -15,7 +15,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
       - run: uv run ruff check . && uv run ruff format --check .
-      - run: uv run pytest
+      - run: uv run pytest --cov=src/platewatch --cov-report=term-missing
       - name: Offline demo
         env:
           PYDANTIC_AI_NO_BANNER: "1"
