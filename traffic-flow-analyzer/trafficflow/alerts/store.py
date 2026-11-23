@@ -23,10 +23,13 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
 from trafficflow.contracts import CongestionLevel
@@ -56,6 +59,7 @@ class AlertStore:
         self._path = str(path)
         # In-memory databases live only in a single connection; keep one open.
         self._mem_conn: sqlite3.Connection | None = None
+        self._closed = False
         if self._path == ":memory:":
             self._mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
             self._mem_conn.execute("PRAGMA journal_mode=WAL")
@@ -77,7 +81,7 @@ class AlertStore:
         meta: dict[str, Any] | None = None,
     ) -> int:
         """Insert one event and return its row id."""
-        with self._connect() as conn:
+        with self._session() as conn:
             cur = conn.execute(
                 "INSERT INTO alert_events (ts, segment_id, level, speed_kmh, rule_name, meta)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
@@ -122,7 +126,7 @@ class AlertStore:
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(max(1, limit))
         sql = f"SELECT * FROM alert_events {where} ORDER BY ts DESC LIMIT ?"  # noqa: S608
-        with self._connect() as conn:
+        with self._session() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
@@ -131,7 +135,7 @@ class AlertStore:
         where = "WHERE segment_id = ?" if segment_id else ""
         params: list[Any] = [segment_id] if segment_id else []
         sql = f"SELECT COUNT(*) FROM alert_events {where}"  # noqa: S608
-        with self._connect() as conn:
+        with self._session() as conn:
             return int(conn.execute(sql, params).fetchone()[0])
 
     def mean_time_to_resolve(self, segment_id: str) -> float | None:
@@ -163,12 +167,56 @@ class AlertStore:
     # ------------------------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
+        if self._closed:
+            # Without this an in-memory store would silently reconnect to a fresh,
+            # empty ":memory:" database and return wrong answers instead of failing.
+            raise sqlite3.ProgrammingError("Cannot operate on a closed AlertStore.")
         if self._mem_conn is not None:
             return self._mem_conn
         conn = sqlite3.connect(self._path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
+    @contextlib.contextmanager
+    def _session(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection, committing on success and closing if we opened it.
+
+        `sqlite3.Connection.__exit__` commits or rolls back but never closes, so
+        using `with self._connect()` directly leaked one open connection per call
+        on a file-backed store. The in-memory connection is shared and deliberately
+        kept open: closing it would discard the database.
+        """
+        conn = self._connect()
+        borrowed = conn is self._mem_conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            if not borrowed:
+                conn.close()
+
+    def close(self) -> None:
+        """Close the store. Idempotent; further use raises `sqlite3.ProgrammingError`.
+
+        Only an in-memory store owns a long-lived connection, so for a file-backed
+        store this just marks it closed — each call already closes its own connection.
+        """
+        if self._mem_conn is not None:
+            self._mem_conn.close()
+            self._mem_conn = None
+        self._closed = True
+
+    def __enter__(self) -> AlertStore:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
     def _init_schema(self) -> None:
-        with self._connect() as conn:
+        with self._session() as conn:
             conn.executescript(self._DDL)
