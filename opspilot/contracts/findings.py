@@ -92,7 +92,7 @@ class DocReference(BaseModel):
 
     doc_id: str
     title: str
-    note: str = Field(max_length=300)
+    note: str = Field(max_length=600)
     evidence_ids: list[str]
 
 
@@ -100,7 +100,7 @@ class DocIssue(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     doc_id: str
-    issue: str = Field(max_length=300)
+    issue: str = Field(max_length=600)
 
 
 class KnowledgeFinding(BaseModel):
@@ -177,7 +177,7 @@ class ReviewConcern(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     severity: Literal["info", "warning"]
-    description: str = Field(max_length=400)
+    description: str = Field(max_length=800)
     related_ids: list[str]
 
 
