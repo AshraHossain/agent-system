@@ -16,7 +16,8 @@ Detect vehicle licence plates in images, read and normalize OCR text, tag confid
 ```mermaid
 flowchart LR
     subgraph Client["Client & CI Surface"]
-        CLI["platewatch CLI (demo, ingest, search, ask)"]
+        CLI["platewatch CLI (demo, ingest, search, ask, serve)"]
+        API["Read-Only HTTP API (GET /plates/search, /health, /ready)"]
         PYTEST["Offline Test Suite (pytest)"]
     end
 
@@ -42,6 +43,8 @@ flowchart LR
     end
 
     CLI & PYTEST --> PIPE & AG
+    CLI --> API
+    API -- "read-only: search, count" --> STORE
     PIPE --> PROT & TXT & EMB & STORE
     TXT --> FMT
     AG --> PIPE & STORE
@@ -98,6 +101,37 @@ uv run ruff check . && uv run ruff format --check .
 uv run pytest                                  # 100% offline suite (ScriptedVision + FunctionModel)
 uv run platewatch demo                         # end-to-end offline ingestion + search + agent demo
 ```
+
+### Read-Only Search API
+
+```bash
+uv run platewatch --db var/platewatch/plates.db serve        # 127.0.0.1:8001
+curl 'http://127.0.0.1:8001/plates/search?q=AB12+CDE'
+curl http://127.0.0.1:8001/ready                             # {"status":"ready","plates":2}
+```
+
+| Route | Purpose |
+|---|---|
+| `GET /plates/search?q=<text>&limit=<1-50>` | Fuzzy plate search; returns `SearchHit` objects |
+| `GET /health`, `GET /ready` | Container probes, always unauthenticated |
+
+Every route is a read. The database path comes from the process that starts the server, never
+from a request, so `q` is plate text only — normalized and embedded, never used as a path or as
+SQL. Write methods are not routed (`405`), and out-of-range input is rejected with `422`.
+
+To require a token, configure digests rather than the token itself, so an environment dump does
+not leak a credential:
+
+```bash
+export PLATEWATCH_API_TOKEN_SHA256=$(python -c "import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" "$MY_TOKEN")
+uv run platewatch serve --host 0.0.0.0
+curl -H "Authorization: Bearer $MY_TOKEN" 'http://127.0.0.1:8001/plates/search?q=AB12CDE'
+```
+
+Binding beyond loopback without a configured token is refused, rather than quietly serving an
+open endpoint; `--allow-unauthenticated` overrides that only when an authenticating proxy sits in
+front. **Rate limiting, per-user identity and TLS are not implemented**: put this behind a reverse
+proxy that provides them before exposing it to a network.
 
 ### Regional Plate Formats (Optional)
 
