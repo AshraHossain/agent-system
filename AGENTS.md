@@ -10,7 +10,7 @@ A workspace of independent GenAI projects led by **OpsPilot AI** (root project),
 |---|---|---|---|
 | `opspilot/`, `adk_apps/`, `tests/` | **OpsPilot AI**: Multi-agent network-ops investigation & evidence-linked report | Google ADK 2.11.0, Gemini, FastAPI, SQLite | [ARCHITECTURE.md](ARCHITECTURE.md), [PLAN.md](PLAN.md), [SECURITY.md](SECURITY.md) |
 | `ledger-hound/` | Agentic QA / red-team harness for a Purchase-to-Pay API (26 plantable bugs) | OpenAI Agents SDK, DSPy, FastAPI | [ledger-hound/README.md](ledger-hound/README.md) |
-| `traffic-flow-analyzer/` | Road congestion forecasting agents + interactive dashboard | PydanticAI, Gradio, Plotly | [traffic-flow-analyzer/CLAUDE.md](traffic-flow-analyzer/CLAUDE.md) |
+| `traffic-flow-analyzer/` | Road congestion forecasting agents + interactive dashboard | PydanticAI, Gradio, Plotly | [traffic-flow-analyzer/CLAUDE.md](traffic-flow-analyzer/CLAUDE.md), [traffic-flow-analyzer/SECURITY.md](traffic-flow-analyzer/SECURITY.md) |
 | `platewatch/` | Licence-plate detection, OCR normalization, tagging & vector search | PydanticAI, Hugging Face, Pillow | [platewatch/CLAUDE.md](platewatch/CLAUDE.md) |
 | `api-tests/` | Black-box contract, fuzzing & security test suite for Traffic Flow API | pytest, httpx, Schemathesis | [api-tests/CLAUDE.md](api-tests/CLAUDE.md) |
 

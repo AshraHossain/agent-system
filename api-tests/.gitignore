@@ -1,3 +1,4 @@
 reports/
 .hypothesis/
 .schemathesis/
+var/

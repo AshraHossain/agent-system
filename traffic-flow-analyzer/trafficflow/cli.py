@@ -126,6 +126,20 @@ def main(argv: list[str] | None = None) -> int:
     sa.add_argument("--provider", choices=["mock", "tomtom", "here"], default="mock")
     sa.add_argument("--api-key", default="")
     sa.add_argument("--model", default=None, help="model for /ask endpoint")
+    sa.add_argument(
+        "--token",
+        default="",
+        help="require Authorization: Bearer <token> or X-API-Key <token> on every request",
+    )
+    sa.add_argument(
+        "--rate-limit",
+        type=int,
+        default=0,
+        help=(
+            "requests/minute per client before 429 "
+            "(0 = disabled; env TRAFFICFLOW_RATE_LIMIT_PER_MINUTE)"
+        ),
+    )
 
     a = p.parse_args(argv)
 
@@ -218,13 +232,36 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         from trafficflow.api import build_app as build_api_app
 
+        if a.rate_limit < 0:
+            print("ERROR: --rate-limit must be >= 0", file=sys.stderr)
+            return 1
+        if a.rate_limit:
+            rate_limit = a.rate_limit
+        else:
+            raw_rate_limit = os.environ.get("TRAFFICFLOW_RATE_LIMIT_PER_MINUTE", "0")
+            try:
+                rate_limit = int(raw_rate_limit)
+            except ValueError:
+                print(
+                    "ERROR: TRAFFICFLOW_RATE_LIMIT_PER_MINUTE must be an integer, "
+                    f"got {raw_rate_limit!r}",
+                    file=sys.stderr,
+                )
+                return 1
+            if rate_limit < 0:
+                print("ERROR: TRAFFICFLOW_RATE_LIMIT_PER_MINUTE must be >= 0", file=sys.stderr)
+                return 1
+
         if a.live:
             feed = _make_live_feed(a.provider, a.api_key)
         else:
             feed = SyntheticFeed()
             feed.advance(12)
         model = a.model or os.environ.get("TRAFFICFLOW_MODEL")
-        app = build_api_app(feed, model=model)
+        token = a.token or os.environ.get("TRAFFICFLOW_API_TOKEN")
+        app = build_api_app(
+            feed, model=model, api_token=token or None, rate_limit_per_minute=rate_limit
+        )
         uvicorn.run(app, host=a.host, port=a.port)
     else:
         from trafficflow.ui.app import build_app

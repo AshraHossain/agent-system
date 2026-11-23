@@ -225,3 +225,171 @@ def test_root_redirects_to_docs(client):
 
 def test_root_is_not_in_the_openapi_schema(client):
     assert "/" not in client.get("/openapi.json").json()["paths"]
+
+
+# -- bearer-token auth (off by default; on when a token is configured) -------
+
+TOKEN = "s3cret-test-token"
+
+
+@pytest.fixture(scope="module")
+def auth_client():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    return TestClient(build_app(feed, api_token=TOKEN))
+
+
+def test_auth_off_by_default(client):
+    assert client.get("/segments").status_code == 200
+
+
+def test_auth_rejects_missing_token(auth_client):
+    r = auth_client.get("/segments")
+    assert r.status_code == 401
+    assert "www-authenticate" in r.headers
+
+
+def test_auth_rejects_wrong_token(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 401
+
+
+def test_auth_rejects_malformed_header(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": TOKEN})  # no "Bearer "
+    assert r.status_code == 401
+
+
+def test_auth_accepts_the_configured_token(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": f"Bearer {TOKEN}"})
+    assert r.status_code == 200
+
+
+def test_auth_accepts_the_configured_token_via_x_api_key(auth_client):
+    r = auth_client.get("/segments", headers={"X-API-Key": TOKEN})
+    assert r.status_code == 200
+
+
+def test_auth_refuses_both_bearer_and_api_key_headers_at_once(auth_client):
+    r = auth_client.get(
+        "/segments", headers={"Authorization": f"Bearer {TOKEN}", "X-API-Key": TOKEN}
+    )
+    assert r.status_code == 401
+
+
+def test_auth_covers_docs_and_openapi(auth_client):
+    assert auth_client.get("/docs").status_code == 401
+    assert auth_client.get("/openapi.json").status_code == 401
+
+
+def test_auth_401_does_not_echo_the_configured_token(auth_client):
+    r = auth_client.get("/segments")
+    assert TOKEN not in r.text
+
+
+# -- sliding-window rate limiting (off by default; on when configured) ------
+
+
+def test_rate_limit_returns_429_with_retry_after_once_exceeded(monkeypatch):
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, rate_limit_per_minute=2))
+    assert client.get("/segments").status_code == 200
+    assert client.get("/segments").status_code == 200
+    r = client.get("/segments")
+    assert r.status_code == 429
+    assert r.headers["retry-after"] == "60"
+
+
+def test_rate_limit_is_disabled_by_default(client):
+    for _ in range(10):
+        assert client.get("/segments").status_code == 200
+
+
+# -- payload-size guard (always on) -----------------------------------------
+
+
+def test_oversized_post_body_is_rejected_with_413(client):
+    big_question = "x" * (65 * 1024)  # just over the 64 KiB cap
+    r = client.post("/ask", json={"question": big_question})
+    assert r.status_code == 413
+
+
+def test_oversized_body_is_rejected_before_auth_runs():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, api_token=TOKEN))
+    big_question = "x" * (65 * 1024)
+    r = client.post("/ask", json={"question": big_question})  # no Authorization header
+    assert r.status_code == 413  # not 401 - size guard ran before auth
+
+
+# -- combined middleware stack (final whole-branch review regression) ------
+#
+# Pins the real middleware depth, outermost to innermost: TelemetryMiddleware
+# -> PayloadSizeGuard -> RateLimitMiddleware -> BearerTokenAuth -> router.
+
+
+def test_combined_auth_and_rate_limit_and_payload_guard_stack_together():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    combined_client = TestClient(build_app(feed, api_token=TOKEN, rate_limit_per_minute=2))
+
+    r1 = combined_client.get("/segments")  # no credentials
+    assert r1.status_code == 401
+    assert "x-request-id" in r1.headers
+
+    r2 = combined_client.get("/segments")  # no credentials
+    assert r2.status_code == 401
+    assert "x-request-id" in r2.headers
+
+    # The two failed-auth attempts above counted against the rate-limit budget,
+    # because rate limiting runs before auth: proves it did not stay 401 forever.
+    r3 = combined_client.get("/segments")
+    assert r3.status_code == 429
+    assert "x-request-id" in r3.headers
+
+    # Fresh app/client so this request's rate-limit window is untouched by the
+    # GETs above; pins that the payload guard runs regardless of auth/rate-limit
+    # state (it sits outside both, just inside TelemetryMiddleware).
+    fresh_client = TestClient(build_app(feed, api_token=TOKEN, rate_limit_per_minute=2))
+    big_question = "x" * (65 * 1024)
+    r4 = fresh_client.post("/ask", json={"question": big_question})  # no credentials
+    assert r4.status_code == 413
+    assert "x-request-id" in r4.headers
+
+
+# -- OWASP + telemetry response headers (always on) ------------------------
+
+EXPECTED_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+}
+
+
+def test_every_response_carries_owasp_and_telemetry_headers(client):
+    r = client.get("/segments")
+    assert "x-request-id" in r.headers
+    assert "x-process-time-ms" in r.headers
+    for name, value in EXPECTED_HEADERS.items():
+        assert r.headers[name] == value
+
+
+def test_docs_and_openapi_omit_the_strict_csp_but_keep_other_headers(client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        r = client.get(path)
+        assert "content-security-policy" not in r.headers
+        assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_a_429_response_still_carries_telemetry_headers():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, rate_limit_per_minute=1))
+    client.get("/segments")
+    r = client.get("/segments")
+    assert r.status_code == 429
+    assert "x-request-id" in r.headers
+    assert r.headers["x-content-type-options"] == "nosniff"

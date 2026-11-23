@@ -11,7 +11,8 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["schemathesis>=4", "pytest-timeout>=2.3", "pytest-xdist>=3.6", "ruff>=0.6"]
+dev = ["schemathesis>=4", "hypothesis>=6.100", "pytest-timeout>=2.3", "pytest-xdist>=3.6", "ruff>=0.6"]
+load = ["locust>=2.31"]
 
 [build-system]
 requires = ["hatchling"]
@@ -22,7 +23,7 @@ packages = ["src/api_tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers -m 'not perf'"
+addopts = "-ra --strict-markers -m 'not perf and not stateful'"
 xfail_strict = true
 timeout = 120
 markers = [
@@ -33,6 +34,7 @@ markers = [
     "perf: latency budgets (opt-in: -m perf)",
     "security: black-box hygiene checks",
     "known_defect: strict-xfail pins for defects in docs/FINDINGS.md",
+    "stateful: Hypothesis rule-based sequences of calls (opt-in: -m stateful)",
 ]
 junit_family = "xunit2"
 
@@ -47,3 +49,4 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
 "src/api_tests/server.py" = ["S603"]
+"loadtest/**" = ["S"]

@@ -33,9 +33,10 @@ MODES = (
 
 
 @pytest.fixture(scope="session")
-def api_schema(openapi, base_url):
+def api_schema(openapi, base_url, settings):
     schema = schemathesis.openapi.from_dict(patched_spec(openapi))
-    schema.config.update(base_url=base_url)
+    headers = {"Authorization": f"Bearer {settings.token}"} if settings.token else None
+    schema.config.update(base_url=base_url, headers=headers)
     schema.config.generation.update(modes=MODES)
     return schema
 
