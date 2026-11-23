@@ -1,3 +1,5 @@
+import contextlib
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -32,43 +34,59 @@ def _rec(pid: str, text: str) -> PlateRecord:
     )
 
 
-def test_store_idempotent_and_fuzzy():
-    s = PlateStore()
-    assert s.add(_rec("1", "ABC1234")) and not s.add(_rec("1", "ABC1234"))
-    s.add(_rec("2", "XYZ908I"))
-    hits = s.search("xyz 9081")
-    assert hits[0].plate_id == "2" and s.search("ABC-1234")[0].exact
-    assert s.search("") == []
+@pytest.fixture
+def store() -> Iterator[PlateStore]:
+    """An in-memory store that is closed afterwards.
+
+    PlateStore holds a long-lived connection, so an abandoned one raises
+    "ResourceWarning: unclosed database" when the collector reaches it.
+    """
+    with PlateStore() as s:
+        yield s
 
 
+def test_store_idempotent_and_fuzzy(store: PlateStore):
+    assert store.add(_rec("1", "ABC1234")) and not store.add(_rec("1", "ABC1234"))
+    store.add(_rec("2", "XYZ908I"))
+    hits = store.search("xyz 9081")
+    assert hits[0].plate_id == "2" and store.search("ABC-1234")[0].exact
+    assert store.search("") == []
+
+
+@contextlib.contextmanager
 def _pipeline(tmp_path: Path):
+    """Yield a pipeline and its store, closing the store on exit.
+
+    PlateStore holds a long-lived connection; an abandoned one raises
+    "ResourceWarning: unclosed database" whenever the collector reaches it.
+    """
     plans = {}
     for i, (name, drawn, read, dc, oc) in enumerate(SAMPLES):
         img, box = make_image(tmp_path / name, drawn, i)
         plans[pixel_key(img.convert("RGB"))] = [(box, dc, read, oc)]
     v = ScriptedVision(plans)
-    store = PlateStore()
-    return PlatePipeline(v, v, store), store
+    with PlateStore() as store:
+        yield PlatePipeline(v, v, store), store
 
 
 def test_scan_is_idempotent_and_skips_bad_files(tmp_path):
-    pipe, store = _pipeline(tmp_path)
-    (tmp_path / "broken.png").write_bytes(b"not an image")
-    first = pipe.scan_inbox(tmp_path)
-    assert (first.images_new, first.images_failed, first.plates_stored) == (3, 1, 3)
-    assert pipe.scan_inbox(tmp_path).images_new == 0 and store.count() == 3
-    assert len(store.needs_review()) == 1
+    with _pipeline(tmp_path) as (pipe, store):
+        (tmp_path / "broken.png").write_bytes(b"not an image")
+        first = pipe.scan_inbox(tmp_path)
+        assert (first.images_new, first.images_failed, first.plates_stored) == (3, 1, 3)
+        assert pipe.scan_inbox(tmp_path).images_new == 0 and store.count() == 3
+        assert len(store.needs_review()) == 1
 
 
 def test_agent_mock_is_grounded(tmp_path):
     from platewatch.agent import PlateDeps, build_agent, mock_model
 
-    pipe, store = _pipeline(tmp_path)
-    out = (
-        build_agent(mock_model())
-        .run_sync("find plate XYZ 9081", deps=PlateDeps(pipe, store, tmp_path))
-        .output
-    )
+    with _pipeline(tmp_path) as (pipe, store):
+        out = (
+            build_agent(mock_model())
+            .run_sync("find plate XYZ 9081", deps=PlateDeps(pipe, store, tmp_path))
+            .output
+        )
     assert out.matches[0].plate_text == "XYZ908I" and out.scanned.plates_stored == 3
 
 
@@ -77,12 +95,14 @@ def test_agent_rejects_invented_ids(tmp_path):
 
     from platewatch.agent import PlateDeps, build_agent
 
-    pipe, store = _pipeline(tmp_path)
-    agent = build_agent(
-        TestModel(call_tools=[], custom_output_args={"summary": "x", "needs_review": ["made-up"]})
-    )
-    with pytest.raises(Exception, match=r"retries|Unknown"):
-        agent.run_sync("hi", deps=PlateDeps(pipe, store, tmp_path))
+    with _pipeline(tmp_path) as (pipe, store):
+        agent = build_agent(
+            TestModel(
+                call_tools=[], custom_output_args={"summary": "x", "needs_review": ["made-up"]}
+            )
+        )
+        with pytest.raises(Exception, match=r"retries|Unknown"):
+            agent.run_sync("hi", deps=PlateDeps(pipe, store, tmp_path))
 
 
 def test_core_does_not_import_frameworks():
@@ -121,8 +141,8 @@ def test_cli_demo_and_search(tmp_path, capsys):
 def test_cli_ingest_and_ask_use_backend(tmp_path, monkeypatch, capsys):
     from platewatch import cli
 
-    pipe, _ = _pipeline(tmp_path)
-    vision = pipe.detector
+    with _pipeline(tmp_path) as (pipe, _):
+        vision = pipe.detector
     monkeypatch.setattr(cli, "_backend", lambda name: (vision, vision))
     db = tmp_path / "p.db"
     assert cli.main(["--db", str(db), "ingest", str(tmp_path)]) == 0
@@ -148,7 +168,7 @@ def _failing_reader(image, box):
     raise RuntimeError("OCR engine crashed")
 
 
-def test_reader_error_skips_detection_not_image(tmp_path):
+def test_reader_error_skips_detection_not_image(tmp_path, store: PlateStore):
     """A reader exception on one crop skips that crop but keeps the others."""
     from platewatch.vision.scripted import ScriptedVision
 
@@ -156,7 +176,6 @@ def test_reader_error_skips_detection_not_image(tmp_path):
     img, box = make_image(tmp_path / "good.png", "ABC123", 0)
     plans = {pixel_key(img.convert("RGB")): [(box, 0.9, "ABC123", 0.95)]}
     real_vision = ScriptedVision(plans)
-    store = PlateStore()
 
     # Monkey-patch reader to fail once then succeed.
     call_count = [0]
@@ -180,7 +199,7 @@ def test_reader_error_skips_detection_not_image(tmp_path):
     assert call_count[0] == 1
 
 
-def test_image_timeout_recorded_as_failure(tmp_path, monkeypatch):
+def test_image_timeout_recorded_as_failure(tmp_path, monkeypatch, store: PlateStore):
     """When process_file times out, scan_inbox records it as a failure, not a crash."""
     import platewatch.pipeline as plmod
     from platewatch.pipeline import PlatePipeline
@@ -189,7 +208,6 @@ def test_image_timeout_recorded_as_failure(tmp_path, monkeypatch):
     img, box = make_image(tmp_path / "slow.png", "ABC123", 0)
     plans = {pixel_key(img.convert("RGB")): [(box, 0.9, "ABC123", 0.95)]}
     vision = ScriptedVision(plans)
-    store = PlateStore()
 
     original_process = PlatePipeline.process_file
 
@@ -209,9 +227,8 @@ def test_image_timeout_recorded_as_failure(tmp_path, monkeypatch):
     assert store.count() == 0
 
 
-def test_sightings_count_tracks_duplicate_plate_text(tmp_path):
+def test_sightings_count_tracks_duplicate_plate_text(tmp_path, store: PlateStore):
     """Same plate text from two different images gets sightings=2 in search results."""
-    store = PlateStore()
     # two distinct records (different ids, same plate_text)
     store.add(_rec("id-1", "ABC1234"))
     store.add(
