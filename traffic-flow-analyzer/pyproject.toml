@@ -37,7 +37,8 @@ markers = [
     "live: needs a real model API key; skipped by default",
     "slow: headless browser or other slow tests; run with -m slow",
 ]
-addopts = "-m 'not live and not slow' -p no:cacheprovider --cov=trafficflow --cov-fail-under=70 --cov-report=term-missing"
+# 80 matches the root project and ledger-hound; actual is ~86%.
+addopts = "-m 'not live and not slow' -p no:cacheprovider --cov=trafficflow --cov-fail-under=80 --cov-report=term-missing"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning", "ignore::statsmodels.tools.sm_exceptions.ConvergenceWarning"]
 
 [tool.ruff]
