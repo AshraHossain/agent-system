@@ -245,7 +245,7 @@ def second_opinion(program: dspy.Module, results: list[Any], render: Any) -> dic
             )
             guess = predicted(pred)
             reasoning = str(getattr(pred, "reasoning", ""))[:300]
-        except Exception as exc:  # noqa: BLE001 - a classifier failure must not sink the report
+        except Exception as exc:
             guess, reasoning = None, f"classifier error: {type(exc).__name__}: {exc}"[:300]
         entry: dict[str, Any] = {"violation": guess, "reasoning": reasoning}
         if r.source == "library":

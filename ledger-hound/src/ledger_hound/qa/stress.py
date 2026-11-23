@@ -112,7 +112,7 @@ def generate(n: int, seed: int, skus: list[str]) -> list[Scenario]:
         received: list[tuple[str, Decimal]] = []
         for j, sku in enumerate(picked):
             qty = rng.randint(2, 40)
-            price = Decimal(rng.choice(PRICE_POOL + [f"{rng.randint(1, 20000) / 100:.2f}"]))
+            price = Decimal(rng.choice([*PRICE_POOL, f"{rng.randint(1, 20000) / 100:.2f}"]))
             po_lines.append((sku, Decimal(qty), price))
             mode = rng.choices(["full", "partial", "none"], [45, 40, 15])[0]
             if j == 0 and mode == "none":

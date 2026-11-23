@@ -233,7 +233,7 @@ class LiveBrain:
     async def _safe(self, label: str, live, fallback):
         try:
             return await live()
-        except Exception as exc:  # noqa: BLE001 - any model failure degrades to the mock
+        except Exception as exc:
             self.notes.append(f"{label}: fell back to mock ({type(exc).__name__}: {exc})"[:300])
             return await fallback()
 
