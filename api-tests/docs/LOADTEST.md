@@ -44,7 +44,7 @@ with the number of concurrent requests, not sublinearly as real parallelism woul
 every level tested** (no 5xx, no timeouts): it queues rather than breaks, but 40 concurrent
 users is a small dashboard's worth of traffic, not a stress test.
 
-**Cause:** `GET /status` computes a forecast and runs anomaly detection for *every* segment on
+**Cause:** Before the fix, `GET /status` computed a forecast and ran anomaly detection for *every* segment on
 every request (`trafficflow/api.py`'s `get_status`), all synchronous, CPU-bound work
 (`forecast_segment`, `detect`). FastAPI runs a sync `def` route in a thread pool, so concurrent
 calls compete for the same CPU instead of running in parallel; `/forecast` does the same work
@@ -54,7 +54,10 @@ for one segment and shows the same pattern at a smaller scale.
 
 `/status` and `/forecast/{id}` now cache each segment's forecast and anomaly result, keyed by a
 hash of that segment's input data; results are recomputed only when the feed has new readings
-(`traffic-flow-analyzer/trafficflow/core/cache.py`, used from `trafficflow/api.py`).
+(`traffic-flow-analyzer/trafficflow/core/cache.py`, used from `trafficflow/api.py`). The key is
+each segment's exact input data plus segment id, free-flow speed and horizon. Staleness, network
+status and current levels are still computed per request. Memory is bounded: an LRU cache of at
+least 1024 entries per app, scaled with the segment count.
 
 Measured on the same machine on 2026-11-25 (4 CPUs, single uvicorn worker, synthetic feed,
 mock model), one server at a time, "before" from `origin/master` (30e5045) and "after" from
@@ -71,8 +74,13 @@ probe on a new server, so its 1-concurrent row is a cold cache miss):
 | 40 | 16.83 s / 17.13 s | 0.70 s / 0.81 s |
 
 A second probe run on the already-warm "after" server gave 0.05 s at 1 concurrent, 0.24 s at 10
-and 0.77 s at 40. A cold miss costs about what "before" costs; the gain comes from the requests
-after it.
+and 0.77 s at 40. A cold miss costs about what "before" costs; once the first request has filled the
+cache, later requests reuse it.
+
+Latency still grows with concurrency (0.23 s at 10, 0.70 s at 40). The likely cause, not
+profiled: warm requests still read each segment's history, hash it and serialize the response,
+which is CPU-bound and still queues, but at about 0.017 s per extra concurrent request instead
+of about 0.42 s.
 
 Locust mixed run, 40 users, 30 s:
 
@@ -107,7 +115,7 @@ for n in (1, 10, 40):
 EOF
 ```
 
-## Not fixed here (original options, status after the fix)
+## Options considered
 
 Scope here was the harness and the measurement, not a performance rewrite. The load test
 earns its keep by turning a vague worry ("`/stream` holds connections open") into a specific,
