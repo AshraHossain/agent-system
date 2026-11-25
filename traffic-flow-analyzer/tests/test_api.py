@@ -8,6 +8,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
+import trafficflow.core.anomaly as anomaly_module
 import trafficflow.core.forecast as forecast_module
 from trafficflow.api import build_app
 from trafficflow.data.feed import SyntheticFeed
@@ -413,6 +414,20 @@ def counted(monkeypatch):
     return calls
 
 
+@pytest.fixture
+def detected(monkeypatch):
+    """Count anomaly scans for apps built after this fixture."""
+    calls = []
+    real = anomaly_module.detect
+
+    def counting(*args, **kwargs):
+        calls.append(args[1])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(anomaly_module, "detect", counting)
+    return calls
+
+
 def _fresh_feed():
     feed = SyntheticFeed(days=21)
     feed.advance(24 * 12)
@@ -437,7 +452,7 @@ def test_forecast_at_60_minutes_reuses_the_status_entry(counted):
     assert len(counted) == before
 
 
-def test_status_responses_match_an_uncached_app():
+def test_status_responses_match_a_cold_app():
     cached = TestClient(build_app(_fresh_feed()))
     first = cached.get("/status").json()
     second = cached.get("/status").json()
@@ -460,6 +475,33 @@ def test_status_recomputes_after_feed_advances(counted):
     assert after_status["as_of"] > before_status["as_of"]
     assert after_fc["points"][0]["ts"] > before_fc["points"][0]["ts"]
     assert len(counted) == 2 * n_segments
+
+
+def test_anomaly_scans_recompute_after_feed_advances(detected):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    n_segments = len(feed.segments())
+    assert client.get("/status").status_code == 200
+    assert client.get("/status").status_code == 200
+    assert len(detected) == n_segments
+    feed.advance(1)
+    assert client.get("/status").status_code == 200
+    assert len(detected) == 2 * n_segments
+
+
+def test_status_error_is_not_cached(monkeypatch):
+    calls = []
+
+    def failing(*args, **kwargs):
+        calls.append(1)
+        raise ValueError("boom")
+
+    monkeypatch.setattr(forecast_module, "forecast_segment", failing)
+    client = TestClient(build_app(_fresh_feed()))
+    assert client.get("/status").status_code == 500
+    after_first = len(calls)
+    assert client.get("/status").status_code == 500
+    assert len(calls) > after_first
 
 
 def test_forecast_error_is_not_cached(monkeypatch):

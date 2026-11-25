@@ -26,6 +26,14 @@ def test_fingerprint_changes_when_the_window_moves():
     assert series_fingerprint(a) != series_fingerprint(b)
 
 
+def test_fingerprint_distinguishes_timezones():
+    idx = pd.date_range("2026-01-01", periods=5, freq="5min")
+    naive = pd.Series(range(5), index=idx, dtype=float)
+    utc = naive.copy()
+    utc.index = idx.tz_localize("UTC")
+    assert series_fingerprint(naive) != series_fingerprint(utc)
+
+
 def test_cache_returns_the_stored_result_without_recomputing():
     cache, calls = ResultCache(), []
     first = cache.get_or_compute("k", lambda: calls.append(1) or object())
