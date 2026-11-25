@@ -31,6 +31,21 @@ markers = ["live: needs a real model API key; skipped by default"]
 addopts = "-m 'not live' -p no:cacheprovider"
 filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
 
+[tool.coverage.run]
+source = ["src/platewatch"]
+branch = true
+# The Hugging Face backends import torch and reach huggingface.co; they are covered
+# only by tests/test_platewatch_live.py (-m live), as the root project also omitted them.
+omit = ["src/platewatch/vision/huggingface.py"]
+
+[tool.coverage.report]
+# 80 matches root, ledger-hound and traffic-flow-analyzer; actual is ~96% with the
+# live-only Hugging Face backends omitted. platewatch previously had no gate at all:
+# root's coverage source was narrowed from ["opspilot", "platewatch"] to ["opspilot"],
+# and this project's own workflow ran bare pytest, so nothing measured it.
+fail_under = 80
+show_missing = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

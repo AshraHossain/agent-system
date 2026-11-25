@@ -1,5 +1,6 @@
 """Tests for the SQLite-backed AlertStore."""
 
+from collections.abc import Iterator
 from datetime import datetime, timedelta
 
 import pytest
@@ -9,8 +10,9 @@ from trafficflow.contracts import CongestionLevel
 
 
 @pytest.fixture
-def store() -> AlertStore:
-    return AlertStore(":memory:")
+def store() -> Iterator[AlertStore]:
+    with AlertStore(":memory:") as s:
+        yield s
 
 
 def test_record_and_query(store: AlertStore):
@@ -93,9 +95,38 @@ def test_monitor_records_to_store():
 
     feed = SyntheticFeed()
     feed.advance(12)  # 08:30 — morning congestion
-    store = AlertStore(":memory:")
     rules = [AlertRule(segment_id="S1", min_level=CongestionLevel.FREE)]
-    monitor = AlertMonitor(AlertConfig(rules=rules, feed=feed), store=store)
-    monitor.check()
-    # Free threshold is always met → at least one record
-    assert store.count() >= 1
+    with AlertStore(":memory:") as store:
+        monitor = AlertMonitor(AlertConfig(rules=rules, feed=feed), store=store)
+        monitor.check()
+        # Free threshold is always met → at least one record
+        assert store.count() >= 1
+
+
+def test_file_backed_sessions_do_not_leak_connections(tmp_path):
+    """Each call on a file-backed store closes the connection it opened.
+
+    `sqlite3.Connection.__exit__` commits but never closes, so the earlier
+    `with self._connect()` pattern left one open connection per call behind.
+    """
+    import gc
+    import sqlite3
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ResourceWarning)
+        store = AlertStore(tmp_path / "alerts.db")
+        for i in range(5):
+            store.record(datetime(2024, 6, 1, 8, i), "S1", CongestionLevel.HEAVY, 40.0)
+        assert store.count() == 5
+        store.close()
+        gc.collect()
+
+    # A closed in-memory store must fail loudly rather than silently reconnecting
+    # to a fresh, empty ":memory:" database and reporting zero rows.
+    mem = AlertStore(":memory:")
+    mem.record(datetime(2024, 6, 1, 8, 0), "S1", CongestionLevel.HEAVY, 40.0)
+    mem.close()
+    mem.close()  # idempotent
+    with pytest.raises(sqlite3.ProgrammingError):
+        mem.count()

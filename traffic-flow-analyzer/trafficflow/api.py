@@ -42,10 +42,22 @@ logger = logging.getLogger(__name__)
 try:
     from fastapi import FastAPI, HTTPException, Query
     from fastapi.responses import RedirectResponse, StreamingResponse
-    from pydantic import BaseModel as _BaseModel
-    from pydantic import WithJsonSchema
+    from pydantic import BaseModel as _PydanticBaseModel
+    from pydantic import ConfigDict, WithJsonSchema
 except ImportError as _err:
     raise ImportError("fastapi is required: pip install 'trafficflow[api]'") from _err
+
+
+class _BaseModel(_PydanticBaseModel):
+    """Immutable base for this module's request and response models.
+
+    Frozen for the same reason `contracts/models.py` is: a DTO that can be mutated
+    after validation lets a handler silently diverge from what the core computed.
+    Declared once here rather than per class so no future model can forget it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
 
 # Same bounds as the agents' forecast tools; work and response size grow with the horizon.
 MIN_HORIZON_MINUTES = 5
