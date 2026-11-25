@@ -213,7 +213,8 @@ def build_app(
     )
     from trafficflow.core.status import network_status
 
-    cache = ResultCache(maxsize=1024)
+    # /status alone needs 2 entries per segment; the headroom covers other horizons.
+    cache = ResultCache(maxsize=max(1024, 4 * len(feed.segments())))
 
     app = FastAPI(
         title="Traffic Flow API",

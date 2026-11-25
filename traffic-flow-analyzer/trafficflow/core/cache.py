@@ -14,9 +14,12 @@ T = TypeVar("T")
 
 
 def series_fingerprint(series: pd.Series) -> str:
-    """Hex digest of a series' values and index; equal series give equal digests."""
+    """Hex digest of a series' values, index and index dtype (so timezone counts)."""
     raw = pd.util.hash_pandas_object(series, index=True).to_numpy().tobytes()
-    return hashlib.blake2b(raw, digest_size=16).hexdigest()
+    digest = hashlib.blake2b(digest_size=16)
+    digest.update(str(series.index.dtype).encode())
+    digest.update(raw)
+    return digest.hexdigest()
 
 
 class ResultCache:
@@ -30,6 +33,10 @@ class ResultCache:
         self._lock = threading.Lock()
 
     def get_or_compute(self, key: Hashable, compute: Callable[[], T]) -> T:
+        """Return the cached value for `key`, computing and storing it on a miss.
+
+        `compute` must not call back into this cache (the lock is not reentrant).
+        """
         # Held during compute(): concurrent misses then compute once. The work is
         # CPU-bound, so the GIL would serialize it anyway.
         with self._lock:
