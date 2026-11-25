@@ -19,7 +19,7 @@
 - No time-based expiry anywhere: a cache entry is valid exactly as long as its input data is unchanged.
 - Ruff, including the bandit `"S"` rules, must stay clean with no new ignores. Use `blake2b`, not `md5`/`sha1` (ruff S324).
 - Conventional commits, scope `trafficflow` (or `api-tests` for files under `api-tests/`). Do not claim production readiness.
-- Coverage gate stays met (`--cov-fail-under=70` in `pyproject.toml`).
+- Coverage gate stays met (`--cov-fail-under=80` in `pyproject.toml`, raised from 70 by PR #52).
 
 ## Review Focus
 
