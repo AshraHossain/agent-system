@@ -482,3 +482,15 @@ def test_each_app_has_its_own_cache(counted):
     TestClient(build_app(feed_a)).get("/status")
     TestClient(build_app(feed_b)).get("/status")  # identical data, but a separate app
     assert len(counted) == 2 * n_segments
+
+
+def test_forecast_at_another_horizon_does_not_reuse_the_status_entry(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    client.get("/status")
+    before = len(counted)
+    body = client.get("/forecast/S1?horizon=30").json()
+    assert body["horizon_minutes"] == 30
+    assert len(counted) == before + 1
+    oracle = TestClient(build_app(_fresh_feed())).get("/forecast/S1?horizon=30").json()
+    assert body == oracle
