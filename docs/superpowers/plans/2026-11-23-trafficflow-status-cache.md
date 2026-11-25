@@ -26,7 +26,7 @@
 1. **An exception must never be cached.** A forecast that raises `ValueError` (too little history) must give `422` on `/forecast` every time and recompute each time; `/status` must still give its opaque `500`. Pinned by `test_cache_does_not_store_exceptions` (Task 1) and `test_forecast_error_is_not_cached` (Task 2).
 2. **New data must show up on the very next request.** After `feed.advance(1)`, `/status`'s `as_of` and `/forecast`'s first point move forward and the forecaster runs again. Pinned by `test_status_recomputes_after_feed_advances` (Task 2).
 3. **Identical data with a different free-flow speed must not reuse an entry**, because `forecast_segment` clips to it. No feed changes a segment's free-flow speed at runtime today, so no test can trigger this; it is pinned by the key including `free_flow_kmh` (Task 2's Interfaces), which the Task 2 reviewer must check. `test_status_responses_match_an_uncached_app` (Task 2) guards the general "same answer as no cache" property.
-4. **Two apps must not share a cache.** Each `build_app` call owns its cache, so two feeds never see each other's results. Pinned by `test_each_app_has_its_own_cache` (Task 2).
+4. **Two apps must not share a cache.** Each `build_app` call owns its cache, so no module-level state outlives an app or leaks between apps (and test runs). Pinned by `test_each_app_has_its_own_cache` (Task 2): two apps on identical data each run the forecaster.
 5. **Many distinct keys must not grow memory without limit** (live feeds change key every poll; `/forecast` accepts 36 horizons). Pinned by `test_cache_evicts_least_recently_used` (Task 1).
 
 ---
@@ -260,12 +260,12 @@ def test_forecast_error_is_not_cached(monkeypatch):
     assert len(calls) == 2
 
 
-def test_each_app_has_its_own_cache():
-    early, late = _fresh_feed(), _fresh_feed()
-    late.advance(12)
-    a = TestClient(build_app(early)).get("/status").json()
-    b = TestClient(build_app(late)).get("/status").json()
-    assert a["as_of"] != b["as_of"]
+def test_each_app_has_its_own_cache(counted):
+    feed_a, feed_b = _fresh_feed(), _fresh_feed()
+    n_segments = len(feed_a.segments())
+    TestClient(build_app(feed_a)).get("/status")
+    TestClient(build_app(feed_b)).get("/status")  # identical data, but a separate app
+    assert len(counted) == 2 * n_segments
 ```
 
 - [ ] **Step 2: Run them to verify the cache tests fail**
@@ -342,6 +342,8 @@ Expected: "before" grows roughly linearly with `n`, as documented. "After" stays
 
 - [ ] **Step 4: Run the documented Locust mixed run against each port**
 
+From `api-tests/`, once: `uv sync --group load`. Then for `PORT` in 8001 and 8002:
+
 ```bash
 uv run locust -f loadtest/locustfile.py --host http://127.0.0.1:PORT --headless -u 40 -r 10 --run-time 30s --csv=var/load-PORT
 ```
@@ -357,7 +359,7 @@ Expected: no `trafficflow serve-api` process left (`pgrep -f "serve-api --port 8
 - [ ] **Step 6: Update the docs with the real numbers**
 
 - `api-tests/docs/LOADTEST.md`: keep the original findings (the history of how the bottleneck was found). Add a "Fixed" section with a before/after table for both measurements (probe at 1/10/40, Locust medians and p99s), the same machine and date for both columns, one sentence on the fix (results keyed by a hash of the input data, recomputed only on new readings) and a pointer to `traffic-flow-analyzer/trafficflow/core/cache.py`. Include the probe snippet from Step 3 so a reviewer can reproduce it. In "Not fixed here", mark option 3 (memoize per-segment forecasts) as done, and keep options 1 and 2 with one line each on why they weren't needed.
-- `api-tests/PLAN.md`: tick item 7 (`☐` → `☑`, matching the file's existing done marker) and add the fix's PR reference once known (leave `(PR #TBD)` for the controller to fill).
+- `api-tests/PLAN.md`: tick item 7 (`☐` → `☑`, matching the file's existing done marker) and add the fix's PR reference `(PR #53)`.
 - `traffic-flow-analyzer/TASK.md`: add a done line under the existing done items: `- [x] /status and /forecast reuse forecasts until the feed has new data (cache keyed by input hash); see api-tests/docs/LOADTEST.md`.
 
 - [ ] **Step 7: Commit**
