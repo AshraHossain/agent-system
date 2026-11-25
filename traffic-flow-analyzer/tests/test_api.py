@@ -8,6 +8,7 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
+import trafficflow.core.forecast as forecast_module
 from trafficflow.api import build_app
 from trafficflow.data.feed import SyntheticFeed
 
@@ -393,3 +394,91 @@ def test_a_429_response_still_carries_telemetry_headers():
     assert r.status_code == 429
     assert "x-request-id" in r.headers
     assert r.headers["x-content-type-options"] == "nosniff"
+
+
+# -- forecast cache (recompute only when the feed has new data) ---------------
+
+
+@pytest.fixture
+def counted(monkeypatch):
+    """Count forecaster runs for apps built after this fixture."""
+    calls = []
+    real = forecast_module.forecast_segment
+
+    def counting(*args, **kwargs):
+        calls.append(args[1].id)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(forecast_module, "forecast_segment", counting)
+    return calls
+
+
+def _fresh_feed():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    return feed
+
+
+def test_repeated_status_runs_the_forecaster_once_per_segment(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    n_segments = len(feed.segments())
+    assert client.get("/status").status_code == 200
+    assert client.get("/status").status_code == 200
+    assert len(counted) == n_segments
+
+
+def test_forecast_at_60_minutes_reuses_the_status_entry(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    client.get("/status")
+    before = len(counted)
+    assert client.get("/forecast/S1?horizon=60").status_code == 200
+    assert len(counted) == before
+
+
+def test_status_responses_match_an_uncached_app():
+    cached = TestClient(build_app(_fresh_feed()))
+    first = cached.get("/status").json()
+    second = cached.get("/status").json()
+    oracle = TestClient(build_app(_fresh_feed())).get("/status").json()
+    assert first == second == oracle
+    f_cached = [cached.get("/forecast/S1?horizon=30").json() for _ in range(2)]
+    f_oracle = TestClient(build_app(_fresh_feed())).get("/forecast/S1?horizon=30").json()
+    assert f_cached[0] == f_cached[1] == f_oracle
+
+
+def test_status_recomputes_after_feed_advances(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    n_segments = len(feed.segments())
+    before_status = client.get("/status").json()
+    before_fc = client.get("/forecast/S1").json()
+    feed.advance(1)
+    after_status = client.get("/status").json()
+    after_fc = client.get("/forecast/S1").json()
+    assert after_status["as_of"] > before_status["as_of"]
+    assert after_fc["points"][0]["ts"] > before_fc["points"][0]["ts"]
+    assert len(counted) == 2 * n_segments
+
+
+def test_forecast_error_is_not_cached(monkeypatch):
+    calls = []
+
+    def failing(*args, **kwargs):
+        calls.append(1)
+        raise ValueError("need at least 288 readings, got 3")
+
+    monkeypatch.setattr(forecast_module, "forecast_segment", failing)
+    client = TestClient(build_app(_fresh_feed()))
+    for _ in range(2):
+        assert client.get("/forecast/S1").status_code == 422
+    assert len(calls) == 2
+
+
+def test_each_app_has_its_own_cache(counted):
+    feed_a, feed_b = _fresh_feed(), _fresh_feed()
+    n_segments = len(feed_a.segments())
+    TestClient(build_app(feed_a)).get("/status")
+    TestClient(build_app(feed_b)).get("/status")  # identical data, but a separate app
+    assert len(counted) == 2 * n_segments
