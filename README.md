@@ -84,8 +84,9 @@ flowchart TD
     PAR --> INC["incident_analyst (Rule Candidates + Root-Cause Ranking)"]
     INC --> DRAFT["report_drafter (Structured ReportDraft + Citations)"]
     DRAFT --> EVER["EvidenceVerifierAgent (Deterministic: Citations, Sufficiency, Ceiling)"]
-    EVER --> RVER["review_verifier (Semantic & Policy Review)"]
-    RVER -->|"Optional LoopAgent (max 2 rounds on failed stage)"| PAR
+    EVER --> GATE{"reinvestigation_gate (optional, OPSPILOT_MAX_INVESTIGATION_ROUNDS=2)"}
+    GATE -->|"another round: re-run only failed stages"| PAR
+    GATE -->|"escalate: end the loop"| RVER["review_verifier (Semantic & Policy Review)"]
     RVER --> FIN["FinalizerAgent (Read-Only Policy Strip + Status/Escalation Rules)"]
     FIN --> OUT(["Frozen InvestigationReport (investigated / inconclusive / requires_human_review)"])
 ```
