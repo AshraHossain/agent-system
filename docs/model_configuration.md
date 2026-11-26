@@ -6,6 +6,16 @@
 | `OPSPILOT_MODEL` | `gemini-2.5-flash` | Gemini model ID passed to `LlmAgent.model` |
 | `OPSPILOT_MODEL_TIMEOUT_S` | 60 | per-request HTTP timeout |
 | `OPSPILOT_MAX_MODEL_ATTEMPTS` | 2 | `HttpRetryOptions.attempts` (429/500/503/504 only) |
+| `OPSPILOT_RETRY_INITIAL_DELAY_S` | 1 | first backoff delay between those attempts |
+| `OPSPILOT_RETRY_MAX_DELAY_S` | 8 | upper bound on a single backoff delay |
+
+Rate limits (429 `RESOURCE_EXHAUSTED`): a run makes ~11-14 model calls in ~20 s, and three
+specialists start in parallel. On a per-minute quota (e.g. free-tier keys) the defaults are
+too short to recover. Raise the retry window, for example
+`OPSPILOT_MAX_MODEL_ATTEMPTS=5`, `OPSPILOT_RETRY_INITIAL_DELAY_S=5`,
+`OPSPILOT_RETRY_MAX_DELAY_S=30`, and keep `OPSPILOT_MAX_DURATION_S` large enough to cover
+the added waits. The defaults are unchanged because they were not validated against a live
+quota.
 
 CLI shortcut: `opspilot --live ...` sets the provider to `gemini`.
 
