@@ -25,6 +25,7 @@ def base_url(settings: Settings) -> Iterator[str]:
         settings.target_project,
         log_path=PROJECT_ROOT / "reports" / "server.log",
         startup_timeout_s=settings.startup_timeout_s,
+        api_token=settings.token,
     )
     with server:
         yield server.base_url

@@ -20,12 +20,20 @@ def free_port() -> int:
 class LocalServer:
     """``uv run trafficflow serve-api`` in the target project, stopped on exit."""
 
-    def __init__(self, project: Path, *, log_path: Path, startup_timeout_s: float = 90.0):
+    def __init__(
+        self,
+        project: Path,
+        *,
+        log_path: Path,
+        startup_timeout_s: float = 90.0,
+        api_token: str | None = None,
+    ):
         if not (project / "pyproject.toml").is_file():
             raise FileNotFoundError(f"target project not found: {project}")
         self.project = project
         self.log_path = log_path
         self.startup_timeout_s = startup_timeout_s
+        self.api_token = api_token
         self.port = free_port()
         self.base_url = f"http://127.0.0.1:{self.port}"
         self._proc: subprocess.Popen[bytes] | None = None
@@ -34,6 +42,9 @@ class LocalServer:
         env = dict(os.environ)
         env.pop("VIRTUAL_ENV", None)  # our venv, not the target's
         env.pop("TRAFFICFLOW_MODEL", None)  # keep /ask on the deterministic mock
+        env.pop("TRAFFICFLOW_API_TOKEN", None)  # set explicitly below, never inherited
+        if self.api_token:
+            env["TRAFFICFLOW_API_TOKEN"] = self.api_token
         cmd = ["uv", "run", "--project", str(self.project), "--extra", "api", "trafficflow"]
         cmd += ["serve-api", "--host", "127.0.0.1", "--port", str(self.port)]
         # a file, not a pipe: uvicorn logs every request and a full pipe would stall it
@@ -51,8 +62,10 @@ class LocalServer:
             if self._proc and self._proc.poll() is not None:
                 out = self.log_path.read_text(errors="replace")
                 raise RuntimeError(f"target exited with {self._proc.returncode}:\n{out[-2000:]}")
+            headers = {"Authorization": f"Bearer {self.api_token}"} if self.api_token else {}
             try:
-                if httpx.get(f"{self.base_url}/openapi.json", timeout=2).status_code == 200:
+                probe = httpx.get(f"{self.base_url}/openapi.json", headers=headers, timeout=2)
+                if probe.status_code == 200:
                     return
             except httpx.TransportError:
                 pass

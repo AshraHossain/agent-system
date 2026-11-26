@@ -58,7 +58,7 @@ async def investigate(
 
         try:
             happy = await explore_with_agent(client, catalog, brain)
-        except Exception as exc:  # noqa: BLE001 - fall back to the scripted path
+        except Exception as exc:
             notes.append(
                 f"agent explorer failed, used scripted path: {type(exc).__name__}: {exc}"[:300]
             )
@@ -80,7 +80,7 @@ async def investigate(
 
         try:
             results += await improvise_attacks(client, catalog, brain, results, n=improvise)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             notes.append(f"improviser failed: {type(exc).__name__}: {exc}"[:300])
     elif improvise:
         notes.append("--improvise needs a live model; skipped")

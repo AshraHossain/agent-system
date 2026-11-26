@@ -38,9 +38,9 @@ def run_demo() -> int:
         for i, (name, drawn, read, dc, oc) in enumerate(SAMPLES):
             img, box = make_image(inbox / name, drawn, i)
             plans[pixel_key(img.convert("RGB"))] = [(box, dc, read, oc)]
-        store = PlateStore()
         vision = ScriptedVision(plans)
-        deps = PlateDeps(PlatePipeline(vision, vision, store), store, inbox)
-        out = build_agent(mock_model()).run_sync("find plate XYZ 9081", deps=deps).output
+        with PlateStore() as store:
+            deps = PlateDeps(PlatePipeline(vision, vision, store), store, inbox)
+            out = build_agent(mock_model()).run_sync("find plate XYZ 9081", deps=deps).output
         print(out.model_dump_json(indent=2))
     return 0

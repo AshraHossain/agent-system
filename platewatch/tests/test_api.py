@@ -206,3 +206,21 @@ def test_serve_on_loopback_needs_no_token(store: PlateStore, monkeypatch):
     monkeypatch.setattr("uvicorn.run", lambda app, **kw: started.update(kw))
     serve(store, host="127.0.0.1", port=8001)
     assert started["host"] == "127.0.0.1"
+
+
+# --- CLI wiring -----------------------------------------------------------------------
+
+
+def test_cli_serve_passes_an_open_store_and_the_bind_options(tmp_path, monkeypatch):
+    """`platewatch serve` must hand `serve` a live store: it is used after the CLI returns."""
+    from platewatch import api, cli
+
+    seen: dict[str, object] = {}
+
+    def fake_serve(store, host, port, allow_unauthenticated):
+        seen.update(host=host, port=port, allow=allow_unauthenticated, plates=store.count())
+
+    monkeypatch.setattr(api, "serve", fake_serve)
+    db = tmp_path / "plates.db"
+    assert cli.main(["--db", str(db), "serve", "--host", "127.0.0.1", "--port", "9123"]) == 0
+    assert seen == {"host": "127.0.0.1", "port": 9123, "allow": False, "plates": 0}

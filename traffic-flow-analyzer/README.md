@@ -220,6 +220,18 @@ uv run trafficflow monitor --level heavy --webhook https://example.invalid/hook
 The monitor polls a live feed and POSTs to the webhook when a segment reaches the chosen
 congestion level. It never calls a model.
 
+Set `TRAFFICFLOW_API_TOKEN` (or pass `--token`) to require
+`Authorization: Bearer <token>` (or `X-API-Key: <token>`, never both) on every route. Unset, the API is open. This is one static
+shared secret — enough to keep a demo instance off the open internet, not a production
+auth system. Set `TRAFFICFLOW_RATE_LIMIT_PER_MINUTE` (or `--rate-limit`) to enable per-client
+rate limiting; it is disabled by default. See [SECURITY.md](SECURITY.md) for the limits and
+the header guarantees.
+
+```bash
+uv run trafficflow serve-api --port 8000 --token "$(openssl rand -hex 32)"
+curl -H "Authorization: Bearer <token>" localhost:8000/segments
+```
+
 ## Honest scope
 
 - **The default feed is simulated** (`SyntheticFeed`). Recorded data can be replayed with

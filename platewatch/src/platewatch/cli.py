@@ -57,27 +57,28 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_demo()
     args.db.parent.mkdir(parents=True, exist_ok=True)
-    store = PlateStore(args.db)
-    if args.cmd == "ingest":
-        det, rd = _backend(args.backend)
-        print(PlatePipeline(det, rd, store).scan_inbox(args.inbox).model_dump_json(indent=2))
-    elif args.cmd == "search":
-        for h in store.search(args.query, limit=args.limit):
-            print(h.model_dump_json())
-    elif args.cmd == "serve":
-        from platewatch.api import serve
+    with PlateStore(args.db) as store:
+        if args.cmd == "ingest":
+            det, rd = _backend(args.backend)
+            print(PlatePipeline(det, rd, store).scan_inbox(args.inbox).model_dump_json(indent=2))
+        elif args.cmd == "search":
+            for h in store.search(args.query, limit=args.limit):
+                print(h.model_dump_json())
+        elif args.cmd == "serve":
+            from platewatch.api import serve
 
-        serve(store, args.host, args.port, args.allow_unauthenticated)
-    else:
-        from platewatch.agent import PlateDeps, build_agent, default_model
+            # Inside the `with`, so the store stays open until the server shuts down.
+            serve(store, args.host, args.port, args.allow_unauthenticated)
+        else:
+            from platewatch.agent import PlateDeps, build_agent, default_model
 
-        det, rd = _backend("hf")
-        deps = PlateDeps(PlatePipeline(det, rd, store), store, args.inbox)
-        print(
-            build_agent(default_model())
-            .run_sync(args.question, deps=deps)
-            .output.model_dump_json(indent=2)
-        )
+            det, rd = _backend("hf")
+            deps = PlateDeps(PlatePipeline(det, rd, store), store, args.inbox)
+            print(
+                build_agent(default_model())
+                .run_sync(args.question, deps=deps)
+                .output.model_dump_json(indent=2)
+            )
     return 0
 
 

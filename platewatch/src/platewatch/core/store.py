@@ -10,6 +10,7 @@ import json
 import sqlite3
 import threading
 from pathlib import Path
+from types import TracebackType
 
 import numpy as np
 
@@ -38,6 +39,22 @@ class PlateStore:
 
     def close(self) -> None:
         self._db.close()
+
+    def __enter__(self) -> PlateStore:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the connection so an abandoned store cannot raise ResourceWarning.
+
+        The connection is long-lived by design (PydanticAI runs sync tools in worker
+        threads, serialised by the lock), so it has to be released explicitly.
+        """
+        self.close()
 
     def has_image(self, image_sha256: str) -> bool:
         with self._lock:

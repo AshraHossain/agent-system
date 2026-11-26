@@ -38,6 +38,7 @@
 - [x] Briefing history persisted in SQLite (`serve --reports var/reports.db`)
 - [x] Map tab (fixed demo coordinates for the simulated segments)
 - [x] Sub-project linked from the root README and `CLAUDE.md`
+- [x] /status and /forecast reuse forecasts until the feed has new data (cache keyed by input hash); see api-tests/docs/LOADTEST.md
 
 ## Needs the owner
 - [ ] **Live-model validation** (many repetitions): schema-valid rate, citation pass rate.

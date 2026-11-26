@@ -264,7 +264,7 @@ async def _partial_receipt_setup(client, bug: str = "") -> tuple[int, int]:
 async def test_rematch_blocked_on_clean_api(clean):
     # Partial receipt → match gives matched_with_exceptions → clean API blocks re-match
     client, _ = clean
-    pid, inv_id = await _partial_receipt_setup(client)
+    _pid, inv_id = await _partial_receipt_setup(client)
     m1 = await client.call("POST", f"/invoices/{inv_id}/match")
     assert m1.body["status"] == "matched_with_exceptions"
     m2 = await client.call("POST", f"/invoices/{inv_id}/match")

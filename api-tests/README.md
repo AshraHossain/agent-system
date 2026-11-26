@@ -81,6 +81,11 @@ docker compose -f ../traffic-flow-analyzer/docker-compose.yml up -d api
 API_BASE_URL=http://localhost:8000 uv run pytest
 ```
 
+If the target requires `Authorization: Bearer <token>` (`TRAFFICFLOW_API_TOKEN`), set
+`API_TOKEN` to the same value; without `API_BASE_URL`, setting `API_TOKEN` also starts the
+local server with that token, so the whole suite runs end-to-end against an authenticated
+instance (see the environment table below).
+
 ## What is tested
 
 | Marker | Folder | What it checks |
@@ -92,6 +97,10 @@ API_BASE_URL=http://localhost:8000 uv run pytest
 | `security` | `tests/security/` | No stack traces or paths in error bodies, hostile ids (traversal, injection, 4 KB) rejected cleanly, large bodies don't crash it, no version in `server`, no permissive CORS, auth enforced when `API_TOKEN` is set |
 | `known_defect` | `tests/known_defects/` | Defects found in the target, pinned as strict xfails — see [docs/FINDINGS.md](docs/FINDINGS.md) |
 | `perf` | `tests/perf/` | p95 latency per endpoint against a budget. **Opt-in**: `-m perf` |
+| `stateful` | `tests/stateful/` | A Hypothesis rule-based state machine runs long random sequences of calls against one live server, checking invariants that only make sense across a sequence (the segment list doesn't change mid-run, the feed's clock never runs backwards). **Opt-in**: `-m stateful` |
+
+Separately, `loadtest/locustfile.py` is a Locust load test, outside the pytest suite — see
+[docs/LOADTEST.md](docs/LOADTEST.md).
 
 ## Commands
 
@@ -102,8 +111,10 @@ uv run pytest -m contract                          # fuzzing, valid and invalid 
 API_FUZZ_MODES=positive uv run pytest -m contract  # schema-valid requests only
 API_FUZZ_EXAMPLES=200 uv run pytest -m contract    # deeper fuzzing
 uv run pytest -m perf                              # latency budgets
-uv run pytest -n auto -m "not contract and not perf"   # parallel (pytest-xdist; one server per worker)
+uv run pytest -m stateful                          # random call-sequence fuzzing
+uv run pytest -n auto -m "not contract and not perf and not stateful"  # parallel (one server/worker)
 uv run pytest --junitxml=reports/junit.xml         # CI report
+API_TOKEN=$(openssl rand -hex 32) uv run pytest    # full suite, end-to-end with auth on
 uv run ruff check . && uv run ruff format --check .
 ```
 
@@ -112,13 +123,14 @@ uv run ruff check . && uv run ruff format --check .
 | Variable | Default | Meaning |
 |---|---|---|
 | `API_BASE_URL` | unset | Test this server instead of starting one |
-| `API_TOKEN` | unset | Sent as `Authorization: Bearer …`; also enables the auth test |
+| `API_TOKEN` | unset | Sent as `Authorization: Bearer …`. Also enables the auth test, and, when `API_BASE_URL` is unset, is passed to the local server as `TRAFFICFLOW_API_TOKEN`, so the whole suite then runs end-to-end against an authenticated instance |
 | `API_TIMEOUT` | `10` | Per-request timeout, seconds |
 | `API_TARGET_PROJECT` | `../traffic-flow-analyzer` | Project to start when `API_BASE_URL` is unset |
 | `API_STARTUP_TIMEOUT` | `90` | Seconds to wait for the local server |
 | `API_FUZZ_EXAMPLES` | `25` | Schemathesis examples per operation |
 | `API_FUZZ_MODES` | `all` | `positive` limits fuzzing to schema-valid requests |
 | `API_PERF_SAMPLES` / `API_PERF_P95_MS` | `20` / `500` | Perf sample count and p95 budget |
+| `API_STATEFUL_EXAMPLES` / `API_STATEFUL_STEPS` | `15` / `20` | Call-sequence count and steps per sequence for `-m stateful` |
 
 CI (`.github/workflows/api-tests.yml`) runs lint, `-m smoke -x`, then the default suite with
 `--junitxml`, whenever `api-tests/` or `traffic-flow-analyzer/` changes; the JUnit report and
@@ -138,7 +150,9 @@ src/api_tests/
   assertions.py  assert_status / assert_schema / assert_ok / assert_error / p95
   contract.py    OpenAPI prep for fuzzing (excludes /stream; holds tagged patches for open spec gaps)
 tests/           one folder per marker (table above)
+loadtest/        Locust load test (not part of the pytest suite; needs `uv sync --group load`)
 docs/FINDINGS.md defects found, with reproduction curls and suggested fixes
+docs/LOADTEST.md load test methodology and results
 ```
 
 A failing test's report includes the last five HTTP exchanges (method, URL, status,
@@ -149,3 +163,10 @@ latency, body preview).
 Nine findings, all fixed in the target and now guarded by regular tests: two medium (an
 unbounded `horizon`, KD-02, and a 500 on incomplete `/ask` history, KD-08) and seven low.
 See [docs/FINDINGS.md](docs/FINDINGS.md).
+
+The load test ([docs/LOADTEST.md](docs/LOADTEST.md)) found a performance bottleneck, not a
+correctness bug: `GET /status` recomputes every segment's forecast on every request, so its
+latency grows roughly linearly with concurrent load (40 concurrent requests: ~18 s each, 0
+failures). `/stream`, the endpoint most worth worrying about on paper (many held-open
+connections), handles 60 concurrent viewers with no issue — it is `/status`'s synchronous,
+per-request computation that doesn't scale, not the long-lived connections.

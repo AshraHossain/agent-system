@@ -9,6 +9,10 @@ Start with::
     uv run trafficflow serve-api --live     # MockLiveFeed (no API key needed)
     TOMTOM_API_KEY=... uv run trafficflow serve-api --live --provider tomtom
 
+With ``TRAFFICFLOW_API_TOKEN`` set (or ``--token``), every route requires
+``Authorization: Bearer <token>`` or ``X-API-Key: <token>``, never both
+(``trafficflow.core.auth``). Unset, the API is open, as before.
+
 Or programmatically::
 
     import uvicorn
@@ -38,10 +42,22 @@ logger = logging.getLogger(__name__)
 try:
     from fastapi import FastAPI, HTTPException, Query
     from fastapi.responses import RedirectResponse, StreamingResponse
-    from pydantic import BaseModel as _BaseModel
-    from pydantic import WithJsonSchema
+    from pydantic import BaseModel as _PydanticBaseModel
+    from pydantic import ConfigDict, WithJsonSchema
 except ImportError as _err:
     raise ImportError("fastapi is required: pip install 'trafficflow[api]'") from _err
+
+
+class _BaseModel(_PydanticBaseModel):
+    """Immutable base for this module's request and response models.
+
+    Frozen for the same reason `contracts/models.py` is: a DTO that can be mutated
+    after validation lets a handler silently diverge from what the core computed.
+    Declared once here rather than per class so no future model can forget it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
 
 # Same bounds as the agents' forecast tools; work and response size grow with the horizon.
 MIN_HORIZON_MINUTES = 5
@@ -151,22 +167,66 @@ class PathOut(_BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def build_app(feed: Feed, model: str | None = None) -> FastAPI:
+def build_app(
+    feed: Feed,
+    model: str | None = None,
+    *,
+    api_token: str | None = None,
+    rate_limit_per_minute: int = 0,
+) -> FastAPI:
     """Return a FastAPI app backed by *feed*.
 
-    All routes are read-only; the feed is never mutated by the API.
+    All routes are read-only; the feed is never mutated by the API. Every POST
+    body over 64 KiB (`trafficflow.core.security.PayloadSizeGuard`) is always
+    rejected with HTTP 413, checked by `Content-Length` before auth or rate
+    limiting run (`PayloadSizeGuard` is added after the `BearerTokenAuth`/
+    `RateLimitMiddleware` blocks so it sits outside both in the middleware
+    stack: Starlette's `add_middleware` makes the most-recently-added
+    middleware outermost, i.e. first to see the request). The full middleware
+    depth, outermost to innermost, is `TelemetryMiddleware` ->
+    `PayloadSizeGuard` -> `RateLimitMiddleware` -> `BearerTokenAuth` ->
+    router: rate limiting therefore runs before auth, so a request that fails
+    auth still counts against that client's rate-limit budget. This is
+    intentional, not an oversight — it throttles credential-guessing floods
+    before any digest-comparison work is spent on them. With *api_token*
+    set, every route requires a matching bearer token. With
+    *rate_limit_per_minute* set above 0, each client is capped to that many
+    requests per minute, past which requests get HTTP 429 with
+    `Retry-After`. Every response, including 401s, 413s, and 429s, always
+    carries OWASP security headers plus
+    `X-Request-ID`/`X-Process-Time-Ms` telemetry (see
+    `trafficflow.core.security.TelemetryMiddleware`).
+
+    Forecasts and anomaly scans are memoized per app, keyed by a hash of each
+    segment's input data, so they rerun only when the feed has new readings.
     """
     from trafficflow.core.anomaly import detect
+    from trafficflow.core.auth import BearerTokenAuth, hash_token
+    from trafficflow.core.cache import ResultCache, series_fingerprint
     from trafficflow.core.congestion import congestion_index, level_for
     from trafficflow.core.forecast import forecast_segment
     from trafficflow.core.freshness import stale_segments
+    from trafficflow.core.security import (
+        PayloadSizeGuard,
+        RateLimitMiddleware,
+        TelemetryMiddleware,
+    )
     from trafficflow.core.status import network_status
+
+    # /status alone needs 2 entries per segment; the headroom covers other horizons.
+    cache = ResultCache(maxsize=max(1024, 4 * len(feed.segments())))
 
     app = FastAPI(
         title="Traffic Flow API",
         description="Read-only congestion forecasting endpoints.",
         version="0.1.0",
     )
+    if api_token:
+        app.add_middleware(BearerTokenAuth, digest=hash_token(api_token))
+    if rate_limit_per_minute > 0:
+        app.add_middleware(RateLimitMiddleware, limit_per_minute=rate_limit_per_minute)
+    app.add_middleware(PayloadSizeGuard)
+    app.add_middleware(TelemetryMiddleware)
 
     @app.get("/", include_in_schema=False)
     def root():
@@ -185,11 +245,23 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
         segs = {s.id: s for s in feed.segments()}
         try:
             hists = {sid: feed.history(sid, 7) for sid in segs}
-            forecasts = [forecast_segment(hists[sid], s, 60) for sid, s in segs.items()]
+            fps = {sid: series_fingerprint(h) for sid, h in hists.items()}
+            forecasts = [
+                cache.get_or_compute(
+                    ("forecast", sid, s.free_flow_kmh, 60, fps[sid]),
+                    lambda sid=sid, s=s: forecast_segment(hists[sid], s, 60),
+                )
+                for sid, s in segs.items()
+            ]
             anomalies = [
                 a
                 for sid, s in segs.items()
-                for a in detect(hists[sid], sid, free_flow_kmh=s.free_flow_kmh)
+                for a in cache.get_or_compute(
+                    ("anomalies", sid, s.free_flow_kmh, fps[sid]),
+                    lambda sid=sid, s=s: tuple(
+                        detect(hists[sid], sid, free_flow_kmh=s.free_flow_kmh)
+                    ),
+                )
             ]
             ns = network_status(forecasts, anomalies, stale_segments(hists, feed.now))
         except Exception as exc:
@@ -219,7 +291,11 @@ def build_app(feed: Feed, model: str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Segment {segment_id!r} not found")
         seg = segs[segment_id]
         try:
-            fc = forecast_segment(feed.history(segment_id, 7), seg, horizon)
+            history = feed.history(segment_id, 7)
+            fc = cache.get_or_compute(
+                ("forecast", segment_id, seg.free_flow_kmh, horizon, series_fingerprint(history)),
+                lambda: forecast_segment(history, seg, horizon),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return ForecastOut(

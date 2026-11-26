@@ -47,7 +47,12 @@ uv run pytest tests/test_security.py tests/test_security_e2e.py tests/test_auth.
   break its suite. It binds to loopback for local practice runs only, is never
   deployed, and must not be treated as an example of hardened service code — the
   hardened reference is `opspilot/api.py`.
-- **`traffic-flow-analyzer/trafficflow/api.py` is not yet hardened.** It currently has
-  no authentication, rate limiting or OWASP response headers; the middleware stack
-  applied to `opspilot/api.py` has not been ported to it. Terminate TLS and restrict
-  network exposure in front of it until that work lands.
+- **`traffic-flow-analyzer` has its own threat model**, covering the same OWASP
+  categories for the Traffic Flow API: see
+  [traffic-flow-analyzer/SECURITY.md](traffic-flow-analyzer/SECURITY.md). It is the
+  authority for that API's guarantees — this file deliberately does not restate them,
+  because a duplicated copy here drifted out of date once already. The one difference
+  worth knowing from the root: unlike OpsPilot's always-on 120 req/min, trafficflow's
+  rate limiting and bearer auth are **opt-in** (`rate_limit_per_minute=0`,
+  `api_token=None`), so pass both when binding to anything other than loopback. Its
+  OWASP headers, telemetry and the 64 KiB payload cap are unconditional.

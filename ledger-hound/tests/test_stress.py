@@ -178,7 +178,7 @@ async def test_shrink_reduces_a_failure_to_its_smallest_form():
     [m] = result["shrunk"]
     assert m["reproduced"] and m["rule"] == "payment_gate"
     assert m["size"]["minimal"] == {"lines": 1, "units": 2}
-    [(sku, qty, price)] = m["minimal"]["po_lines"]
+    [(sku, _qty, price)] = m["minimal"]["po_lines"]
     assert m["minimal"]["received"] == [[sku, "2"]]
     assert m["minimal"]["invoice_lines"] == [[sku, "1", str(D(price) * 2)]]
 

@@ -52,7 +52,7 @@ flowchart LR
     end
 
     subgraph Backends["Live Cloud vs. Deterministic Offline Backends"]
-        LIVE[("Live Mode: Gemini 2.5 Flash / Vertex AI + Gemini Embeddings")]
+        LIVE[("Live Mode: Gemini / Vertex AI / OpenRouter + Gemini Embeddings")]
         MOCK[("Mock Mode: ScriptedLlm + HashingEmbedder + SQLite (mode=ro)")]
     end
 
@@ -62,9 +62,32 @@ flowchart LR
     PIPE --> SEC & TOOLS & VER
     TOOLS --> STATS & TOPO & RET & HYP
     RUNNER --> SESS
-    PIPE -. "Live Mode (--live)" .-> LIVE
+    PIPE -. "Live Mode (gemini / openrouter)" .-> LIVE
     PIPE -. "Offline Default (mock)" .-> MOCK
     TOOLS -. "Read-Only URI (mode=ro)" .-> MOCK
+```
+
+### Multi-Agent ADK Orchestration & Verification Pipeline (`flowchart TD`)
+
+```mermaid
+flowchart TD
+    IN(["User Report + Dataset ID"]) --> INTAKE["IntakeAgent (Deterministic: normalize, redact, injection scan)"]
+    INTAKE -->|scope| PAR
+
+    subgraph PAR["ParallelAgent (Concurrent Specialists)"]
+        direction LR
+        TEL["telemetry_analyst (EV-TEL-*)"]
+        TOP["topology_analyst (EV-TOP-*)"]
+        KNO["knowledge_researcher (EV-DOC-* / EV-INC-*)"]
+    end
+
+    PAR --> INC["incident_analyst (Rule Candidates + Root-Cause Ranking)"]
+    INC --> DRAFT["report_drafter (Structured ReportDraft + Citations)"]
+    DRAFT --> EVER["EvidenceVerifierAgent (Deterministic: Citations, Sufficiency, Ceiling)"]
+    EVER --> RVER["review_verifier (Semantic & Policy Review)"]
+    RVER -->|"Optional LoopAgent (max 2 rounds on failed stage)"| PAR
+    RVER --> FIN["FinalizerAgent (Read-Only Policy Strip + Status/Escalation Rules)"]
+    FIN --> OUT(["Frozen InvestigationReport (investigated / inconclusive / requires_human_review)"])
 ```
 
 ### End-to-End Investigation Sequence (`sequenceDiagram`)
@@ -134,8 +157,10 @@ sequenceDiagram
 # 1. Install pinned environment (Python 3.11–3.13, google-adk[db]==2.11.0)
 uv sync
 
-# 2. Run the full verification gate (ruff lint/format + 485 offline tests + guardrail eval)
+# 2. Run the full verification gate (ruff lint/format + 493 offline tests + guardrail eval)
 make check
+# Or verify root + all 4 sub-projects (platewatch, traffic-flow-analyzer, ledger-hound, api-tests):
+make check-all
 
 # 3. Build synthetic datasets & run an end-to-end offline investigation
 uv run opspilot build-data                       # 14 main + 10 held-out SQLite datasets -> var/datasets/
@@ -158,13 +183,13 @@ uv run opspilot show <session_id>
 uv run opspilot resume <session_id>              # re-runs only failed/missing stages
 ```
 
-### Live Gemini / Vertex AI Evaluation (Optional)
+### Live Gemini / Vertex AI / OpenRouter Evaluation (Optional)
 
 ```bash
-export GOOGLE_API_KEY="..."                      # or Vertex AI ADC (see docs/model_configuration.md)
+export GOOGLE_API_KEY="..."                      # or Vertex AI ADC, or OPENROUTER_API_KEY (see docs/model_configuration.md)
 uv run opspilot --live demo --case C03
 uv run pytest -m live
-uv run opspilot --live eval --repeat 5           # 5-run mean/min/max/stdev + per-agent compliance vs mock
+OPSPILOT_MODEL_PROVIDER=openrouter uv run opspilot eval --repeat 3 --out var/eval
 ```
 
 ---
@@ -185,6 +210,8 @@ Generated deterministically via `make eval` (`uv run opspilot eval --guardrails 
 | **Guardrail Perturbation Pass Rate** | 10 injected LLM failure modes | **100.0%** (`10/10` caught) | Hallucinated IDs, mutating steps, secret/injection echo, deprecated runbooks |
 | **Verifier Red-Team Matrix** | `catch` + `blind_spot` (93 runs) / `benign` (45 runs) | **100.0%** (`93/93` caught), **0/45** FP | Swapped rankings, inflated confidence, wrong metric facts, certainty lexicon |
 | **Pipeline Latency (`p50` / `p95` / `mean`)** | Main (`C01–C14`, offline SQLite + ADK) | **0.41s** / **0.48s** / **0.37s** | Full 7-stage ADK orchestration + SQLite queries + deterministic verification |
+
+> **Live Evaluation (`google/gemini-2.5-flash` via OpenRouter, 3 repetitions, C11 skipped as mock-only timeout fault)**: `100.0%` completion rate (`39/39`), `100.0%` Top-1 root-cause accuracy, `100.0%` citation validity, `99.17%` citation relevance, `100.0%` malicious-document handling, `39/39` clean runs on `knowledge_researcher` and `review_verifier`, `22.5s` mean latency (`35.5s` p95), and `53.85%` status accuracy. See [docs/eval_results_live.md](docs/eval_results_live.md).
 
 Detailed evaluation methodology, live multi-run results, and held-out pre-fix baselines: [docs/evaluation.md](docs/evaluation.md), [docs/eval_results_offline.md](docs/eval_results_offline.md), [docs/eval_results_live.md](docs/eval_results_live.md), and [docs/eval_results_verifier.md](docs/eval_results_verifier.md).
 
@@ -217,7 +244,7 @@ Full OWASP API & LLM Top 10 threat model and verification matrix: **[SECURITY.md
 | [opspilot/eval/](opspilot/eval/) | Reproducible evaluation harness, p50/p95 metrics, guardrail perturbations, verifier red-team matrix |
 | [opspilot/api.py](opspilot/api.py) | FastAPI boundary (`GET /runs/{run_id}`, `/health`, `/readyz`) + Auth, Rate-Limit, Boundary & Telemetry ASGI middleware |
 | [adk_apps/opspilot_ai/](adk_apps/opspilot_ai/) | `root_agent` entrypoint for `adk web` and `adk api_server` |
-| [tests/](tests/) | 485+ offline unit (`-m unit`) and integration (`-m integration`) tests + live Gemini suite (`-m live`) |
+| [tests/](tests/) | 493 offline unit (`-m unit`) and integration (`-m integration`) tests + live Gemini suite (`-m live`) |
 
 ### Self-Contained Sub-Projects
 

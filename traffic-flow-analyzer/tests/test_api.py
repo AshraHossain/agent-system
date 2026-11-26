@@ -8,6 +8,8 @@ pytest.importorskip("fastapi")
 
 from fastapi.testclient import TestClient
 
+import trafficflow.core.anomaly as anomaly_module
+import trafficflow.core.forecast as forecast_module
 from trafficflow.api import build_app
 from trafficflow.data.feed import SyntheticFeed
 
@@ -225,3 +227,312 @@ def test_root_redirects_to_docs(client):
 
 def test_root_is_not_in_the_openapi_schema(client):
     assert "/" not in client.get("/openapi.json").json()["paths"]
+
+
+# -- bearer-token auth (off by default; on when a token is configured) -------
+
+TOKEN = "s3cret-test-token"
+
+
+@pytest.fixture(scope="module")
+def auth_client():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    return TestClient(build_app(feed, api_token=TOKEN))
+
+
+def test_auth_off_by_default(client):
+    assert client.get("/segments").status_code == 200
+
+
+def test_auth_rejects_missing_token(auth_client):
+    r = auth_client.get("/segments")
+    assert r.status_code == 401
+    assert "www-authenticate" in r.headers
+
+
+def test_auth_rejects_wrong_token(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 401
+
+
+def test_auth_rejects_malformed_header(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": TOKEN})  # no "Bearer "
+    assert r.status_code == 401
+
+
+def test_auth_accepts_the_configured_token(auth_client):
+    r = auth_client.get("/segments", headers={"Authorization": f"Bearer {TOKEN}"})
+    assert r.status_code == 200
+
+
+def test_auth_accepts_the_configured_token_via_x_api_key(auth_client):
+    r = auth_client.get("/segments", headers={"X-API-Key": TOKEN})
+    assert r.status_code == 200
+
+
+def test_auth_refuses_both_bearer_and_api_key_headers_at_once(auth_client):
+    r = auth_client.get(
+        "/segments", headers={"Authorization": f"Bearer {TOKEN}", "X-API-Key": TOKEN}
+    )
+    assert r.status_code == 401
+
+
+def test_auth_covers_docs_and_openapi(auth_client):
+    assert auth_client.get("/docs").status_code == 401
+    assert auth_client.get("/openapi.json").status_code == 401
+
+
+def test_auth_401_does_not_echo_the_configured_token(auth_client):
+    r = auth_client.get("/segments")
+    assert TOKEN not in r.text
+
+
+# -- sliding-window rate limiting (off by default; on when configured) ------
+
+
+def test_rate_limit_returns_429_with_retry_after_once_exceeded(monkeypatch):
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, rate_limit_per_minute=2))
+    assert client.get("/segments").status_code == 200
+    assert client.get("/segments").status_code == 200
+    r = client.get("/segments")
+    assert r.status_code == 429
+    assert r.headers["retry-after"] == "60"
+
+
+def test_rate_limit_is_disabled_by_default(client):
+    for _ in range(10):
+        assert client.get("/segments").status_code == 200
+
+
+# -- payload-size guard (always on) -----------------------------------------
+
+
+def test_oversized_post_body_is_rejected_with_413(client):
+    big_question = "x" * (65 * 1024)  # just over the 64 KiB cap
+    r = client.post("/ask", json={"question": big_question})
+    assert r.status_code == 413
+
+
+def test_oversized_body_is_rejected_before_auth_runs():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, api_token=TOKEN))
+    big_question = "x" * (65 * 1024)
+    r = client.post("/ask", json={"question": big_question})  # no Authorization header
+    assert r.status_code == 413  # not 401 - size guard ran before auth
+
+
+# -- combined middleware stack (final whole-branch review regression) ------
+#
+# Pins the real middleware depth, outermost to innermost: TelemetryMiddleware
+# -> PayloadSizeGuard -> RateLimitMiddleware -> BearerTokenAuth -> router.
+
+
+def test_combined_auth_and_rate_limit_and_payload_guard_stack_together():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    combined_client = TestClient(build_app(feed, api_token=TOKEN, rate_limit_per_minute=2))
+
+    r1 = combined_client.get("/segments")  # no credentials
+    assert r1.status_code == 401
+    assert "x-request-id" in r1.headers
+
+    r2 = combined_client.get("/segments")  # no credentials
+    assert r2.status_code == 401
+    assert "x-request-id" in r2.headers
+
+    # The two failed-auth attempts above counted against the rate-limit budget,
+    # because rate limiting runs before auth: proves it did not stay 401 forever.
+    r3 = combined_client.get("/segments")
+    assert r3.status_code == 429
+    assert "x-request-id" in r3.headers
+
+    # Fresh app/client so this request's rate-limit window is untouched by the
+    # GETs above; pins that the payload guard runs regardless of auth/rate-limit
+    # state (it sits outside both, just inside TelemetryMiddleware).
+    fresh_client = TestClient(build_app(feed, api_token=TOKEN, rate_limit_per_minute=2))
+    big_question = "x" * (65 * 1024)
+    r4 = fresh_client.post("/ask", json={"question": big_question})  # no credentials
+    assert r4.status_code == 413
+    assert "x-request-id" in r4.headers
+
+
+# -- OWASP + telemetry response headers (always on) ------------------------
+
+EXPECTED_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "cache-control": "no-store",
+    "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+}
+
+
+def test_every_response_carries_owasp_and_telemetry_headers(client):
+    r = client.get("/segments")
+    assert "x-request-id" in r.headers
+    assert "x-process-time-ms" in r.headers
+    for name, value in EXPECTED_HEADERS.items():
+        assert r.headers[name] == value
+
+
+def test_docs_and_openapi_omit_the_strict_csp_but_keep_other_headers(client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        r = client.get(path)
+        assert "content-security-policy" not in r.headers
+        assert r.headers["x-content-type-options"] == "nosniff"
+
+
+def test_a_429_response_still_carries_telemetry_headers():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    client = TestClient(build_app(feed, rate_limit_per_minute=1))
+    client.get("/segments")
+    r = client.get("/segments")
+    assert r.status_code == 429
+    assert "x-request-id" in r.headers
+    assert r.headers["x-content-type-options"] == "nosniff"
+
+
+# -- forecast cache (recompute only when the feed has new data) ---------------
+
+
+@pytest.fixture
+def counted(monkeypatch):
+    """Count forecaster runs for apps built after this fixture."""
+    calls = []
+    real = forecast_module.forecast_segment
+
+    def counting(*args, **kwargs):
+        calls.append(args[1].id)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(forecast_module, "forecast_segment", counting)
+    return calls
+
+
+@pytest.fixture
+def detected(monkeypatch):
+    """Count anomaly scans for apps built after this fixture."""
+    calls = []
+    real = anomaly_module.detect
+
+    def counting(*args, **kwargs):
+        calls.append(args[1])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(anomaly_module, "detect", counting)
+    return calls
+
+
+def _fresh_feed():
+    feed = SyntheticFeed(days=21)
+    feed.advance(24 * 12)
+    return feed
+
+
+def test_repeated_status_runs_the_forecaster_once_per_segment(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    n_segments = len(feed.segments())
+    assert client.get("/status").status_code == 200
+    assert client.get("/status").status_code == 200
+    assert len(counted) == n_segments
+
+
+def test_forecast_at_60_minutes_reuses_the_status_entry(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    client.get("/status")
+    before = len(counted)
+    assert client.get("/forecast/S1?horizon=60").status_code == 200
+    assert len(counted) == before
+
+
+def test_status_responses_match_a_cold_app():
+    cached = TestClient(build_app(_fresh_feed()))
+    first = cached.get("/status").json()
+    second = cached.get("/status").json()
+    oracle = TestClient(build_app(_fresh_feed())).get("/status").json()
+    assert first == second == oracle
+    f_cached = [cached.get("/forecast/S1?horizon=30").json() for _ in range(2)]
+    f_oracle = TestClient(build_app(_fresh_feed())).get("/forecast/S1?horizon=30").json()
+    assert f_cached[0] == f_cached[1] == f_oracle
+
+
+def test_status_recomputes_after_feed_advances(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    n_segments = len(feed.segments())
+    before_status = client.get("/status").json()
+    before_fc = client.get("/forecast/S1").json()
+    feed.advance(1)
+    after_status = client.get("/status").json()
+    after_fc = client.get("/forecast/S1").json()
+    assert after_status["as_of"] > before_status["as_of"]
+    assert after_fc["points"][0]["ts"] > before_fc["points"][0]["ts"]
+    assert len(counted) == 2 * n_segments
+
+
+def test_anomaly_scans_recompute_after_feed_advances(detected):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    n_segments = len(feed.segments())
+    assert client.get("/status").status_code == 200
+    assert client.get("/status").status_code == 200
+    assert len(detected) == n_segments
+    feed.advance(1)
+    assert client.get("/status").status_code == 200
+    assert len(detected) == 2 * n_segments
+
+
+def test_status_error_is_not_cached(monkeypatch):
+    calls = []
+
+    def failing(*args, **kwargs):
+        calls.append(1)
+        raise ValueError("boom")
+
+    monkeypatch.setattr(forecast_module, "forecast_segment", failing)
+    client = TestClient(build_app(_fresh_feed()))
+    assert client.get("/status").status_code == 500
+    after_first = len(calls)
+    assert client.get("/status").status_code == 500
+    assert len(calls) > after_first
+
+
+def test_forecast_error_is_not_cached(monkeypatch):
+    calls = []
+
+    def failing(*args, **kwargs):
+        calls.append(1)
+        raise ValueError("need at least 288 readings, got 3")
+
+    monkeypatch.setattr(forecast_module, "forecast_segment", failing)
+    client = TestClient(build_app(_fresh_feed()))
+    for _ in range(2):
+        assert client.get("/forecast/S1").status_code == 422
+    assert len(calls) == 2
+
+
+def test_each_app_has_its_own_cache(counted):
+    feed_a, feed_b = _fresh_feed(), _fresh_feed()
+    n_segments = len(feed_a.segments())
+    TestClient(build_app(feed_a)).get("/status")
+    TestClient(build_app(feed_b)).get("/status")  # identical data, but a separate app
+    assert len(counted) == 2 * n_segments
+
+
+def test_forecast_at_another_horizon_does_not_reuse_the_status_entry(counted):
+    feed = _fresh_feed()
+    client = TestClient(build_app(feed))
+    client.get("/status")
+    before = len(counted)
+    body = client.get("/forecast/S1?horizon=30").json()
+    assert body["horizon_minutes"] == 30
+    assert len(counted) == before + 1
+    oracle = TestClient(build_app(_fresh_feed())).get("/forecast/S1?horizon=30").json()
+    assert body == oracle

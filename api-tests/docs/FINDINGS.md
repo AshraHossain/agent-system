@@ -50,6 +50,11 @@ Each of these now returns a documented 4xx, or the documented value.
   by this suite reached it, so it got no KD number. Both now log the exception with a short
   reference and answer `{"detail": "Internal error (ref …)"}`; the 500 is documented.
   Unit-tested in `traffic-flow-analyzer/tests/test_api.py` by forcing a failure.
+- **Open, performance not correctness:** `GET /status` (and `/forecast` for one segment)
+  recomputes every segment's forecast synchronously on every request, so latency grows roughly
+  linearly with concurrent load (40 concurrent requests → ~18 s each, 0 failures). Found by
+  [docs/LOADTEST.md](LOADTEST.md), with suggested fixes there; not a KD since nothing is
+  incorrect, it is just slow under load.
 
 ## Not defects (checked and fine)
 

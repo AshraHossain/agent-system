@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import threading
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
 from trafficflow.contracts import TrafficReport
@@ -66,3 +67,24 @@ class ReportStore:
     def clear(self) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM reports")
+
+    def close(self) -> None:
+        """Close the shared connection. Idempotent.
+
+        The connection is deliberately long-lived (one per store, shared by Gradio's
+        worker threads), so it has to be released explicitly; without this a store
+        held open until garbage collection raised `ResourceWarning: unclosed database`.
+        """
+        with self._lock:
+            self._conn.close()
+
+    def __enter__(self) -> ReportStore:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()

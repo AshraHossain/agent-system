@@ -17,7 +17,7 @@
 - [x] Verifier detection matrix: planted defects x all cases vs a clean baseline (`opspilot eval --verifier-matrix`, docs/eval_results_verifier.md)
 - [x] Close the matrix's deterministic blind spots: summary/findings agreement, confidence vs rule confidence, ranking vs rule ranking, category/component-type mismatch (semantic errors caught 37/93 -> 69/93)
 - [x] Deterministic backstop for overstated certainty: `overstated_certainty` lexicon with negation handling (error unless the leading hypothesis is `strong`, warning otherwise); matrix 69/93 -> 93/93, still 0/45 false positives; plain assertions remain a known miss
-- [ ] Replay the matrix's `paraphrased_certainty` (and other blind spots) against the live LLM reviewer
+- [x] Replay the matrix's `paraphrased_certainty` (and other blind spots) against the live LLM reviewer (`review_verifier` on live `google/gemini-2.5-flash` caught both plain-assertion overconfidence and read-only policy violation with `severity="warning"`)
 
 ## Medium priority
 - [x] Optional bounded re-investigation loop (`LoopAgent`, max 2) — retries failed stages; off by default (`OPSPILOT_MAX_INVESTIGATION_ROUNDS=2`)
