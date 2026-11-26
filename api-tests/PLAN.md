@@ -36,8 +36,8 @@ with evidence instead of being hidden.
    Load testing: `loadtest/locustfile.py` (Locust, kept out of the pytest suite and its default
    deps — see `docs/LOADTEST.md`). It found a real bottleneck in `/status` under concurrent
    load, documented there rather than fixed in this suite.
-7. ☐ Fix the `/status`/`/forecast` concurrency bottleneck `docs/LOADTEST.md` found, in
-   `traffic-flow-analyzer` (out of this suite's scope; see that doc's recommendations).
+7. ✅ Fix the `/status`/`/forecast` concurrency bottleneck `docs/LOADTEST.md` found, in
+   `traffic-flow-analyzer` (forecasts cached by input hash; before/after numbers in that doc) (PR #53).
 
 ## Out of scope
 

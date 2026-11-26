@@ -196,9 +196,13 @@ def build_app(
     carries OWASP security headers plus
     `X-Request-ID`/`X-Process-Time-Ms` telemetry (see
     `trafficflow.core.security.TelemetryMiddleware`).
+
+    Forecasts and anomaly scans are memoized per app, keyed by a hash of each
+    segment's input data, so they rerun only when the feed has new readings.
     """
     from trafficflow.core.anomaly import detect
     from trafficflow.core.auth import BearerTokenAuth, hash_token
+    from trafficflow.core.cache import ResultCache, series_fingerprint
     from trafficflow.core.congestion import congestion_index, level_for
     from trafficflow.core.forecast import forecast_segment
     from trafficflow.core.freshness import stale_segments
@@ -208,6 +212,9 @@ def build_app(
         TelemetryMiddleware,
     )
     from trafficflow.core.status import network_status
+
+    # /status alone needs 2 entries per segment; the headroom covers other horizons.
+    cache = ResultCache(maxsize=max(1024, 4 * len(feed.segments())))
 
     app = FastAPI(
         title="Traffic Flow API",
@@ -238,11 +245,23 @@ def build_app(
         segs = {s.id: s for s in feed.segments()}
         try:
             hists = {sid: feed.history(sid, 7) for sid in segs}
-            forecasts = [forecast_segment(hists[sid], s, 60) for sid, s in segs.items()]
+            fps = {sid: series_fingerprint(h) for sid, h in hists.items()}
+            forecasts = [
+                cache.get_or_compute(
+                    ("forecast", sid, s.free_flow_kmh, 60, fps[sid]),
+                    lambda sid=sid, s=s: forecast_segment(hists[sid], s, 60),
+                )
+                for sid, s in segs.items()
+            ]
             anomalies = [
                 a
                 for sid, s in segs.items()
-                for a in detect(hists[sid], sid, free_flow_kmh=s.free_flow_kmh)
+                for a in cache.get_or_compute(
+                    ("anomalies", sid, s.free_flow_kmh, fps[sid]),
+                    lambda sid=sid, s=s: tuple(
+                        detect(hists[sid], sid, free_flow_kmh=s.free_flow_kmh)
+                    ),
+                )
             ]
             ns = network_status(forecasts, anomalies, stale_segments(hists, feed.now))
         except Exception as exc:
@@ -272,7 +291,11 @@ def build_app(
             raise HTTPException(status_code=404, detail=f"Segment {segment_id!r} not found")
         seg = segs[segment_id]
         try:
-            fc = forecast_segment(feed.history(segment_id, 7), seg, horizon)
+            history = feed.history(segment_id, 7)
+            fc = cache.get_or_compute(
+                ("forecast", segment_id, seg.free_flow_kmh, horizon, series_fingerprint(history)),
+                lambda: forecast_segment(history, seg, horizon),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return ForecastOut(

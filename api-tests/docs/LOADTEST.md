@@ -44,20 +44,87 @@ with the number of concurrent requests, not sublinearly as real parallelism woul
 every level tested** (no 5xx, no timeouts): it queues rather than breaks, but 40 concurrent
 users is a small dashboard's worth of traffic, not a stress test.
 
-**Cause:** `GET /status` computes a forecast and runs anomaly detection for *every* segment on
+**Cause:** Before the fix, `GET /status` computed a forecast and ran anomaly detection for *every* segment on
 every request (`trafficflow/api.py`'s `get_status`), all synchronous, CPU-bound work
 (`forecast_segment`, `detect`). FastAPI runs a sync `def` route in a thread pool, so concurrent
 calls compete for the same CPU instead of running in parallel; `/forecast` does the same work
 for one segment and shows the same pattern at a smaller scale.
 
-## Not fixed here
+## Fixed
+
+`/status` and `/forecast/{id}` now cache each segment's forecast and anomaly result, keyed by a
+hash of that segment's input data; results are recomputed only when the feed has new readings
+(`traffic-flow-analyzer/trafficflow/core/cache.py`, used from `trafficflow/api.py`). The key is
+each segment's exact input data plus segment id, free-flow speed and horizon. Staleness, network
+status and current levels are still computed per request. Memory is bounded: an LRU cache of at
+least 1024 entries per app, scaled with the segment count.
+
+Measured on the same machine on 2026-11-25 (4 CPUs, single uvicorn worker, synthetic feed,
+mock model), one server at a time, "before" from `origin/master` (30e5045) and "after" from
+this branch. The Locust run is the documented one (`-u 40 -r 10 --run-time 30s`); 0 failures
+in both runs.
+
+`/status` concurrency probe (median / max per level, fresh server each; "after" is the first
+probe on a new server, so its 1-concurrent row is a cold cache miss):
+
+| Concurrent `/status` | Before | After |
+|---|---|---|
+| 1 | 0.35 s / 0.35 s | 0.33 s / 0.33 s (cold miss) |
+| 10 | 4.09 s / 4.15 s | 0.23 s / 0.25 s |
+| 40 | 16.83 s / 17.13 s | 0.70 s / 0.81 s |
+
+A second probe run on the already-warm "after" server gave 0.05 s at 1 concurrent, 0.24 s at 10
+and 0.77 s at 40. A cold miss costs about what "before" costs; once the first request has filled the
+cache, later requests reuse it.
+
+Latency still grows with concurrency (0.23 s at 10, 0.70 s at 40). The likely cause, not
+profiled: warm requests still read each segment's history, hash it and serialize the response,
+which is CPU-bound and still queues, but at about 0.017 s per extra concurrent request instead
+of about 0.42 s.
+
+Locust mixed run, 40 users, 30 s:
+
+| Endpoint | Before median / p99 | After median / p99 |
+|---|---|---|
+| `/status` | 8.3 s / 13 s | 19 ms / 260 ms |
+| `/forecast/{id}` | 3.0 s / 5.9 s | 5 ms / 170 ms |
+| Requests completed (all endpoints) | 212 | 1091 |
+
+The load is synthetic and short; these numbers show the bottleneck removed on this setup, not
+that the service is ready for production traffic. Reproduce the probe from `api-tests/`, with
+`PORT` set to the server under test:
+
+```bash
+PORT=8002 uv run python - <<'EOF'
+import concurrent.futures as cf, os, statistics, time
+import httpx
+
+url = f"http://127.0.0.1:{os.environ['PORT']}/status"
+
+
+def one(_):
+    t = time.perf_counter()
+    httpx.get(url, timeout=120).raise_for_status()
+    return time.perf_counter() - t
+
+
+for n in (1, 10, 40):
+    with cf.ThreadPoolExecutor(n) as ex:
+        lat = list(ex.map(one, range(n)))
+    print(f"{n:>2} concurrent: median {statistics.median(lat):.2f}s  max {max(lat):.2f}s")
+EOF
+```
+
+## Options considered
 
 Scope here was the harness and the measurement, not a performance rewrite. The load test
 earns its keep by turning a vague worry ("`/stream` holds connections open") into a specific,
 measured one ("`/status` recomputes every segment's forecast from scratch, per request").
 Options worth weighing, in order of how much they change:
 
-1. Cache `/status`'s result for a few seconds — the feed does not change faster than that.
-2. Run `uvicorn` with multiple workers (`--workers N`); the computation is CPU-bound, so more
-   processes buy real parallelism the thread pool does not.
-3. Memoize or incrementally update each segment's forecast instead of recomputing it per request.
+1. Cache `/status`'s result for a few seconds — not needed: the input-hash cache of option 3
+   already removes the repeated work without a time-based expiry.
+2. Run `uvicorn` with multiple workers (`--workers N`) — not needed: with the cache, one worker
+   handled the 40-user run with 0 failures; still an option if CPU-bound traffic grows.
+3. Memoize or incrementally update each segment's forecast instead of recomputing it per
+   request — **done**, see "Fixed" above.
