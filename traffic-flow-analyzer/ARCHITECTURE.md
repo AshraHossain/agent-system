@@ -12,7 +12,10 @@ trafficflow/
   agents/      deps, tools, prompts, agent factories, mock models, pipeline
   ui/          plots.py (pure Plotly builders), app.py (Gradio Blocks)
   reports.py   ReportStore: SQLite history of generated briefings
-  cli.py       trafficflow demo | backtest | fetch-data | evaluate | serve
+  alerts/      AlertMonitor: polls a live feed, fires webhooks on threshold crossings
+  api.py       FastAPI read layer (/segments /status /forecast /history /path /ask)
+  cli.py       trafficflow demo | backtest | fetch-data | evaluate | validate | run-eval
+               | serve | serve-api | monitor
 ```
 
 Rule: `contracts/` and `core/` never import `pydantic_ai` or `gradio`
@@ -22,33 +25,48 @@ Rule: `contracts/` and `core/` never import `pydantic_ai` or `gradio`
 
 ```mermaid
 graph TD
-  FEED["Feed<br/>SyntheticFeed / CsvFeed"] --> CORE["core<br/>forecast · anomaly · congestion"]
-  CORE --> TOOLS["tools<br/>validated, read-only, record evidence"]
-  TOOLS --> FA["Forecast Analyst"]
+  FEED["Feed<br/>SyntheticFeed / CsvFeed / ReplayFeed / LiveFeedBuffer"] --> CORE
+  CORE["core<br/>forecast · anomaly · congestion · selection · freshness"] --> TOOLS
+  TOOLS["tools<br/>validated, read-only, record evidence, stale-aware"] --> FA["Forecast Analyst"]
   TOOLS --> IA["Incident Analyst"]
   FA --> BW["Brief Writer"]
   IA --> BW
-  BW --> VER["verify_brief<br/>citations exist"]
-  CORE --> ST["network_status (rule)"]
+  BW --> VER["verify_brief<br/>citations + numbers exist"]
+  CORE --> ST["network_status (rule)<br/>stale segments floor at WATCH"]
   VER --> REP["TrafficReport"]
   ST --> REP
+  REP --> STORE["ReportStore (SQLite)"]
   FEED --> PLOTS["ui/plots.py"]
   CORE --> PLOTS
-  PLOTS --> UI["Gradio dashboard"]
+  PLOTS --> UI["Gradio dashboard<br/>briefing · Ask · Map · History"]
   REP --> UI
+  STORE --> UI
+  FEED --> API["FastAPI (serve-api)"]
+  CORE --> API
+  FEED --> MON["AlertMonitor (monitor)"]
+  MON --> HOOK["webhook"]
 ```
 
-The plots and table are built straight from `core/` (no model calls). Only the briefing and
-Ask tabs involve agents.
+The plots, table, map and status are built straight from `core/` (no model calls). Only the
+briefing and Ask tabs involve agents. `serve-api` and `monitor` are optional entry points onto
+the same `core/` and `Feed` layers; `monitor` never calls a model.
 
 ## Forecaster
 
 For each segment, history is the last 7 days at 5-minute resolution:
 
 * **Profile** — median speed per (minute-of-day, weekday/weekend).
-* **Forecast(h)** — profile(t+h) + `0.92^h` × recent residual (mean of the last 3 readings).
-* **Interval** — ± 1.645 × robust residual sigma (MAD), widening slowly with horizon.
+* **Forecast(h)** — blends toward the latest reading as `h` grows:
+  `w^h * last + (1 - w^h) * (profile(t+h) + 0.92^h * last_residual)`, `w = 0.9`.
+* **Interval** — leave-one-day-out conformal quantiles (tail 0.05) from errors at the same
+  time of day (±2 h), over the last 6 complete days; MAD-based fallback when there are too
+  few samples. Always clamped to contain the point forecast.
+* **Model choice** — `core/selection.py` backtests this forecaster against moving-average and
+  persistence on the segment's own recent history and picks the lowest-MAE one; the
+  `compare_models` tool exposes the result so agents can explain it, never choose it.
 * Needs at least 2 days of history, otherwise the tool returns `{"status": "error"}`.
+* A segment with no reading in the last 15 minutes is `stale` (`core/freshness.py`) and rules
+  out a NORMAL network status.
 
 Congestion index = 1 − speed / free-flow; levels at 0.2 / 0.4 / 0.6 (`core/congestion.py`).
 Incidents: robust z ≤ −3.5 for ≥ 3 consecutive readings within the last 2 hours.
