@@ -11,6 +11,7 @@ uv sync
 uv run pytest                              # offline; the live test is deselected
 uv run ruff check . && uv run ruff format --check .
 uv run platewatch demo                     # scripted detector/OCR + mock agent
+uv sync --extra api && uv run platewatch serve   # read-only GET /plates/search, loopback
 PLATEWATCH_LIVE_DIR=<photos> uv run --with transformers --with torch \
   pytest -m live tests/test_platewatch_live.py -s    # needs network to huggingface.co
 ```

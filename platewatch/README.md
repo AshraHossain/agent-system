@@ -16,7 +16,7 @@ Detect vehicle licence plates in images, read and normalize OCR text, tag confid
 ```mermaid
 flowchart LR
     subgraph Client["Client & CI Surface"]
-        CLI["platewatch CLI (demo, ingest, search, ask)"]
+        CLI["platewatch CLI (demo, ingest, search, ask, serve)"]
         PYTEST["Offline Test Suite (pytest)"]
     end
 
@@ -98,6 +98,26 @@ uv run ruff check . && uv run ruff format --check .
 uv run pytest                                  # 100% offline suite (ScriptedVision + FunctionModel)
 uv run platewatch demo                         # end-to-end offline ingestion + search + agent demo
 ```
+
+### Read-Only Search API (Optional)
+
+```bash
+uv sync --extra api
+uv run platewatch serve                        # 127.0.0.1:8100, opens the database read-only
+curl -s "http://127.0.0.1:8100/plates/search?q=ABC-1234&limit=5"
+```
+
+`GET /plates/search` takes `q` (1–64 characters; case, spaces and punctuation ignored), `limit`
+(1–50, default 5) and `min_score` (0–1, default 0.3, applies to non-exact matches) and returns
+`SearchHit` records, exact matches first. A query with no letters or digits is a 422; `GET /health`
+is a liveness probe. The database is opened with SQLite `mode=ro`, so nothing served can change it,
+and a missing database is an error rather than a new empty store.
+
+Plate numbers are personal data in many jurisdictions. Binding anything but loopback is refused
+unless `PLATEWATCH_API_TOKEN` (at least 32 characters) is set, which then requires
+`Authorization: Bearer <token>` on every route except `/health`; `--allow-unauthenticated`
+overrides the refusal with a warning. There is no TLS, per-user identity or rate limiting: keep it
+on loopback or behind an authenticating, TLS-terminating proxy.
 
 ### Regional Plate Formats (Optional)
 

@@ -30,12 +30,27 @@ CREATE TABLE IF NOT EXISTS images (image_sha256 TEXT PRIMARY KEY, source TEXT NO
 
 
 class PlateStore:
-    def __init__(self, path: str | Path = ":memory:", embedder: Embedder | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path = ":memory:",
+        embedder: Embedder | None = None,
+        *,
+        read_only: bool = False,
+    ) -> None:
+        """``read_only`` opens an existing database with SQLite's ``mode=ro``: every write
+        fails at the database layer, and a missing file is an error rather than a new store."""
         self._embedder = embedder or HashingEmbedder()
         # PydanticAI runs sync tools in worker threads; serialise access with a lock.
-        self._db = sqlite3.connect(str(path), check_same_thread=False)
+        if read_only:
+            if not Path(path).is_file():
+                raise FileNotFoundError(f"no plate database at {path}")
+            uri = f"{Path(path).resolve().as_uri()}?mode=ro"
+            self._db = sqlite3.connect(uri, uri=True, check_same_thread=False)
+        else:
+            self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.RLock()
-        self._db.executescript(_SCHEMA)
+        if not read_only:
+            self._db.executescript(_SCHEMA)
 
     def close(self) -> None:
         self._db.close()

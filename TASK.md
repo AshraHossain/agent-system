@@ -38,4 +38,5 @@
 - [ ] Run the live test; tune model ids and the 80%/50% floors from real output
 - [x] Region-specific plate format rules: 9 source-cited patterns in `platewatch/core/formats.py`, `region:<code>` tags, optional strict mode via `PLATEWATCH_REGIONS`; Germany excluded (normalisation destroys its format)
 - [ ] Learned embeddings and an ANN index (Qdrant/pgvector) beyond ~10^5 plates
-- [ ] Read-only `GET /plates/search` API; detection/OCR evaluation harness on a labelled set
+- [x] Read-only `GET /plates/search` API (`platewatch serve`, SQLite `mode=ro`, loopback unless `PLATEWATCH_API_TOKEN` is set)
+- [ ] Detection/OCR evaluation harness on a labelled set
