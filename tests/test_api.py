@@ -335,6 +335,33 @@ async def test_rate_limit_middleware_returns_429_with_retry_after():
         assert (await c.get("/health")).status_code == 200
 
 
+def _stacked_app(stored, *, rate_limit: int, max_bytes: int):
+    limits = Limits(rate_limit_per_minute=rate_limit, max_payload_bytes=max_bytes)
+    return create_app(replace(stored, api_token=TOKEN, limits=limits))
+
+
+async def test_create_app_rate_limits_before_auth(stored):
+    """ADR-0014 order: failed auth attempts still count toward a client's rate limit."""
+    async with _client(_stacked_app(stored, rate_limit=2, max_bytes=1024)) as c:
+        responses = [await c.get("/list-apps") for _ in range(3)]
+    assert [r.status_code for r in responses] == [401, 401, 429]
+    assert all(r.headers["x-request-id"] for r in responses)
+
+
+async def test_create_app_authenticates_before_input_boundary(stored):
+    """ADR-0014 order: an unauthenticated caller gets 401, never the size check's 413."""
+    body = b'{"pad": "' + b"x" * 64 + b'"}'
+    json_header = {"content-type": "application/json"}
+    async with _client(_stacked_app(stored, rate_limit=10, max_bytes=32)) as c:
+        anonymous = await c.post("/run", content=body, headers=json_header)
+        authed = await c.post(
+            "/run", content=body, headers={**json_header, "Authorization": f"Bearer {TOKEN}"}
+        )
+    assert anonymous.status_code == 401
+    assert authed.status_code == 413
+    assert anonymous.headers["x-request-id"] and authed.headers["x-request-id"]
+
+
 async def test_input_boundary_middleware_enforces_400_413_415():
     app = _guarded_test_app(rate_limit=100, max_bytes=32)
     async with _client(app) as c:

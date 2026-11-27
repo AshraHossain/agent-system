@@ -382,6 +382,8 @@ def create_app(settings: Settings | None = None, *, bind_host: str | None = None
         bind_host=bind_host,
     )
     app.include_router(runs_router(settings))
+    # Starlette runs the last-added middleware first, so this registration order gives
+    # ADR-0014's request order: Telemetry -> RateLimit -> BearerTokenAuth -> InputBoundary.
     app.add_middleware(
         InputBoundaryMiddleware,
         max_payload_bytes=settings.limits.max_payload_bytes,
