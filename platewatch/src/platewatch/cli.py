@@ -42,6 +42,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     a.add_argument("question")
     a.add_argument("--inbox", type=Path, default=DEFAULT_INBOX)
+    sv = sub.add_parser("serve", help="read-only HTTP search API (GET /plates/search)")
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8001)
+    sv.add_argument(
+        "--allow-unauthenticated",
+        action="store_true",
+        help="serve beyond loopback without a token (only behind an authenticating proxy)",
+    )
     args = p.parse_args(argv)
 
     if args.cmd == "demo":
@@ -56,6 +64,11 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "search":
             for h in store.search(args.query, limit=args.limit):
                 print(h.model_dump_json())
+        elif args.cmd == "serve":
+            from platewatch.api import serve
+
+            # Inside the `with`, so the store stays open until the server shuts down.
+            serve(store, args.host, args.port, args.allow_unauthenticated)
         else:
             from platewatch.agent import PlateDeps, build_agent, default_model
 

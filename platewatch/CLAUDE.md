@@ -11,6 +11,7 @@ uv sync
 uv run pytest                              # offline; the live test is deselected
 uv run ruff check . && uv run ruff format --check .
 uv run platewatch demo                     # scripted detector/OCR + mock agent
+uv run platewatch serve                    # read-only GET /plates/search on 127.0.0.1:8001
 PLATEWATCH_LIVE_DIR=<photos> uv run --with transformers --with torch \
   pytest -m live tests/test_platewatch_live.py -s    # needs network to huggingface.co
 ```
@@ -26,6 +27,10 @@ PLATEWATCH_LIVE_DIR=<photos> uv run --with transformers --with torch \
   are covered only by `-m live`. Offline tests use `ScriptedVision`.
 - The Hugging Face defaults have never been run against real photos; do not report accuracy for
   them until the live test has been run and its numbers recorded.
+- `api.py` is read-only: it may reach only `PlateStore.search` and `.count`, and the database path
+  comes from the process, never from a request. Keep probes unauthenticated, keep accepted tokens
+  stored as SHA-256 digests, and keep the refusal to bind beyond loopback without one. Rate
+  limiting, per-user identity and TLS are out of scope here; say so rather than implying otherwise.
 - Regional formats live in `core/formats.py`, one entry per region with the source URL it came
   from. Never add a pattern from memory, and never turn a format check into a rejection gate: old
   formats, personalised marks and non-car schemes are all legitimate and match nothing. A region
